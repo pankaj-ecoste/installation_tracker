@@ -1,0 +1,19 @@
+{
+  "name": "installation-tracker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "apply-migrations": "node scripts/apply-migrations.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4"
+  },
+  "devDependencies": {
+    "pg": "^8.13.0",
+    "vite": "^5.4.8"
+  }
+}
