@@ -21,7 +21,7 @@ import { renderChecklist, loadChecklistTemplate, addChecklistItem, toggleCheckli
 import { onOrderTypeChange, renderFormMilestones, renderExistingMilestones, updateExistingMilestone, addMilestoneToForm, confirmAddMilestoneToForm, renderTowerRows, renderVendorRows, addVendorRow, renderProductQuickPicks, quickAddProduct, renderProductRows, addProductRow, renderConstraintList, addConstraintToForm, removeFormConstraint, addDPRConstraint, removeDPRConstraint, toggleNoConstraints, addUpdateConstraint, cycleConstraintStatus, editConstraintNextAction, renderUpdateConstraints, escalateConstraint, escalateSnag, cycleSnagStatusOnProject } from '../sections/projects/formHelpers.js';
 import { renderProjects, toggleChecklistDropdown, renderChecklistDropdown, renderAllChecklistDropdowns, acknowledgeChecklist, renderCard, toggleCard, renderDetail } from '../sections/projects/projectCards.js';
 import { fieldRowHTML, captureDPRArrivalGeoLocation, captureGeoLocation, reqFieldChanged, renderRequestFields, openAddRequest, openEditRequest, genRequestNumber, saveRequest, notifyProjectTeamNewRequest, notifyNewRequest, renderRequests, sendVisitReportEmail, tatBadge, reviewWaitBadge, toggleRequestTimeline, fmtDateTime, slaGap, renderRequestStageTimeline, renderRequestCard, viewRequestReadOnly, updateRequestFields, acknowledgeRequest, confirmAcknowledge, sendAssignmentEmails, changePlannedDate, advanceRequestStatus, convertRequestToProject, confirmConvertRequestToProject, exportProjectsCSV, parseCSV, importProjectsCSV, exportRequestsCSV } from '../sections/requests/requestsTab.js';
-import { renderTeamMgmt, togglePerm, openAddMember, togglePinVisible, openEditMember, updateRolePreview, saveMember, toggleMemberStatus, deleteMember } from '../sections/team/teamMgmtTab.js';
+import { renderTeamMgmt, togglePerm, openAddMember, openEditMember, updateRolePreview, saveMember, toggleMemberStatus, deleteMember } from '../sections/team/teamMgmtTab.js';
 import { renderVendorPortal } from '../sections/vendorPortal/vendorPortal.js';
 import { updateNewVendorBadge, renderNewVendors, markVendorReviewed, markVendorApprovedByShashank } from '../sections/vendors/newVendorsTab.js';
 
@@ -231,7 +231,6 @@ export function installDomGlobals(){
     renderTeamMgmt,
     togglePerm,
     openAddMember,
-    togglePinVisible,
     openEditMember,
     updateRolePreview,
     saveMember,

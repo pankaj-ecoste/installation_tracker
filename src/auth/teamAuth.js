@@ -6,6 +6,8 @@ import { renderMetrics } from '../sections/metrics.js';
 import { setTab, showClientSection, showSection } from '../sections/navigation.js';
 import { renderProjects } from '../sections/projects/projectCards.js';
 import { updateNewVendorBadge } from '../sections/vendors/newVendorsTab.js';
+import { SUPABASE_URL, SUPABASE_ANON_KEY, TEST_MODE } from '../lib/config.js';
+import { setTeamAuthToken } from '../lib/supabaseClient.js';
 
 /* ══ TEAM AUTH ══ */
 export function showTeamLogin(){
@@ -14,16 +16,38 @@ export function showTeamLogin(){
   document.getElementById('tbr-team').classList.add('hidden');
 }
 
-export function teamLogin(){
+// Phase C: PIN verification moved server-side (bcrypt, via the team-login Edge Function) —
+// this no longer compares plaintext PINs in the browser. TEST_MODE keeps the original
+// in-memory check since it has no live Supabase project to call.
+export async function teamLogin(){
   const user=document.getElementById('tl-user').value.trim().toLowerCase();
   const pass=document.getElementById('tl-pass').value.trim();
   const err=document.getElementById('tl-error');
   if(!user||!pass){ err.classList.remove('hidden'); err.textContent='Please enter username and PIN.'; return; }
-  const member=state.teamMembers.find(m=>m.username===user&&m.pin===pass&&m.active);
-  if(!member){ err.classList.remove('hidden'); err.textContent='Invalid username or PIN.'; return; }
+
+  let member;
+  if(TEST_MODE){
+    member=state.teamMembers.find(m=>m.username===user&&m.pin===pass&&m.active);
+    if(!member){ err.classList.remove('hidden'); err.textContent='Invalid username or PIN.'; return; }
+    member.lastLogin=new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+  } else {
+    let res, data;
+    try{
+      res=await fetch(SUPABASE_URL+'/functions/v1/team-login',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+SUPABASE_ANON_KEY},
+        body:JSON.stringify({username:user,pin:pass})
+      });
+      data=await res.json();
+    }catch(e){ console.error('team-login request failed',e); err.classList.remove('hidden'); err.textContent='Could not reach the server — check your connection.'; return; }
+    if(!res.ok||!data.token){ err.classList.remove('hidden'); err.textContent=data.error||'Invalid username or PIN.'; return; }
+    setTeamAuthToken(data.token);
+    const idx=state.teamMembers.findIndex(m=>m.id===data.member.id);
+    if(idx>=0){ Object.assign(state.teamMembers[idx],data.member); member=state.teamMembers[idx]; }
+    else { member=data.member; state.teamMembers.push(member); }
+  }
   err.classList.add('hidden');
   state.currentUser=member;
-  member.lastLogin=new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
   document.getElementById('tl-user').value='';
   document.getElementById('tl-pass').value='';
   showTeamDashboard();
@@ -82,5 +106,5 @@ export function showTeamDashboard(){
   renderMetrics(); renderProjects();
 }
 
-export function lockTeam(){ state.currentUser=null; showClientSection(); }
+export function lockTeam(){ state.currentUser=null; setTeamAuthToken(null); showClientSection(); }
 export function backToClient(){ showClientSection(); }

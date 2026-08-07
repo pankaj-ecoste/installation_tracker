@@ -3,6 +3,13 @@ import { db } from '../lib/supabaseClient.js';
 import { dprToRow, lotToRow, memberToRow, projectToRow, rowToDpr, rowToFinanceRow, rowToLot, rowToMember, rowToProject, rowToRequest } from '../lib/mappers.js';
 import { SEED_DPR, SEED_LOTS, SEED_PROJECTS, SEED_TEAM } from '../lib/seedData.js';
 
+// Every column team_members has except pin/pin_hash — loadAllData() runs for every visitor,
+// even before any login, so this list is what keeps the Phase C PIN hashing meaningful: a
+// bare `select('*')` here would still broadcast every member's pin_hash (and, until it's
+// dropped, the legacy plaintext pin column) to every browser tab regardless of the Edge
+// Function hardening. Update this list if team_members ever grows a new non-secret column.
+const TEAM_MEMBER_PUBLIC_COLUMNS = 'id,name,username,role,dept,wa,active,last_login,email';
+
 /* Insert/update a single project row in Supabase to match its current
    local state. Called after ANY change to a project (edits, comments,
    constraint status changes, progress updates, etc). */
@@ -40,14 +47,14 @@ export async function loadAllData(){
     state.dprLog=dprRows.map(rowToDpr);
     state.nextDprId=state.dprLog.length?Math.max(...state.dprLog.map(d=>d.id))+1:1;
 
-    // TEAM MEMBERS
-    let {data:memRows,error:memErr}=await db.from('team_members').select('*').order('id');
+    // TEAM MEMBERS (pin/pin_hash deliberately excluded — see TEAM_MEMBER_PUBLIC_COLUMNS above)
+    let {data:memRows,error:memErr}=await db.from('team_members').select(TEAM_MEMBER_PUBLIC_COLUMNS).order('id');
     if(memErr) throw memErr;
     if(!memRows.length){
       const seedRows=SEED_TEAM.map(m=>({id:m.id,...memberToRow(m)}));
       const {error:seedErr}=await db.from('team_members').insert(seedRows);
       if(seedErr) throw seedErr;
-      ({data:memRows}=await db.from('team_members').select('*').order('id'));
+      ({data:memRows}=await db.from('team_members').select(TEAM_MEMBER_PUBLIC_COLUMNS).order('id'));
     }
     state.teamMembers=memRows.map(rowToMember);
     state.nextMemberId=state.teamMembers.length?Math.max(...state.teamMembers.map(m=>m.id))+1:1;

@@ -93,6 +93,23 @@ export function makeMockClient(seedProjects, seedDpr, seedTeam, seedLots){
   return {from, auth, storage};
 }
 
-export const db = TEST_MODE
+export let db = TEST_MODE
   ? makeMockClient(SEED_PROJECTS, SEED_DPR, SEED_TEAM, SEED_LOTS)
   : createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* ══ TEAM AUTH TOKEN ══
+   Phase C: after a successful team-login Edge Function call, the client holds a short-lived
+   JWT signed with the project's own JWT secret (not a Supabase Auth session — team login has
+   its own username+PIN flow, see src/auth/teamAuth.js). Reconfiguring the single shared `db`
+   export here — rather than threading the token through every call site — is what lets the
+   ~230 existing `db.from(table)...` calls across the app stay completely untouched; `db` is a
+   live ES module binding, so every importer sees the reconfigured client automatically. */
+let currentTeamToken = null;
+export function getTeamAuthToken(){ return currentTeamToken; }
+export function setTeamAuthToken(token){
+  currentTeamToken = token || null;
+  if (TEST_MODE) return; // mock client has no concept of auth headers
+  db = currentTeamToken
+    ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global: { headers: { Authorization: `Bearer ${currentTeamToken}` } } })
+    : createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+}

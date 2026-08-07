@@ -1,10 +1,27 @@
 import { state } from '../../lib/state.js';
-import { db } from '../../lib/supabaseClient.js';
+import { db, getTeamAuthToken } from '../../lib/supabaseClient.js';
 import { showTeamDashboard } from '../../auth/teamAuth.js';
 import { PERM_LABELS, ROLES } from '../../lib/constants.js';
 import { canDo } from '../../lib/helpers.js';
 import { memberToRow, rowToMember } from '../../lib/mappers.js';
 import { closePanel, openPanel } from '../navigation.js';
+import { SUPABASE_URL, SUPABASE_ANON_KEY, TEST_MODE } from '../../lib/config.js';
+
+// Phase C: PINs are one-way hashed server-side now (bcrypt via pgcrypto) — this is the only
+// path left that can set one. Requires the caller's own signed team JWT (team-login issued
+// it); the Edge Function itself re-checks team_role==='admin' before writing.
+async function setMemberPinHash(memberId, newPin){
+  try{
+    const res=await fetch(SUPABASE_URL+'/functions/v1/team-set-pin',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+getTeamAuthToken()},
+      body:JSON.stringify({memberId,newPin})
+    });
+    const data=await res.json();
+    if(!res.ok) return data.error||'Could not save PIN — check console.';
+    return null;
+  }catch(e){ console.error('team-set-pin request failed',e); return 'Could not reach the server — check console.'; }
+}
 
 /* ══ TEAM MANAGEMENT ══ */
 export function renderTeamMgmt(){
@@ -31,7 +48,7 @@ export function renderTeamMgmt(){
         return '<tr>'+
           '<td><div style="display:flex;align-items:center;gap:8px"><div class="avatar-sm" style="background:'+bg+'">'+initials+'</div><div style="font-weight:600;font-size:13px">'+m.name+'</div></div></td>'+
           '<td style="font-family:monospace;font-size:12px;color:#555">'+m.username+'</td>'+
-          (isAdmin?'<td><span id="pin-mask-'+m.id+'" style="font-family:monospace;font-size:12px">••••••</span><button class="icon-btn btn-sm" style="margin-left:4px" onclick="togglePinVisible('+m.id+',\''+m.pin+'\')" title="Show/hide PIN">👁</button></td>':'')+
+          (isAdmin?'<td><span style="font-family:monospace;font-size:12px;color:#999">••••••</span></td>':'')+
           '<td><span class="role-badge '+role.color+'">'+role.emoji+' '+role.label+'</span></td>'+
           '<td style="color:#666;font-size:12px">'+m.dept+'</td>'+
           '<td style="color:#888;font-size:12px">'+m.lastLogin+'</td>'+
@@ -72,13 +89,12 @@ export function openAddMember(){
   document.getElementById('member-panel-title').textContent='Add team member';
   ['m-name','m-user','m-pin','m-dept','m-wa','m-email'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
   document.getElementById('m-role').value='viewer';
+  const pinLabel=document.getElementById('m-pin-label');
+  if(pinLabel) pinLabel.textContent='PIN * (min. 6 digits)';
+  document.getElementById('m-pin').placeholder='6-digit PIN or longer';
   document.getElementById('m-error').classList.add('hidden');
   updateRolePreview();
   openPanel('panel-add-member');
-}
-export function togglePinVisible(id,pin){
-  const el=document.getElementById('pin-mask-'+id); if(!el) return;
-  el.textContent=(el.textContent==='••••••')?pin:'••••••';
 }
 export function openEditMember(id){
   const m=state.teamMembers.find(x=>x.id===id); if(!m) return;
@@ -86,7 +102,11 @@ export function openEditMember(id){
   document.getElementById('member-panel-title').textContent='Edit member';
   document.getElementById('m-name').value=m.name;
   document.getElementById('m-user').value=m.username;
-  document.getElementById('m-pin').value=m.pin;
+  // PINs are one-way hashed now — nothing to prefill. Blank = keep the current PIN.
+  document.getElementById('m-pin').value='';
+  const pinLabel=document.getElementById('m-pin-label');
+  if(pinLabel) pinLabel.textContent='New PIN (leave blank to keep current)';
+  document.getElementById('m-pin').placeholder='Leave blank to keep current PIN';
   document.getElementById('m-role').value=m.role;
   document.getElementById('m-dept').value=m.dept;
   document.getElementById('m-wa').value=m.wa||'';
@@ -106,25 +126,40 @@ export async function saveMember(){
   const user=document.getElementById('m-user').value.trim().toLowerCase();
   const pin=document.getElementById('m-pin').value.trim();
   const err=document.getElementById('m-error');
-  if(!name||!user||!pin){ err.classList.remove('hidden'); err.textContent='Name, username, and PIN are required.'; return; }
-  // Strengthened from the original 4-digit minimum. Full hashing would mean moving PINs
-  // onto Supabase Auth instead of this plain team_members table check — a bigger,
-  // deployment-time architecture change to make once real client data is involved, not
-  // something to do quietly in TEST_MODE. This is the strongest improvement possible
-  // without that migration.
-  if(!/^\d{6,}$/.test(pin)){ err.classList.remove('hidden'); err.textContent='PIN must be at least 6 digits.'; return; }
-  if(/^(\d)\1+$/.test(pin)||'0123456789'.includes(pin)||'9876543210'.includes(pin)){ err.classList.remove('hidden'); err.textContent='That PIN is too easy to guess (repeated or sequential digits) — please choose a different one.'; return; }
+  const isNew=!state.editingMemberId;
+  if(!name||!user){ err.classList.remove('hidden'); err.textContent='Name and username are required.'; return; }
+  // A new member has no existing PIN to fall back on; editing an existing member leaves the
+  // field blank by default (PINs are one-way hashed — nothing to prefill), where blank means
+  // "keep the current PIN" and typing a value sets a new one (approved exception, see plan.md).
+  if(isNew&&!pin){ err.classList.remove('hidden'); err.textContent='PIN is required for a new member.'; return; }
+  if(pin){
+    if(!/^\d{6,}$/.test(pin)){ err.classList.remove('hidden'); err.textContent='PIN must be at least 6 digits.'; return; }
+    if(/^(\d)\1+$/.test(pin)||'0123456789'.includes(pin)||'9876543210'.includes(pin)){ err.classList.remove('hidden'); err.textContent='That PIN is too easy to guess (repeated or sequential digits) — please choose a different one.'; return; }
+  }
   const dupe=state.teamMembers.find(m=>m.username===user&&m.id!==state.editingMemberId);
   if(dupe){ err.classList.remove('hidden'); err.textContent='Username "'+user+'" is already taken.'; return; }
-  const data={name,username:user,pin,role:document.getElementById('m-role').value,dept:document.getElementById('m-dept').value.trim(),wa:document.getElementById('m-wa').value.trim(),email:document.getElementById('m-email').value.trim(),active:true,lastLogin:'Never'};
+  const data={name,username:user,role:document.getElementById('m-role').value,dept:document.getElementById('m-dept').value.trim(),wa:document.getElementById('m-wa').value.trim(),email:document.getElementById('m-email').value.trim(),active:true,lastLogin:'Never'};
+  if(TEST_MODE&&pin) data.pin=pin; // mock DB still needs a plaintext PIN for its local login check
   if(state.editingMemberId){
     const idx=state.teamMembers.findIndex(m=>m.id===state.editingMemberId);
     state.teamMembers[idx]={...state.teamMembers[idx],...data};
-    const {error}=await db.from('team_members').update(memberToRow(state.teamMembers[idx])).eq('id',state.editingMemberId);
+    const payload=memberToRow(state.teamMembers[idx]);
+    if(!TEST_MODE) delete payload.pin; // never write plaintext PINs to the real table
+    const {error}=await db.from('team_members').update(payload).eq('id',state.editingMemberId);
     if(error){ console.error('Supabase update failed',error); err.classList.remove('hidden'); err.textContent='Could not save to database — check console.'; return; }
+    if(pin&&!TEST_MODE){
+      const pinErr=await setMemberPinHash(state.editingMemberId,pin);
+      if(pinErr){ err.classList.remove('hidden'); err.textContent=pinErr; return; }
+    }
   } else {
-    const {data:inserted,error}=await db.from('team_members').insert({id:state.nextMemberId,...memberToRow(data)}).select().single();
+    const payload=memberToRow(data);
+    if(!TEST_MODE) delete payload.pin;
+    const {data:inserted,error}=await db.from('team_members').insert({id:state.nextMemberId,...payload}).select().single();
     if(error){ console.error('Supabase insert failed',error); err.classList.remove('hidden'); err.textContent='Could not save to database — check console.'; return; }
+    if(pin&&!TEST_MODE){
+      const pinErr=await setMemberPinHash(inserted.id,pin);
+      if(pinErr){ err.classList.remove('hidden'); err.textContent=pinErr; return; }
+    }
     state.nextMemberId++;
     state.teamMembers.push(rowToMember(inserted));
   }
