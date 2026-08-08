@@ -83,9 +83,9 @@ export function renderDashboard(){
       metricCard('Constraints', constraintCounts.open+' open', constraintCounts['in-progress']+' in progress · '+constraintCounts.solved+' solved', constraintCounts.open>0?'#cc3333':'#1D9E75')+
     '</div>'+
     '<div class="section-hdr">🏗 Developer-wise breakdown</div>'+
-    '<table class="team-table"><thead><tr><th>Developer</th><th>Projects</th><th>Installed / Planned</th><th>JMR</th><th>RA bill (₹)</th><th>Collected (₹)</th><th>Hold amount (₹)</th><th>Open constraints</th></tr></thead><tbody>'+
+    '<div style="overflow-x:auto"><table class="team-table"><thead><tr><th>Developer</th><th>Projects</th><th>Installed / Planned</th><th>JMR</th><th>RA bill (₹)</th><th>Collected (₹)</th><th>Hold amount (₹)</th><th>Open constraints</th></tr></thead><tbody>'+
     Object.entries(devAgg).map(([dev,a])=>'<tr><td>'+dev+'</td><td>'+a.projects+'</td><td>'+fmt(a.installed)+' / '+fmt(a.planned)+' ('+pct(a.installed,a.planned)+'%)</td><td>'+fmt(a.jmr)+'</td><td>'+fmt(a.raBillAmt)+'</td><td>'+fmt(a.collected)+'</td><td>'+fmt(a.holdAmount)+'</td><td style="color:'+(a.openConstraints>0?'#cc3333':'#1D9E75')+'">'+a.openConstraints+'</td></tr>').join('')+
-    '</tbody></table>'+
+    '</tbody></table></div>'+
     '<div class="section-hdr" style="margin-top:16px">📋 Project-wise breakdown (Developer → Project → Tower/Block)</div>'+
     (()=>{
       // Group by project name so towers/blocks nest under their parent project, matching
@@ -125,11 +125,11 @@ export function renderDashboard(){
           rows+='<tr><td style="padding-left:24px;color:#666">↳ '+p.tower+'</td><td>'+fmt(p.installedQty)+' / '+fmt(p.plannedQty)+' ('+pct(p.installedQty,p.plannedQty)+'%)</td><td>'+fmt(p.jmrQty)+'</td><td>'+fmt(p.raBillAmt)+'</td><td>'+fmt(p.paymentCollected)+'</td><td>'+fmt(unbilled)+'</td><td>'+fmt(released)+'</td><td style="color:'+(p.constraintsOpen>0?'#cc3333':'#1D9E75')+'">'+p.constraintsOpen+'</td><td>'+(framing?'<span class="badge bgr">'+framing+'</span>':'—')+'</td></tr>';
         });
       });
-      return '<table class="team-table"><thead><tr><th>Developer / Project / Tower</th><th>Installed / Planned</th><th>JMR</th><th>RA bill (₹)</th><th>Collected (₹)</th><th>Unbilled Amount to Vendor (₹)</th><th>Released to vendor (₹)</th><th>Open constraints</th><th>Frame Installed</th></tr></thead><tbody>'+rows+'</tbody></table>';
+      return '<div style="overflow-x:auto"><table class="team-table"><thead><tr><th>Developer / Project / Tower</th><th>Installed / Planned</th><th>JMR</th><th>RA bill (₹)</th><th>Collected (₹)</th><th>Unbilled Amount to Vendor (₹)</th><th>Released to vendor (₹)</th><th>Open constraints</th><th>Frame Installed</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
     })()+
     '<div class="section-hdr" style="margin-top:16px">📈 Vendor productivity — planned vs. achieved, and run rate</div>'+
     '<div style="font-size:11px;color:#888;margin-bottom:8px">Required Performance Run Rate excludes Frame installed qty — it\'s calculated from the main product quantity only, since Frame goes in as its own separate step first.</div>'+
-    '<table class="team-table"><thead><tr><th>Vendor</th><th>Project</th><th>Planned date</th><th>Installed / Planned qty</th><th>Performance Run Rate (units/day)</th><th>Required Performance Run Rate (units/day)*</th><th>Performance Status</th><th>Achieved date</th></tr></thead><tbody>'+
+    '<div style="overflow-x:auto"><table class="team-table"><thead><tr><th>Vendor</th><th>Project</th><th>Planned date</th><th>Installed / Planned qty</th><th>Performance Run Rate (units/day)</th><th>Required Performance Run Rate (units/day)*</th><th>Performance Status</th><th>Achieved date</th></tr></thead><tbody>'+
     vendorRows.map(({p,runRate,requiredRunRate,daysRemaining,isOverdue,performanceStatus})=>
       '<tr><td>'+p.vendor+'</td><td>'+p.name+' — '+p.tower+'</td>'+
       '<td>'+(p.committedDate?fmtDate(p.committedDate):'—')+(isOverdue?' <span style="color:#cc3333;font-weight:600">(overdue)</span>':'')+'</td>'+
@@ -139,7 +139,7 @@ export function renderDashboard(){
       '<td style="font-weight:600">'+performanceStatus+'</td>'+
       '<td>'+(p.actualDate?fmtDate(p.actualDate):(p.status==='Completed'?'—':'In progress'))+'</td>'+
       '</tr>').join('')+
-    '</tbody></table>'+
+    '</tbody></table></div>'+
     '<div style="font-size:11px;color:#888;margin-top:6px">* Excludes Frame installed qty — calculated from the main product\'s planned quantity only.</div>';
 }
 

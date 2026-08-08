@@ -24,9 +24,9 @@ export function renderFormMilestones(){
   if(!state.formMilestones.length){ list.innerHTML='<div style="font-size:12px;color:#888">No milestones added yet.</div>'; return; }
   // header row
   list.innerHTML=
-    '<div style="display:flex;gap:8px;padding:4px 0 6px;border-bottom:2px solid #e0e0e0;font-size:11px;font-weight:600;color:#666;margin-bottom:4px">'+
+    '<div class="ms-row" style="display:flex;gap:8px;padding:4px 0 6px;border-bottom:2px solid #e0e0e0;font-size:11px;font-weight:600;color:#666;margin-bottom:4px">'+
       '<div style="width:20px;flex-shrink:0"></div>'+
-      '<div style="flex:2">Milestone</div>'+
+      '<div class="ms-label" style="flex:2">Milestone</div>'+
       '<div style="width:140px;flex-shrink:0;text-align:center">📅 Planned date</div>'+
       '<div style="width:140px;flex-shrink:0;text-align:center">✅ Actual date</div>'+
       '<div style="width:60px;flex-shrink:0;text-align:center">Gap</div>'+
@@ -41,11 +41,11 @@ export function renderFormMilestones(){
         gapColor=g<0?'#1a5e2a':g>0?'#cc3333':'#444';
         m.gap=g;
       } else { m.gap=null; }
-      return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f0f0f0">'+
+      return '<div class="ms-row" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f0f0f0">'+
         '<input type="checkbox" '+(m.selected?'checked':'')+' onchange="formMilestones['+i+'].selected=this.checked;renderFormMilestones()" style="width:16px;flex-shrink:0">'+
-        '<div style="flex:2;font-size:12px;color:'+(m.selected?'#1a1a1a':'#aaa')+'">'+m.label+'</div>'+
-        '<input type="date" class="form-input" style="width:140px;padding:4px 8px;font-size:12px;flex-shrink:0" value="'+m.planned+'" '+(m.selected?'':'disabled')+' onchange="formMilestones['+i+'].planned=this.value;renderFormMilestones()">'+
-        '<input type="date" class="form-input" style="width:140px;padding:4px 8px;font-size:12px;flex-shrink:0;'+(m.actual?'border-color:#1D9E75;background:#f0faf6':'')+'" value="'+(m.actual||'')+'" '+(m.selected?'':'disabled')+' onchange="formMilestones['+i+'].actual=this.value;renderFormMilestones()" placeholder="Leave blank if not done">'+
+        '<div class="ms-label" style="flex:2;font-size:12px;color:'+(m.selected?'#1a1a1a':'#aaa')+'">'+m.label+'</div>'+
+        '<input type="date" class="form-input ms-date" style="width:140px;padding:4px 8px;font-size:12px;flex-shrink:0" value="'+m.planned+'" '+(m.selected?'':'disabled')+' onchange="formMilestones['+i+'].planned=this.value;renderFormMilestones()">'+
+        '<input type="date" class="form-input ms-date" style="width:140px;padding:4px 8px;font-size:12px;flex-shrink:0;'+(m.actual?'border-color:#1D9E75;background:#f0faf6':'')+'" value="'+(m.actual||'')+'" '+(m.selected?'':'disabled')+' onchange="formMilestones['+i+'].actual=this.value;renderFormMilestones()" placeholder="Leave blank if not done">'+
         '<div style="width:60px;flex-shrink:0;text-align:center;font-size:11px;font-weight:600;color:'+gapColor+'">'+gapLabel+'</div>'+
         '<button onclick="formMilestones.splice('+i+',1);renderFormMilestones()" style="background:none;border:none;cursor:pointer;color:#cc3333;font-size:16px;width:20px;flex-shrink:0;padding:0">×</button>'+
       '</div>';
@@ -59,8 +59,8 @@ export function renderExistingMilestones(){
   const el=document.getElementById('u-existing-ms-list'); if(!el) return;
   if(!state.currentMilestones.length){ el.innerHTML='<div style="font-size:12px;color:#888">No milestones yet.</div>'; return; }
   el.innerHTML=
-    '<div style="display:flex;gap:8px;padding:4px 0 6px;border-bottom:2px solid #e0e0e0;font-size:11px;font-weight:600;color:#666;margin-bottom:4px">'+
-      '<div style="flex:2">Milestone</div><div style="width:140px;text-align:center">📅 Planned</div><div style="width:140px;text-align:center">✅ Actual</div><div style="width:60px;text-align:center">Gap</div>'+
+    '<div class="ms-row" style="display:flex;gap:8px;padding:4px 0 6px;border-bottom:2px solid #e0e0e0;font-size:11px;font-weight:600;color:#666;margin-bottom:4px">'+
+      '<div class="ms-label" style="flex:2">Milestone</div><div style="width:140px;text-align:center">📅 Planned</div><div style="width:140px;text-align:center">✅ Actual</div><div style="width:60px;text-align:center">Gap</div>'+
     '</div>'+
     state.currentMilestones.map((m,i)=>{
       let gapLabel='Pending', gapColor='#888';
@@ -69,10 +69,10 @@ export function renderExistingMilestones(){
         gapLabel=g===0?'On time':g<0?Math.abs(g)+'d early':g+'d late';
         gapColor=g<0?'#1a5e2a':g>0?'#cc3333':'#444';
       }
-      return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f0f0f0">'+
-        '<div style="flex:2;font-size:12px">'+m.label+'</div>'+
-        '<input type="date" class="form-input" style="width:140px;padding:4px 8px;font-size:12px" value="'+(m.planned||'')+'" onchange="updateExistingMilestone('+i+',\'planned\',this.value)">'+
-        '<input type="date" class="form-input" style="width:140px;padding:4px 8px;font-size:12px;'+(m.actual?'border-color:#1D9E75;background:#f0faf6':'')+'" value="'+(m.actual||'')+'" onchange="updateExistingMilestone('+i+',\'actual\',this.value)">'+
+      return '<div class="ms-row" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f0f0f0">'+
+        '<div class="ms-label" style="flex:2;font-size:12px">'+m.label+'</div>'+
+        '<input type="date" class="form-input ms-date" style="width:140px;padding:4px 8px;font-size:12px" value="'+(m.planned||'')+'" onchange="updateExistingMilestone('+i+',\'planned\',this.value)">'+
+        '<input type="date" class="form-input ms-date" style="width:140px;padding:4px 8px;font-size:12px;'+(m.actual?'border-color:#1D9E75;background:#f0faf6':'')+'" value="'+(m.actual||'')+'" onchange="updateExistingMilestone('+i+',\'actual\',this.value)">'+
         '<div style="width:60px;text-align:center;font-size:11px;font-weight:600;color:'+gapColor+'">'+gapLabel+'</div>'+
       '</div>';
     }).join('');

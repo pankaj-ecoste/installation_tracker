@@ -200,6 +200,12 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helv
   /* Wide tables (Gantt, DPR products, dispatch items) stay horizontally scrollable
      rather than squeezing illegibly small or breaking layout. */
   .gantt-table{min-width:600px}
+  /* Milestone editor rows (Add/Edit Project) are a fixed-width flex row (checkbox +
+     label + two 140px date inputs + gap + delete) that's wider than any phone screen.
+     Let them wrap instead of forcing horizontal scroll on the whole page. */
+  .ms-row{flex-wrap:wrap}
+  .ms-label{flex-basis:100%!important}
+  .ms-date{width:calc(50% - 24px)!important}
 }
 @media (max-width: 400px) {
   .metrics{grid-template-columns:repeat(2,1fr)}

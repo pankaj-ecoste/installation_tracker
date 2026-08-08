@@ -277,8 +277,45 @@ pushed — pending user go-ahead):**
 **Still flagged as opportunistic, not yet done**: drop the now-unused plaintext `pin` column on
 `team_members` (dead since Phase C, RLS doesn't change that calculus).
 
+### Mobile audit (2026-08-08)
+
+User flagged that this app must work well on phones. Audited at a real 390×844 mobile viewport
+(chrome-devtools MCP's device emulation, `deviceScaleFactor:2, isMobile:true`) using a scripted
+DOM overflow check (`document.documentElement.scrollWidth > clientWidth`) rather than eyeballing
+screenshots — faster and catches every screen, not just the ones photographed. Covered: client
+portal login, team login, vendor portal login/register, all 10 admin nav tabs, Add/Edit Project
+(incl. the milestones editor), Add Team Member, New Request (Pre-Mockup and Main Order field
+sets), Add DPR, and the client portal's post-login project view.
+
+**Two real mobile bugs found and fixed** (the CSS in `app.css` already had a `@media
+(max-width:640px)` block from the original `complete.html` — these were gaps in it, not a
+missing mobile story):
+1. **Four `.team-table` instances had no horizontal-scroll wrapper**, unlike every other use of
+   that class in the codebase (`dprTab.js`, `requestsTab.js`, `financeTab.js` all already wrap
+   it in `<div style="overflow-x:auto">`). Team Management's member list and all three Dashboard
+   tables (developer breakdown, project breakdown, vendor productivity) forced the *entire page*
+   to scroll sideways on a phone instead of just the table. Fixed by adding the same wrapper div
+   at those four call sites (`teamMgmtTab.js`, `dashboardTab.js` ×3) — zero desktop visual
+   change, `overflow-x:auto` is a no-op when content already fits.
+2. **The milestones editor (Add/Edit Project) used a fixed-width flex row** (140px × 2 date
+   inputs + 60px gap + 20px checkbox/delete, no wrap) that's wider than any phone screen,
+   forcing the same page-wide horizontal scroll. Since these are inline-styled JS template
+   strings (not CSS classes), added `.ms-row`/`.ms-label`/`.ms-date` classes alongside the
+   existing inline styles (both milestone renderers — new-project form and existing-project
+   edit) and a mobile-only override in `app.css` (`flex-wrap:wrap`, label forced to its own
+   line, date inputs to ~50% width) — again additive-only, no desktop change.
+
+Both verified fixed via the same scripted overflow check after rebuilding, on the actual
+milestone data (4 real milestones) not just an empty form.
+
+**Not yet re-checked at mobile**: Finance ledger's per-row edit panel, New Vendors admin-review
+cards, and the vendor portal's own dashboard (all reasoned to be low-risk — simple layouts,
+already using the flexible `flex:2`/`flex:1` pattern elsewhere in the codebase — but not
+explicitly screenshot/overflow-tested this session).
+
 ### Next session should start with
 
-Push the two Phase E fixes (commits `d1bec45`, `2459605`) to `main` once the user confirms —
-Vercel auto-deploys from there, so that's also the final go-live for Phase F. After that, this
-project is at the "production-ready" bar the rest of the plan has been building toward.
+Push the Phase E fixes (commits `d1bec45`, `2459605`) plus the mobile-audit CSS/layout fixes
+once the user confirms — Vercel auto-deploys from `main`, so that's also the final go-live for
+Phase F. After that, this project is at the "production-ready" bar the rest of the plan has been
+building toward.

@@ -39,7 +39,7 @@ export function renderTeamMgmt(){
     '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;margin-bottom:16px">'+
       Object.entries(ROLES).map(([k,r])=>'<div style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:10px;text-align:center"><div style="font-size:20px;margin-bottom:4px">'+r.emoji+'</div><div style="font-size:11px;font-weight:600">'+r.label+'</div><div style="font-size:18px;font-weight:700;color:#1D9E75;margin-top:2px">'+(rolesCount[k]||0)+'</div></div>').join('')+
     '</div>'+
-    '<table class="team-table">'+
+    '<div style="overflow-x:auto"><table class="team-table">'+
       '<thead><tr><th>Member</th><th>Username</th>'+(isAdmin?'<th>PIN</th>':'')+'<th>Role</th><th>Department</th><th>Last login</th><th>Status</th>'+(isAdmin?'<th>Actions</th>':'')+'</tr></thead>'+
       '<tbody>'+state.teamMembers.map(m=>{
         const role=ROLES[m.role];
@@ -59,7 +59,7 @@ export function renderTeamMgmt(){
             '<button class="icon-btn btn-sm" onclick="toggleMemberStatus('+m.id+')" title="Toggle">'+(m.active?'🔕':'🔔')+'</button>'+
             (m.id!==state.currentUser?.id?'<button class="icon-btn btn-sm danger" onclick="deleteMember('+m.id+')" title="Remove">🗑</button>':'')+
           '</div></td>':'')+'</tr>';
-      }).join('')+'</tbody></table>'+
+      }).join('')+'</tbody></table></div>'+
     '<div style="margin-top:16px;background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:14px">'+
       '<div style="font-size:13px;font-weight:600;margin-bottom:4px">Role permissions</div>'+
       '<div style="font-size:12px;color:#888;margin-bottom:10px">'+(isAdmin?'Click ✅/❌ to toggle permissions (Admin row is locked).':'Current permissions per role.')+'</div>'+
