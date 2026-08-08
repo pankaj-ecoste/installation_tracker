@@ -53,9 +53,9 @@ plus the client portal and vendor portal.
 | A | Mechanical Vite extraction (30 files under `src/`), zero logic change | ✅ Done — verified live in browser: all 10 nav tabs, Add/Edit Project, Add Request, Add DPR, Team Management, login/logout |
 | B | Fresh Supabase project + schema + migrations | ✅ Done — verified live in browser with `VITE_TEST_MODE=false` against the real project: all 8 tables created, auto-seed on first load worked, every tab (All Projects, DPR Log, Team, Material, Finance, Requests, New Vendors) renders identically to Phase A, no console errors |
 | C | Auth hardening (team login + client portal via Edge Functions, signed JWT) | ✅ Done — deployed live, verified in browser against the real project |
-| D | RLS + storage policies + go-live env vars | ⬜ Pending |
+| D | RLS + storage policies + go-live env vars | ✅ Done — applied live, verified per-role via direct API calls + real browser login (admin, finance) |
 | E | Full manual regression pass, old file vs new app, per role | ⬜ Pending |
-| F | Vercel deployment | 🟡 Pipeline live early (ahead of Phase D) — `installation-tracker-five.vercel.app` deploys from `main` with `VITE_TEST_MODE=false` against the real Supabase project; verified logging in as admin shows real DB data. Team/client login are now hardened (Phase C); still needs Phase D's RLS before this is a safe production URL to share widely — anon key can still read every table directly. |
+| F | Vercel deployment | 🟡 Pipeline live early (was ahead of Phase D, now caught up) — `installation-tracker-five.vercel.app` deploys from `main` with `VITE_TEST_MODE=false` against the real Supabase project. Team/client login hardened (Phase C) and RLS now enforced (Phase D) — writes are locked down per role; still worth a full Phase E regression pass before wide sharing. |
 
 ### Phase A notes (done 2026-08-07)
 
@@ -149,16 +149,79 @@ plus the client portal and vendor portal.
   the original plaintext-comparison code path — it has no live Supabase project to call an Edge
   Function against, and this was verified separately in the browser first.
 
+### Phase D notes (done 2026-08-08)
+
+- `supabase/migrations/0004_rls_policies.sql`: enables RLS on all 8 tables. **Scope decision**:
+  locks down WRITES only (insert/update/delete), matching the `ROLES.can` matrix in
+  `src/lib/constants.js` exactly. Reads stay open (`using (true)`) on every table, unchanged
+  from today — `loadAllData()` fetches once, unconditionally, before any login exists, so
+  gating SELECT on the team JWT (the architecture doc's original plan) would have made every
+  real user's first load come back empty. Full row-level read scoping would need redesigning
+  the load sequence (fetch after login) — out of scope for this migration, and today's
+  anon-can-read-everything is an already-known gap, not something this migration makes worse.
+  Four JWT/role helper functions added (`app_jwt_team_role()`, `app_jwt_team_member_id()`,
+  `app_jwt_team_username()`, `app_is_active_team_member()`, `app_active_team_member_name()`) —
+  the "active" re-check means a deactivated member's still-unexpired token stops being able to
+  write immediately, not just at next login.
+  - Single-flow tables (`dpr_log`, `team_members`, `finance_ledger`, `activity_log`) got their
+    exact per-action role gate replicated from the `ROLES.can` matrix.
+  - Shared-flow tables (`projects`, `material_lots`, `requests`) — UPDATE deliberately uses a
+    baseline "any active team member" check instead of one precise role, because their shared
+    helpers (`syncProject()`, etc.) are genuinely called from many differently-permissioned
+    flows (doc uploads, checklist acknowledgment, finance uploads) with no single owning
+    permission — confirmed by grepping every call site before accepting this trade-off, not a
+    shortcut.
+  - `vendor_profiles`: INSERT is the vendor's own `auth.uid()` (real Supabase Auth, not the
+    team JWT); UPDATE (the two-stage approval fields) is admin-only via the team JWT — matches
+    the actual code in `newVendorsTab.js` (`isAdmin` check), not the architecture doc's looser
+    "admin/finance" claim, which was wrong.
+- `supabase/migrations/0005_storage_policies.sql`: the `uploads` storage bucket didn't exist
+  yet on the live project (checked directly against `storage.buckets` before writing this) —
+  created here as public-read (matches every existing `getPublicUrl()` call site). Write access
+  restricted to the exact folder-prefix allowlist found by grepping every `uploadFiles()` call
+  site (not copied from the architecture doc, which listed a folder that isn't actually used in
+  the code) — team-JWT-gated for all real folders, `auth.uid()`-gated for `vendor-kyc` only
+  (vendor registration uses real Supabase Auth, not the team JWT).
+- **A real bug found and fixed by live testing, not caught by reading the SQL:** 0004's
+  `revoke select (pin, pin_hash) on team_members from anon, authenticated` looked correct but
+  was a complete no-op — confirmed live, `curl .../team_members?select=pin_hash` with the plain
+  anon key still returned every hash after 0004 was applied. Root cause: Supabase's default
+  schema setup already grants `anon`/`authenticated` a blanket **table-level** `SELECT` on every
+  table (that's what lets PostgREST read anything pre-RLS); a table-level grant implies select
+  on every column, and a column-level `REVOKE` does nothing against a broader grant that's still
+  in force — it only matters if the privilege was granted at the column level to begin with.
+  Fixed in `0006_fix_team_members_column_select.sql`: revoke the table-level SELECT entirely,
+  then grant SELECT back on an explicit safe column list (matches
+  `TEAM_MEMBER_PUBLIC_COLUMNS` in `src/data/loadAllData.js` exactly). Verified live afterward:
+  `pin`/`pin_hash` selects now 401 with "permission denied for table team_members", the safe
+  column list still returns data, and `select=*` also now correctly fails (confirms the app's
+  own code, which never uses `select=*` here, is unaffected). **General lesson: on Supabase,
+  column-level REVOKE is only meaningful after first revoking the table-level grant — check
+  `information_schema.role_table_grants`, not just `column_privileges`, before trusting a
+  column-level restriction actually does anything.**
+- **Verification approach**: rather than only clicking through the UI per role (slow, easy to
+  miss a case), logged in as all 5 seeded team roles (admin/neelam/shubham/finance/sales — no
+  `dispatch_head` account is seeded, that role's `material_lots` INSERT grant is untested
+  against real data but matches the same pattern verified for `admin`) via the real
+  `team-login` Edge Function to get real JWTs, then hit PostgREST directly with each token to
+  confirm every INSERT/UPDATE against every table matches `ROLES.can` exactly — including a
+  correct ownership-scoped case (`shubham`, the DPR's own supervisor, can update it; `finance`,
+  who isn't the owner and isn't admin/manager, gets silently filtered to 0 rows). All test rows
+  cleaned up afterward via a direct `DATABASE_URL` connection (RLS doesn't apply there). Then
+  confirmed live in an actual browser per [[feedback_verification_approach]]: logged in as
+  `admin` (dashboard renders fully, edit/delete icons visible, no console errors beyond a
+  pre-existing benign GoTrue multi-instance warning) and `finance` (same dashboard, edit/delete
+  icons correctly absent per `editProject:false`/`deleteProject:false`). Full per-role UI
+  walkthrough (supervisor DPR edit, dispatch_head material lots, vendor/client portals) is
+  Phase E's job, not repeated here.
+- `TODAY` was already switched to the real date with no override, both locally (`.env.local`)
+  and on Vercel (recorded in Phase B/F setup) — nothing further needed for that part of Phase D.
+
 ### Next session should start with
 
-Phase D: RLS + storage policies + go-live env vars. Apply `0002_rls_policies.sql` (not yet
-created) and `0005_storage_policies.sql` (numbering per the architecture doc — Phase C used
-`0003`, so RLS should probably become `0004` to stay in filename order, double-check before
-naming it). This is the phase most likely to break something real, since RLS is default-deny —
-see the architecture doc's Phase D check: re-run the parity checklist **per role**, not just as
-admin. Also worth doing in this phase: drop the now-unused plaintext `pin` column on
-`team_members` once Phase C has run in production a while, and reconsider whether `loadAllData()`
-running fully before any login (now returning less per Phase C's column restriction, but still
-everything else) is still the right shape once RLS actually restricts what `anon` can read —
-right now every table is still fully anon-readable pre-login except `team_members`'s
-pin/pin_hash columns.
+Phase E: full manual regression pass, `complete.html` vs the new app, per role — the final gate
+before calling this production-ready and sharing the URL widely. Also worth doing opportunistically:
+drop the now-unused plaintext `pin` column on `team_members` (has been dead since Phase C, RLS
+doesn't change that calculus), and add a real `dispatch_head` team member (none exists in the
+current seed data) so that role's `material_lots` INSERT policy gets exercised against real data,
+not just reasoned about by analogy to admin.
