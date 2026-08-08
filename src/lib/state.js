@@ -14,6 +14,7 @@ export const state = {
   vendorProfiles: [],
   activityLog: [],
   vendRegDetails: {},
+  vendRegFiles: {},
   currentVendor: null,
   projects: [],
   dprLog: [],
