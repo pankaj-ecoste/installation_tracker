@@ -313,9 +313,33 @@ cards, and the vendor portal's own dashboard (all reasoned to be low-risk — si
 already using the flexible `flex:2`/`flex:1` pattern elsewhere in the codebase — but not
 explicitly screenshot/overflow-tested this session).
 
+All of the above (Phase E fixes + mobile-audit fixes) are pushed to `main` and live in
+production as of 2026-08-08.
+
+### Feature add: address alongside GPS coordinates (2026-08-08)
+
+Team feedback (relayed by the user): when a supervisor captures GPS location (site visit report,
+DPR material-arrival acknowledgment), the app only showed raw coordinates — team wanted the
+resolved street address shown too. Both capture points (`captureGeoLocation()` in
+`requestsTab.js` for the visit-report flow, `captureDPRArrivalGeoLocation()` for DPR material
+arrival) share a new `reverseGeocodeAddress(lat,lng)` helper that calls OpenStreetMap's free
+Nominatim reverse-geocoding API (no key/billing setup needed) and appends the result:
+`"19.076000, 72.877700 — Shahid Major Kaustubh Rane flyover, ... Mumbai, ... India"`. Best-effort
+only — coordinates are captured and shown immediately; if the address lookup is slow, offline,
+or fails, the UI just keeps the coordinates-only string, never blocks the capture itself. Both
+`geoLocation` fields are stored as plain text (one inside a request's `details` jsonb blob, one
+as `material_lots.arrival_geo_location`, a real `text` column) and only ever displayed as raw
+text elsewhere in the app — no schema migration needed, no downstream code parses the "lat, lng"
+format expecting it to stay exactly that shape.
+
+Verified live against the real Nominatim API (stubbed `navigator.geolocation` to a known Mumbai
+coordinate via `Object.defineProperty` since real GPS isn't available in this environment) —
+confirmed the address resolves and displays correctly in the actual Visit Report form UI. Did
+**not** save this into the real in-progress request I used to test it (`PRE-0001`, genuine team
+data — the team is now actively using the app in production) — cancelled out without persisting,
+confirmed via direct DB read afterward that `details->geoLocation` is still `null` on that row.
+
 ### Next session should start with
 
-Push the Phase E fixes (commits `d1bec45`, `2459605`) plus the mobile-audit CSS/layout fixes
-once the user confirms — Vercel auto-deploys from `main`, so that's also the final go-live for
-Phase F. After that, this project is at the "production-ready" bar the rest of the plan has been
-building toward.
+Push this geolocation-address commit once the user confirms, same as every other change this
+project — Vercel auto-deploys from `main`.

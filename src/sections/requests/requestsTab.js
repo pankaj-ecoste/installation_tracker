@@ -32,16 +32,36 @@ export function fieldRowHTML(f, valObj, idPrefix){
     : '<input class="form-input" type="'+(f.type==='date'?'date':f.type==='number'?'number':'text')+'" id="'+inputId+'" data-key="'+f.key+'" value="'+val.replace(/"/g,'&quot;')+'" oninput="reqFieldChanged(this,\''+idPrefix+'\')" placeholder="'+(f.placeholder||f.label)+'">';
   return '<div class="form-group" style="margin-bottom:10px"><label class="form-label">'+f.label+(f.required?' *':'')+'</label>'+inputHtml+'</div>';
 }
+// Reverse-geocodes coordinates into a human-readable address via OpenStreetMap's free
+// Nominatim API (no key/billing setup needed). Best-effort only — if it's slow, offline, or
+// rate-limited, the caller still has the coordinates already captured, so this never blocks
+// or fails the location capture itself, just the address text appended alongside it.
+async function reverseGeocodeAddress(lat, lng){
+  try{
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(), 6000);
+    const res=await fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat='+lat+'&lon='+lng+'&zoom=18&addressdetails=1', {signal:controller.signal, headers:{'Accept-Language':'en'}});
+    clearTimeout(timeout);
+    if(!res.ok) return null;
+    const data=await res.json();
+    return data && data.display_name ? data.display_name : null;
+  }catch(e){ return null; }
+}
 export function captureDPRArrivalGeoLocation(){
   const resultEl=document.getElementById('dpr-arrival-geo-result');
   if(!navigator.geolocation){ resultEl.style.color='#cc3333'; resultEl.textContent='Geolocation not supported on this device/browser.'; return; }
   resultEl.style.color='#888'; resultEl.textContent='Getting location...';
   navigator.geolocation.getCurrentPosition(
-    pos=>{
-      const coords=pos.coords.latitude.toFixed(6)+', '+pos.coords.longitude.toFixed(6);
+    async pos=>{
+      const lat=pos.coords.latitude, lng=pos.coords.longitude;
+      const coords=lat.toFixed(6)+', '+lng.toFixed(6);
       state.dprArrivalGeoLocation=coords;
       resultEl.style.color='#1D9E75';
-      resultEl.textContent='📍 Captured: '+coords;
+      resultEl.textContent='📍 Captured: '+coords+' — looking up address...';
+      const address=await reverseGeocodeAddress(lat,lng);
+      const combined=address?coords+' — '+address:coords;
+      state.dprArrivalGeoLocation=combined;
+      resultEl.textContent='📍 Captured: '+combined;
     },
     err=>{ resultEl.style.color='#cc3333'; resultEl.textContent='Could not get location — '+err.message+'. Make sure location access is allowed and you are at the site.'; },
     {enableHighAccuracy:true, timeout:10000}
@@ -52,11 +72,16 @@ export function captureGeoLocation(){
   if(!navigator.geolocation){ resultEl.style.color='#cc3333'; resultEl.textContent='Geolocation not supported on this device/browser.'; return; }
   resultEl.style.color='#888'; resultEl.textContent='Getting location...';
   navigator.geolocation.getCurrentPosition(
-    pos=>{
-      const coords=pos.coords.latitude.toFixed(6)+', '+pos.coords.longitude.toFixed(6);
+    async pos=>{
+      const lat=pos.coords.latitude, lng=pos.coords.longitude;
+      const coords=lat.toFixed(6)+', '+lng.toFixed(6);
       state.reqVisitDetails.geoLocation=coords;
       resultEl.style.color='#1D9E75';
-      resultEl.textContent='📍 Captured: '+coords;
+      resultEl.textContent='📍 Captured: '+coords+' — looking up address...';
+      const address=await reverseGeocodeAddress(lat,lng);
+      const combined=address?coords+' — '+address:coords;
+      state.reqVisitDetails.geoLocation=combined;
+      resultEl.textContent='📍 Captured: '+combined;
     },
     err=>{ resultEl.style.color='#cc3333'; resultEl.textContent='Could not get location — '+err.message+'. Make sure location access is allowed and you are at the site.'; },
     {enableHighAccuracy:true, timeout:10000}
