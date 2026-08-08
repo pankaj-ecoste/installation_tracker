@@ -54,8 +54,8 @@ plus the client portal and vendor portal.
 | B | Fresh Supabase project + schema + migrations | ✅ Done — verified live in browser with `VITE_TEST_MODE=false` against the real project: all 8 tables created, auto-seed on first load worked, every tab (All Projects, DPR Log, Team, Material, Finance, Requests, New Vendors) renders identically to Phase A, no console errors |
 | C | Auth hardening (team login + client portal via Edge Functions, signed JWT) | ✅ Done — deployed live, verified in browser against the real project |
 | D | RLS + storage policies + go-live env vars | ✅ Done — applied live, verified per-role via direct API calls + real browser login (admin, finance) |
-| E | Full manual regression pass, old file vs new app, per role | ⬜ Pending |
-| F | Vercel deployment | 🟡 Pipeline live early (was ahead of Phase D, now caught up) — `installation-tracker-five.vercel.app` deploys from `main` with `VITE_TEST_MODE=false` against the real Supabase project. Team/client login hardened (Phase C) and RLS now enforced (Phase D) — writes are locked down per role; still worth a full Phase E regression pass before wide sharing. |
+| E | Full manual regression pass, old file vs new app, per role | ✅ Done (2026-08-08) — two real production bugs found and fixed, see notes below. Fixes committed locally, **not yet pushed** — pending user go-ahead. |
+| F | Vercel deployment | 🟡 Pipeline live early (was ahead of Phase D, now caught up) — `installation-tracker-five.vercel.app` deploys from `main` with `VITE_TEST_MODE=false` against the real Supabase project. Once Phase E's fixes are pushed, this is the final go-live. |
 
 ### Phase A notes (done 2026-08-07)
 
@@ -217,11 +217,68 @@ plus the client portal and vendor portal.
 - `TODAY` was already switched to the real date with no override, both locally (`.env.local`)
   and on Vercel (recorded in Phase B/F setup) — nothing further needed for that part of Phase D.
 
+### Phase E notes (done 2026-08-08)
+
+Full walkthrough per role against the real Supabase project (mostly via local dev pointed at
+production data, with the two fixes below also re-verified against the deployed
+`installation-tracker-five.vercel.app` URL): admin, manager (neelam), supervisor (shubham),
+finance, sales/viewer, a newly-seeded dispatch_head (see below), client portal (access-code
+login, Gantt, the known feedback-box bug confirmed still present and left as-is), and vendor
+portal (register → admin review queue → login). Nav tabs, edit/delete icon visibility, and
+scoped project counts matched the `ROLES.can` matrix exactly for every role. No unexpected
+console errors beyond the pre-existing benign GoTrue multi-instance warning.
+
+**Opportunistic seed**: added a real `dispatch_head` team member (`ravi.dispatch`, Ravi Kumar)
+via the live Team Management UI as admin — this exercised the Add Team Member flow live (see bug
+#1) and gives that role real data to test against, not just reasoning by analogy to admin.
+
+**Two real production bugs found by this pass, both fixed (commits `d1bec45`, `2459605`, not yet
+pushed — pending user go-ahead):**
+
+1. **Add Team Member was completely broken in production** (admin role, Team Management →
+   `+ Add Member`). `saveMember()`'s insert used `.insert({...}).select().single()` — the
+   trailing bare `.select()` defaults to `select=*`, which requires column-level SELECT on every
+   column of the row, including `pin`/`pin_hash`. Those were revoked from
+   `anon`/`authenticated` in Phase D's `0006_fix_team_members_column_select.sql`, so every
+   attempt 403'd with `permission denied for table team_members`, silently and completely
+   blocking admin from ever adding a new team member since Phase D shipped. Fixed by scoping the
+   post-insert `.select()` to the same public column list `loadAllData()` already uses (now
+   exported as `TEAM_MEMBER_PUBLIC_COLUMNS` from `src/data/loadAllData.js`). TEST_MODE keeps
+   requesting `select('*')` since the mock client doesn't enforce column grants and needs `pin`
+   back for its own local login check. Verified live: added `ravi.dispatch` successfully, no
+   console errors, `pin_hash` confirmed set via a follow-up login as that account.
+2. **Vendor self-registration was completely broken in production**, for two independent,
+   stacked reasons:
+   - The KYC document `<input type=file>` `onchange` handlers uploaded to the `vendor-kyc`
+     storage folder immediately on file selection — before the vendor's account exists. Phase
+     D's storage policy for that folder requires `auth.uid() is not null`, so every such upload
+     403'd (`new row violates row-level security policy`), and registration could never get past
+     "Please upload: MSME Certificate" (the missing-doc validation, since the upload always
+     failed). Fixed by staging the picked `File` objects in a new `state.vendRegFiles` map and
+     only calling `uploadFiles()` after `signUp()` resolves, when a real session exists.
+   - Even after that fix, uploads (and the pre-existing `vendor_profiles` insert right after
+     signUp) still failed the same way, because this Supabase project has "Confirm email"
+     enabled — `signUp()` creates the `auth.users` row but returns no active session until the
+     email is confirmed, so `auth.uid()` was still null immediately afterward. **User decision
+     (2026-08-08): disable "Confirm email" in the Supabase project's Auth settings** (done by
+     the user via the dashboard) rather than the two code-heavier alternatives (service-role
+     Edge Function for the whole registration write, or splitting registration into a
+     confirm-then-complete-profile two-step flow) — chosen because nothing else in this app
+     relies on verified vendor emails today, and unverified registrations still sit in the
+     existing admin-approval queue before being trusted. Verified live end-to-end after the
+     toggle: registered a real test vendor, all 5 KYC docs uploaded with real public URLs,
+     `vendor_profiles` row saved, logged in as that vendor successfully, and confirmed the
+     registration appeared in Admin's New Vendors → "Stage 1: Admin review" queue with all 5
+     document links present. Test request/vendor rows cleaned up afterward via direct
+     `DATABASE_URL` access (RLS doesn't apply there); five small dummy KYC text files were left
+     in the `uploads/vendor-kyc/` storage folder from the successful test run (harmless, low
+     priority to clean up).
+
+**Still flagged as opportunistic, not yet done**: drop the now-unused plaintext `pin` column on
+`team_members` (dead since Phase C, RLS doesn't change that calculus).
+
 ### Next session should start with
 
-Phase E: full manual regression pass, `complete.html` vs the new app, per role — the final gate
-before calling this production-ready and sharing the URL widely. Also worth doing opportunistically:
-drop the now-unused plaintext `pin` column on `team_members` (has been dead since Phase C, RLS
-doesn't change that calculus), and add a real `dispatch_head` team member (none exists in the
-current seed data) so that role's `material_lots` INSERT policy gets exercised against real data,
-not just reasoned about by analogy to admin.
+Push the two Phase E fixes (commits `d1bec45`, `2459605`) to `main` once the user confirms —
+Vercel auto-deploys from there, so that's also the final go-live for Phase F. After that, this
+project is at the "production-ready" bar the rest of the plan has been building toward.
