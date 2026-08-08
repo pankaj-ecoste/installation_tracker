@@ -8,7 +8,7 @@ import { SEED_DPR, SEED_LOTS, SEED_PROJECTS, SEED_TEAM } from '../lib/seedData.j
 // bare `select('*')` here would still broadcast every member's pin_hash (and, until it's
 // dropped, the legacy plaintext pin column) to every browser tab regardless of the Edge
 // Function hardening. Update this list if team_members ever grows a new non-secret column.
-const TEAM_MEMBER_PUBLIC_COLUMNS = 'id,name,username,role,dept,wa,active,last_login,email';
+export const TEAM_MEMBER_PUBLIC_COLUMNS = 'id,name,username,role,dept,wa,active,last_login,email';
 
 /* Insert/update a single project row in Supabase to match its current
    local state. Called after ANY change to a project (edits, comments,

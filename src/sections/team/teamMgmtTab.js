@@ -6,6 +6,7 @@ import { canDo } from '../../lib/helpers.js';
 import { memberToRow, rowToMember } from '../../lib/mappers.js';
 import { closePanel, openPanel } from '../navigation.js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY, TEST_MODE } from '../../lib/config.js';
+import { TEAM_MEMBER_PUBLIC_COLUMNS } from '../../data/loadAllData.js';
 
 // Phase C: PINs are one-way hashed server-side now (bcrypt via pgcrypto) — this is the only
 // path left that can set one. Requires the caller's own signed team JWT (team-login issued
@@ -154,7 +155,12 @@ export async function saveMember(){
   } else {
     const payload=memberToRow(data);
     if(!TEST_MODE) delete payload.pin;
-    const {data:inserted,error}=await db.from('team_members').insert({id:state.nextMemberId,...payload}).select().single();
+    // Real table: authenticated only has column-level SELECT on the public list (pin/pin_hash
+    // excluded, see 0006_fix_team_members_column_select.sql) — a bare `select=*` after insert
+    // 403s with "permission denied for table team_members" because Postgres needs SELECT on
+    // every expanded column, not just the row. TEST_MODE's mock DB still needs the plaintext
+    // `pin` back so its local login check (teamAuth.js) works for a member added this session.
+    const {data:inserted,error}=await db.from('team_members').insert({id:state.nextMemberId,...payload}).select(TEST_MODE?'*':TEAM_MEMBER_PUBLIC_COLUMNS).single();
     if(error){ console.error('Supabase insert failed',error); err.classList.remove('hidden'); err.textContent='Could not save to database — check console.'; return; }
     if(pin&&!TEST_MODE){
       const pinErr=await setMemberPinHash(inserted.id,pin);
