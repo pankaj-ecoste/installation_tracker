@@ -54,8 +54,8 @@ plus the client portal and vendor portal.
 | B | Fresh Supabase project + schema + migrations | ✅ Done — verified live in browser with `VITE_TEST_MODE=false` against the real project: all 8 tables created, auto-seed on first load worked, every tab (All Projects, DPR Log, Team, Material, Finance, Requests, New Vendors) renders identically to Phase A, no console errors |
 | C | Auth hardening (team login + client portal via Edge Functions, signed JWT) | ✅ Done — deployed live, verified in browser against the real project |
 | D | RLS + storage policies + go-live env vars | ✅ Done — applied live, verified per-role via direct API calls + real browser login (admin, finance) |
-| E | Full manual regression pass, old file vs new app, per role | ✅ Done (2026-08-08) — two real production bugs found and fixed, see notes below. Fixes committed locally, **not yet pushed** — pending user go-ahead. |
-| F | Vercel deployment | 🟡 Pipeline live early (was ahead of Phase D, now caught up) — `installation-tracker-five.vercel.app` deploys from `main` with `VITE_TEST_MODE=false` against the real Supabase project. Once Phase E's fixes are pushed, this is the final go-live. |
+| E | Full manual regression pass, old file vs new app, per role | ✅ Done (2026-08-08) — two real production bugs found and fixed, pushed and live. See notes below. |
+| F | Vercel deployment | ✅ Done — `installation-tracker-five.vercel.app` deploys from `main` with `VITE_TEST_MODE=false` against the real Supabase project. All Phase E + mobile-audit + feature fixes are live. This is the final go-live; the team is already using it in production (confirmed via real data — see mobile-audit/geolocation notes below). |
 
 ### Phase A notes (done 2026-08-07)
 
@@ -232,8 +232,8 @@ console errors beyond the pre-existing benign GoTrue multi-instance warning.
 via the live Team Management UI as admin — this exercised the Add Team Member flow live (see bug
 #1) and gives that role real data to test against, not just reasoning by analogy to admin.
 
-**Two real production bugs found by this pass, both fixed (commits `d1bec45`, `2459605`, not yet
-pushed — pending user go-ahead):**
+**Two real production bugs found by this pass, both fixed and pushed live (commits `d1bec45`,
+`2459605`):**
 
 1. **Add Team Member was completely broken in production** (admin role, Team Management →
    `+ Add Member`). `saveMember()`'s insert used `.insert({...}).select().single()` — the
@@ -339,7 +339,22 @@ confirmed the address resolves and displays correctly in the actual Visit Report
 data — the team is now actively using the app in production) — cancelled out without persisting,
 confirmed via direct DB read afterward that `details->geoLocation` is still `null` on that row.
 
-### Next session should start with
+This commit is pushed and live.
 
-Push this geolocation-address commit once the user confirms, same as every other change this
-project — Vercel auto-deploys from `main`.
+## Project status: the restructuring itself (Phases 0–F) is complete and live in production
+
+All 6 phases are done; the app is deployed, hardened, regression-tested per role, mobile-checked,
+and the team is actively using it (confirmed via real data appearing — see PRE-0001 above). What
+remains is not a phase of this plan, just optional low-priority cleanup, tracked here so it isn't
+lost:
+
+- Drop the now-dead plaintext `pin` column on `team_members` (superseded by `pin_hash` since
+  Phase C; nothing reads it anymore, RLS doesn't change that calculus).
+- A handful of screens flagged but not explicitly mobile-tested (reasoned low-risk, not
+  zero-risk): Finance ledger's per-row edit panel, New Vendors admin-review cards, vendor
+  portal's own dashboard.
+- The client portal's "leave feedback" box bug (message never persists) — left as-is
+  deliberately per the approved exceptions list, not forgotten.
+
+None of these block calling the project finished. Next session should start by asking the user
+what's next, not by assuming there's unfinished restructuring work.
