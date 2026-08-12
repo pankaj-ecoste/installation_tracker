@@ -1,3 +1,4 @@
+import { state } from '../lib/state.js';
 import { doClientLogin, clientLogout } from '../auth/clientAuth.js';
 import { showTeamLogin, teamLogin, showTeamDashboard, lockTeam, backToClient } from '../auth/teamAuth.js';
 import { openVendorRegister, vendorRegister, vendorLogin, vendorLogout } from '../auth/vendorAuth.js';
@@ -241,5 +242,21 @@ export function installDomGlobals(){
     renderNewVendors,
     markVendorReviewed,
     markVendorApprovedByShashank
+  });
+  // Row-editor fields in Add/Edit Project (Products, Vendors, Tower, Milestones), DPR
+  // (installed/cumulative qty, location), and Material Lot dispatch (product, bundle count,
+  // qty dispatched) mutate one of state's arrays directly by its bare name — e.g.
+  // oninput="formProducts[i].qty=this.value" — a leftover from before the ES-module split, when
+  // these were real top-level `let` globals. The codemod that wrapped everything in `state`
+  // couldn't see these references: they live inside JS string literals, not real code, until the
+  // browser evaluates them as onclick/oninput attributes. Without this, typing into any of these
+  // fields threw "ReferenceError: formProducts is not defined" (etc) silently — the typed value
+  // stayed visible in the input box but never reached state, so it saved as blank/0.
+  ['formProducts','formVendors','formTowers','formMilestones','pendingMilestones','dprProducts','lotItems'].forEach(key=>{
+    Object.defineProperty(window, key, {
+      configurable:true,
+      get(){ return state[key]; },
+      set(v){ state[key]=v; }
+    });
   });
 }

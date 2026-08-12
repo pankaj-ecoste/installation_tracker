@@ -426,3 +426,41 @@ Verified live against the real Supabase project (`qxxcwctbaefwhjjlmiyi`) using t
 account, reproducing the exact bug before the fix and confirming it resolved after, on a real
 project (id 3, "Arun Seth — Supply only") using its Drive Link field as the test value — reset
 back to its original empty value afterward, no test data left behind.
+
+### v2-3: Fixed silent data loss in Products/Vendors/Tower/Milestones/DPR/Lot row fields (2026-08-12)
+
+**Report**: Admin filled in the "18mm Grille" product's quantity when creating/editing "Ashiana
+(Jaipur) — Tower 2", but the project card shows "18mm Grille — 0 sqft" and Planned is 0 sqft.
+
+**Root cause, confirmed live**: much broader than just this one field. Every row-editor field in
+three different forms — **Add/Edit Project** (Products name+qty, Vendors name+role, Tower name,
+Milestones selected/planned/actual), **DPR** (cumulative qty, today-installed qty, location), and
+**Material Lot dispatch** (product, bundle count, qty dispatched) — types into the field via an
+inline handler like `oninput="formProducts[i].qty=this.value"`. That bare `formProducts` name was
+a real top-level global before the app's original ES-module split (see
+[[project_restructuring_overview]] for that codemod); after the split it only exists as
+`state.formProducts`, and nothing ever re-exposed the bare name on `window`. The AST-based codemod
+that did the rename couldn't see these references — they live inside JS string literals, not real
+code, until the browser evaluates them as onclick/oninput attributes at runtime. Confirmed via
+console: typing into the Qty field threw `ReferenceError: formProducts is not defined` on every
+keystroke. The number stays visible in the input box regardless (that's just the browser's native
+display, independent of the app's JS), which is why it looked like data entry worked — but the
+value never reached `state`, so Save persisted whatever was there before (blank/0).
+
+**Fix**: `src/utils/domGlobals.js` (the file already dedicated to exposing things inline handlers
+need) now also defines live getter/setter properties on `window` for the seven affected bare
+names: `formProducts`, `formVendors`, `formTowers`, `formMilestones`, `pendingMilestones`,
+`dprProducts`, `lotItems`. Each getter/setter proxies straight to the matching `state.X`, so these
+bare references now always resolve to the live, current array — no other code changed.
+
+Verified live against the real Supabase project, all three affected forms, without persisting any
+fabricated data to real records: Edit Project's Products qty field (project id 11, the actual
+"Ashiana (Jaipur) — Tower 2" from the report) now updates `state.formProducts` correctly when
+typed into (confirmed via console, then cancelled without saving); Material Lot's bundle-count
+field and DPR's cumulative-qty field both confirmed the same way. No console errors on any of the
+three after the fix, versus the reproducible `ReferenceError` before it.
+
+**Not yet fixed**: the real "Ashiana (Jaipur) — Tower 2" project (id 11) still has its 18mm
+Grille qty saved as blank from before this fix — the fix prevents new instances of this, it
+doesn't retroactively repair already-broken data. Needs the correct quantity from the user, then
+either they re-enter it now that it actually saves, or tell it to me directly to enter.
