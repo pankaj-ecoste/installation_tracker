@@ -464,3 +464,87 @@ three after the fix, versus the reproducible `ReferenceError` before it.
 Grille qty saved as blank from before this fix — the fix prevents new instances of this, it
 doesn't retroactively repair already-broken data. Needs the correct quantity from the user, then
 either they re-enter it now that it actually saves, or tell it to me directly to enter.
+
+### v2-4: Fixed "Could not save — requests table SQL" error on New Request (2026-08-12)
+
+**Report**: Shalini (Sales/Viewer) got "Could not save — check console. (Have you run the
+requests table SQL in Supabase yet?)" submitting a new Post-PO request, with all required fields
+and documents filled in. Reported as happening in production while the team is actively using
+the app.
+
+**Root cause, confirmed by live reproduction against the real production database**: `requests.id`
+is a real Postgres identity column, but `saveRequest()` computed its own "next id" client-side
+(`state.nextRequestId = max(existing ids) + 1`, calculated once when the page loads and never
+refreshed — same underlying architecture as [[v2-2]]) and passed it explicitly on insert. Two
+browser tabs that both loaded before either one saved independently compute the *same* "next id"
+— the first insert succeeds, the second collides on the primary key. Reproduced exactly: two
+sessions both starting from `nextRequestId=4`, first save succeeded, second failed with the
+identical error text from the report, traced to Postgres error `23505 duplicate key value
+violates unique constraint "requests_pkey"`. Given multiple Sales/Viewer staff are submitting
+requests concurrently today, this was always going to surface under real usage.
+
+**Fix**: `saveRequest()` (`src/sections/requests/requestsTab.js`) no longer supplies a client-
+computed `id` on insert — Postgres's own identity column assigns it atomically, so two concurrent
+inserts can never collide regardless of how stale either tab's local counts are. Verified live:
+re-ran the identical two-tab concurrent-save reproduction after the fix — both saved successfully
+with distinct database ids (no error, no collision).
+
+**Known related gap, not fixed here (flagging per the same policy as v2-2's note)**: the exact
+same unsafe pattern (`id: state.nextXId` on insert) exists in 7 other places — `dpr_log`
+(saveDPR), `finance_ledger` (saveFinanceRow), `material_lots` (saveLot), `team_members`
+(saveMember), and `projects` (three separate insert call sites: saveProject's "create new" path,
+and two in requestsTab.js's convert-request-to-project flows). Any of these could fail the exact
+same way under concurrent use — it just hasn't been reported yet. Same fix applies (drop the
+client-supplied `id`, let the identity column assign it) — worth doing proactively given this is
+live production and it's the same one-line change repeated, but holding off until confirmed with
+the user given the number of files touched.
+
+**Also noticed, cosmetic only, not fixed**: `genRequestNumber()`'s human-readable label (e.g.
+"PRE-0004") is still computed client-side from a local count and can display as a duplicate
+across two concurrent submissions — confirmed during the same test (both got "PRE-0004", DB ids 4
+and 5). This does not block saving and is unrelated to the primary-key collision; separate,
+lower-priority issue.
+
+Verified against real production data throughout, no test data left behind — both reproduction
+attempts (before and after the fix) created rows that were removed via a direct Postgres
+connection afterward (RLS has no delete policy on `requests`, so cleanup needed `DATABASE_URL`
+directly rather than the app's own client).
+
+### v2-4 continued: applied the same fix to all 7 remaining insert sites (2026-08-12)
+
+Per the user's decision to close this proactively rather than wait for each to break in
+production: applied the identical fix (drop the client-supplied `id`, let the Postgres identity
+column assign it) to every other insert call site with the same pattern —
+`dpr_log` (saveDPR, `dprTab.js`), `finance_ledger` (saveFinanceRow, `financeTab.js`),
+`material_lots` (saveLot, `materialTab.js`), `team_members` (saveMember, `teamMgmtTab.js`), and
+`projects` (three call sites: saveProject's create-new path in `addEditProject.js`, and two in
+`requestsTab.js` — `confirmConvertRequestToProject` and the CSV-import loop).
+
+**Critical catch made during verification, would have been a serious regression if missed**:
+every one of these tables' Postgres identity sequences had never actually advanced, because every
+insert since the app went live supplied its own explicit `id` (identity columns only auto-advance
+their sequence on inserts that omit `id`). Checked all 6 sequences directly against real data:
+`projects`' sequence was at 5 while real rows go up to id 67; `team_members`' sequence was at 7
+against real rows up to 18. Left alone, the code fix above would have made every single new
+project or team member insert **fail** (not just under concurrent access — deterministically,
+every time) until ~60+ consecutive failed attempts happened to walk the sequence forward past the
+real max id — a much worse regression than the bug being fixed. (`dpr_log`, `material_lots`,
+`requests` happened to already have sequences sitting ahead of their real max ids, purely by
+coincidence of this session's own earlier test inserts; `finance_ledger` was empty. Relying on
+that coincidence for `projects`/`team_members` would not have held.)
+
+**Fix applied**: ran `select setval(pg_get_serial_sequence(table,'id'), max(id), true)` directly
+against the production database (via `DATABASE_URL`, since this is bookkeeping RLS has no path
+for) for all 6 tables, bringing every sequence to exactly the real current max id (or reset to
+start at 1 for the empty `finance_ledger`). This is a one-time, zero-behavior-change correction —
+no schema change, no data change, just telling Postgres's own auto-numbering where the existing
+data actually ends.
+
+Verified live, one insert per table, all six: `dpr_log` (id 3→4 correctly, via saveDPR),
+`material_lots`, `finance_ledger`, `requests` (already verified above), `team_members` (id
+18→19, via saveMember, including its PIN-hash follow-up write), and `projects` (id 67→68,
+inserted directly matching `saveProject`'s create-new payload shape). Every test row was deleted
+afterward via `DATABASE_URL` directly (none of these tables have a delete RLS policy, so the
+app's own client can't remove them — expected, matches existing `requests`/`projects` delete
+gaps already known from earlier phases). Final state confirmed: all 6 sequences sit at or above
+their real max id, production data otherwise completely unchanged from before this session.

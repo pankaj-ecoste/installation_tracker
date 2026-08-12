@@ -243,9 +243,11 @@ export async function saveRequest(){
       assignedSupervisor:'', plannedVisitDate:'', actualVisitDate:'', plannedDateLocked:false,
       details:mergedDetails, checklist:[], linkedProjectId:null
     };
-    const {data:inserted,error}=await db.from('requests').insert({id:state.nextRequestId,...requestToRow(newReq)}).select().single();
+    // No client-supplied id — requests.id is a real Postgres identity column, so letting the
+    // database assign it atomically avoids two concurrent submissions both computing the same
+    // "next" id and colliding on the primary key (see plan.md v2-4 for the incident this fixed).
+    const {data:inserted,error}=await db.from('requests').insert(requestToRow(newReq)).select().single();
     if(error){ console.error('Supabase insert failed',error); err.classList.remove('hidden'); document.getElementById('req-err-msg').textContent='Could not save — check console. (Have you run the requests table SQL in Supabase yet?)'; return; }
-    state.nextRequestId++;
     state.requests.unshift(rowToRequest(inserted));
     logActivity('New request', rowToRequest(inserted).requestNumber+' — '+reqTypeLabel(type)+' request logged by '+createdBy);
     // Auto-emailer removed on new request submission per request — the in-app Notifications
@@ -614,7 +616,7 @@ export async function confirmConvertRequestToProject(){
   const template=r.requestType==='pre-mockup'?MS_PREMOCKUP:r.requestType==='mockup'?MS_MOCKUP_STEPS:isSampling?MS_SAMPLING:r.requestType==='post-mockup'?MS_POSTMOCKUP_STEPS:r.requestType==='pre-main-survey'?MS_PREMAINSURVEY_STEPS:r.requestType==='main-order'?MS_MAINORDER_STEPS:MS_MAIN;
   const milestones=template.map((label,i)=>i===0?{label,planned:plannedDate,actual:actualDate,gap,key:milestoneKeyFor(label)}:{label,planned:'',actual:'',gap:null,key:milestoneKeyFor(label)});
   const newProj={
-    id:state.nextId, accessCode, createdBy:r.createdBy||(state.currentUser?state.currentUser.username:'admin'),
+    accessCode, createdBy:r.createdBy||(state.currentUser?state.currentUser.username:'admin'),
     name, tower:d.towerBlock||'—', developer:d.developerName||'—', city:d.city||'—',
     state:d.state||'—', supervisor:r.assignedSupervisor||'—',
     vendor:(r.details&&r.details.assignedVendor)||'—', supervisorWA:'', status:'Not Started',
@@ -628,9 +630,10 @@ export async function confirmConvertRequestToProject(){
     sourceRequestType:reqTypeLabel(r.requestType)
   };
   // Create the project immediately on click — no separate "Save" step to forget or lose via back button.
-  const {data:inserted,error}=await db.from('projects').insert({id:state.nextId,...projectToRow(newProj)}).select().single();
+  // No client-supplied id — projects.id is a real Postgres identity column, so letting the
+  // database assign it atomically avoids two concurrent submissions colliding (see plan.md v2-4).
+  const {data:inserted,error}=await db.from('projects').insert(projectToRow(newProj)).select().single();
   if(error){ console.error('Supabase insert failed',error); document.getElementById('convert-error').classList.remove('hidden'); document.getElementById('convert-err-msg').textContent='Could not create the project — check console.'; return; }
-  state.nextId++;
   const createdProject=rowToProject(inserted);
   state.projects.push(createdProject);
   await updateRequestFields(id,{status:'Converted to Project', linkedProjectId:createdProject.id, convertedAt:new Date().toISOString()});
@@ -690,7 +693,7 @@ export async function importProjectsCSV(input){
     if(!accessCode||!name){ skipped++; continue; }
     if(state.projects.find(p=>p.accessCode===accessCode)){ skipped++; continue; }
     const newProj={
-      id:state.nextId, accessCode, createdBy:state.currentUser?state.currentUser.username:'admin',
+      accessCode, createdBy:state.currentUser?state.currentUser.username:'admin',
       name, tower:row['Tower/Block']||'—', developer:row['Developer']||'—', city:row['City']||'—', state:row['State']||'—',
       supervisor:row['Supervisor']||'—', vendor:'—', supervisorWA:'', status:row['Status']||'Not Started',
       plannedQty:parseInt(row['Planned Qty (sqft)'])||0, installedQty:parseInt(row['Installed Qty (sqft)'])||0,
@@ -700,9 +703,10 @@ export async function importProjectsCSV(input){
       poQty:parseInt(row['PO Qty'])||0, soQty:parseInt(row['SO Qty'])||0,
       daysAvailable:parseInt(row['Days Available'])||0, installCommencementDate:row['Installation Commencement Date']||''
     };
-    const {data:inserted,error}=await db.from('projects').insert({id:state.nextId,...projectToRow(newProj)}).select().single();
+    // No client-supplied id — projects.id is a real Postgres identity column, so letting the
+    // database assign it atomically avoids two concurrent submissions colliding (see plan.md v2-4).
+    const {data:inserted,error}=await db.from('projects').insert(projectToRow(newProj)).select().single();
     if(error){ console.error('Supabase insert failed for row',row,error); skipped++; continue; }
-    state.nextId++;
     state.projects.push(rowToProject(inserted));
     created++;
   }

@@ -252,9 +252,10 @@ export async function saveLot(){
     const {error}=await db.from('material_lots').update(lotToRow(state.materialLots[idx])).eq('id',state.editingLotId);
     if(error){ console.error('Supabase update failed',error); document.getElementById('lot-error').classList.remove('hidden'); document.getElementById('lot-err-msg').textContent='Could not save to database — check console.'; return; }
   } else {
-    const {data:inserted,error}=await db.from('material_lots').insert({id:state.nextLotId,...lotToRow(data)}).select().single();
+    // No client-supplied id — material_lots.id is a real Postgres identity column, so letting
+    // the database assign it atomically avoids two concurrent submissions colliding (see plan.md v2-4).
+    const {data:inserted,error}=await db.from('material_lots').insert(lotToRow(data)).select().single();
     if(error){ console.error('Supabase insert failed',error); document.getElementById('lot-error').classList.remove('hidden'); document.getElementById('lot-err-msg').textContent='Could not save to database — check console.'; return; }
-    state.nextLotId++;
     state.materialLots.push(rowToLot(inserted));
     const proj=state.projects.find(x=>x.id===projId);
     logActivity('Dispatch lot added', (proj?proj.name+' — '+proj.tower:'Project')+' — '+data.lotNo);

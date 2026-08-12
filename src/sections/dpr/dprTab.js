@@ -492,9 +492,10 @@ export async function saveDPR(){
     if(idx>=0) state.dprLog[idx]=savedDpr; else state.dprLog.unshift(savedDpr);
     logActivity('DPR updated', (p?p.name+' — '+p.tower:'Project')+' — corrected daily report for '+newDpr.date);
   } else {
-    const {data:inserted,error}=await db.from('dpr_log').insert({id:state.nextDprId,...dprToRow(newDpr)}).select().single();
+    // No client-supplied id — dpr_log.id is a real Postgres identity column, so letting the
+    // database assign it atomically avoids two concurrent submissions colliding (see plan.md v2-4).
+    const {data:inserted,error}=await db.from('dpr_log').insert(dprToRow(newDpr)).select().single();
     if(error){ console.error('Supabase insert failed',error); alert('Could not save DPR to database — check console.'); return; }
-    state.nextDprId++;
     savedDpr=rowToDpr(inserted);
     state.dprLog.unshift(savedDpr);
     logActivity('DPR submitted', (p?p.name+' — '+p.tower:'Project')+' — daily report for '+newDpr.date);

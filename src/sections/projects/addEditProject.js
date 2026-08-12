@@ -298,11 +298,12 @@ export async function saveProject(){
       supervisor:'—', supervisorWA:'',
       installedQty:0, jmrQty:0, raBillAmt:0, paymentCollected:0, raBillReady:false
     };
-    const newProj={id:state.nextId,...data,milestones:selectedMs,comments:[]};
-    const {data:inserted,error}=await db.from('projects').insert({id:state.nextId,...projectToRow(newProj)}).select().single();
+    const newProj={...data,milestones:selectedMs,comments:[]};
+    // No client-supplied id — projects.id is a real Postgres identity column, so letting the
+    // database assign it atomically avoids two concurrent submissions colliding (see plan.md v2-4).
+    const {data:inserted,error}=await db.from('projects').insert(projectToRow(newProj)).select().single();
     if(error){ console.error('Supabase insert failed',error); showFormErr('Could not save "'+towerNames[i]+'" to database — check console.'); return; }
     state.projects.push(rowToProject(inserted));
-    state.nextId++;
   }
   closePanel('panel-add-proj');
   renderMetrics(); renderProjects(); updateBell();

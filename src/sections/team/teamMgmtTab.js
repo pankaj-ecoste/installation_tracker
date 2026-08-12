@@ -160,13 +160,14 @@ export async function saveMember(){
     // 403s with "permission denied for table team_members" because Postgres needs SELECT on
     // every expanded column, not just the row. TEST_MODE's mock DB still needs the plaintext
     // `pin` back so its local login check (teamAuth.js) works for a member added this session.
-    const {data:inserted,error}=await db.from('team_members').insert({id:state.nextMemberId,...payload}).select(TEST_MODE?'*':TEAM_MEMBER_PUBLIC_COLUMNS).single();
+    // No client-supplied id — team_members.id is a real Postgres identity column, so letting
+    // the database assign it atomically avoids two concurrent submissions colliding (see plan.md v2-4).
+    const {data:inserted,error}=await db.from('team_members').insert(payload).select(TEST_MODE?'*':TEAM_MEMBER_PUBLIC_COLUMNS).single();
     if(error){ console.error('Supabase insert failed',error); err.classList.remove('hidden'); err.textContent='Could not save to database — check console.'; return; }
     if(pin&&!TEST_MODE){
       const pinErr=await setMemberPinHash(inserted.id,pin);
       if(pinErr){ err.classList.remove('hidden'); err.textContent=pinErr; return; }
     }
-    state.nextMemberId++;
     state.teamMembers.push(rowToMember(inserted));
   }
   closePanel('panel-add-member'); renderTeamMgmt();

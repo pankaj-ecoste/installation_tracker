@@ -120,9 +120,10 @@ export async function saveFinanceRow(){
     if(error){ console.error('Supabase update failed',error); err.classList.remove('hidden'); document.getElementById('fin-err-msg').textContent='Could not save — check console. (Has the finance_ledger table been created?)'; return; }
     logActivity('Finance ledger updated', (proj?proj.name+' — '+proj.tower:'Project')+' — '+contractor);
   } else {
-    const {data:inserted,error}=await db.from('finance_ledger').insert({id:state.nextFinanceId,...financeRowToRow(rowData)}).select().single();
+    // No client-supplied id — finance_ledger.id is a real Postgres identity column, so letting
+    // the database assign it atomically avoids two concurrent submissions colliding (see plan.md v2-4).
+    const {data:inserted,error}=await db.from('finance_ledger').insert(financeRowToRow(rowData)).select().single();
     if(error){ console.error('Supabase insert failed',error); err.classList.remove('hidden'); document.getElementById('fin-err-msg').textContent='Could not save — check console. (Has the finance_ledger table been created?)'; return; }
-    state.nextFinanceId++;
     state.financeLedger.push(rowToFinanceRow(inserted));
     logActivity('Finance ledger row added', (proj?proj.name+' — '+proj.tower:'Project')+' — '+contractor);
   }
