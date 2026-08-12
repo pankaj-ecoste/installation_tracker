@@ -1,5 +1,6 @@
 import { state } from '../../lib/state.js';
 import { db } from '../../lib/supabaseClient.js';
+import { TEST_MODE } from '../../lib/config.js';
 import { syncProject } from '../../data/loadAllData.js';
 import { logActivity } from '../../lib/activityLog.js';
 import { CHECKLIST_DEFS, CHECKLIST_TEMPLATES, checklistDoneItems, checklistTotalItems, isChecklistActive, milestoneKeyFor, notifyJMRUpload } from '../../lib/constants.js';
@@ -174,7 +175,18 @@ export function openAddProject(){
   openPanel('panel-add-proj');
 }
 
-export function openEditProject(id){
+export async function openEditProject(id){
+  // The app loads all data once at startup and never re-fetches, so this tab's local copy
+  // of the project can be stale if anyone (including this same user, in another tab) saved
+  // changes to it since then. Re-fetch this one project's current row before populating the
+  // edit form, so it never shows out-of-date values regardless of how long this tab's been open.
+  if(!TEST_MODE){
+    const {data:row,error}=await db.from('projects').select('*').eq('id',id).single();
+    if(!error&&row){
+      const idx=state.projects.findIndex(x=>x.id===id);
+      if(idx>=0) state.projects[idx]={...rowToProject(row),id};
+    }
+  }
   const p=state.projects.find(x=>x.id===id); if(!p) return;
   state.editingId=id; state.pendingConstraints=p.constraints.map(c=>c.text);
   state.formMilestones=(p.milestones||[]).map(m=>({label:m.label,planned:m.planned||'',actual:m.actual||'',gap:m.gap!=null?m.gap:null,selected:true}));
@@ -258,8 +270,14 @@ export async function saveProject(){
       raBillReady:existing?.raBillReady||false
     };
     const idx=state.projects.findIndex(p=>p.id===state.editingId);
+    const previous=state.projects[idx];
     state.projects[idx]={...state.projects[idx],...data,milestones:selectedMs};
-    await syncProject(state.projects[idx]);
+    const result=await syncProject(state.projects[idx]);
+    if(!result.ok){
+      state.projects[idx]=previous; // roll back the local change — it never actually reached the database
+      showFormErr('Could not save — check console for the exact error. Your changes were not saved; please try again.');
+      return;
+    }
     closePanel('panel-add-proj');
     renderMetrics(); renderProjects(); updateBell();
     return;

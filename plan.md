@@ -358,3 +358,71 @@ lost:
 
 None of these block calling the project finished. Next session should start by asking the user
 what's next, not by assuming there's unfinished restructuring work.
+
+---
+
+## v2: team-driven data-entry tweaks (starting 2026-08-12)
+
+The restructuring project (Phases 0–F, above) is done and the app is live in production with the
+team actively using it. This new track is different in kind: small, specific changes to how data
+gets filled in day-to-day, requested directly by the team as they use the app (not architecture
+work). **Same non-negotiable ground rule carries over**: no feature/flow changes except the exact
+one requested — anything else stays pixel/behavior-identical. Each change gets logged here before
+being implemented, confirmed with the user first, then verified live.
+
+### v2-1: Vendor KYC uploads made optional (2026-08-12)
+
+**Ask**: On the vendor portal's registration form (KYC Documents section — MSME Certificate, GST
+Certificate, PAN Card, TAN Certificate, Cancelled Cheque), all 5 file uploads were mandatory. Team
+wants them optional — registration should submit successfully even with zero files attached.
+
+**Root cause**: Not an HTML `required` attribute — two JS checks in `src/auth/vendorAuth.js`
+enforced it: `vendorRegister()` blocked submission pre-signup if any doc wasn't staged
+(`missingDoc`, line 38), and blocked again post-signup if any staged upload hadn't produced a URL
+(`missingUpload`, line 50). Removed both checks; the upload loop now only attempts files the
+vendor actually selected, skipping the rest.
+
+**Confirmed no downstream flow change**: the admin "New Vendors" review tab
+(`newVendorsTab.js:24-27`) already rendered each KYC doc as either a clickable link or a red "❌
+X missing" badge per-document — built to handle absence gracefully already. Admins will now just
+see more ❌ badges for vendors who skip uploads; no code change needed there.
+
+### v2-2: Fixed "old data reappears" bug on Edit Project (2026-08-12)
+
+**Report**: Staff edit a project and save; later, opening "Edit Project" on that same project
+shows the old (pre-edit) values instead of what was just saved.
+
+**Root cause, confirmed by live reproduction against the real production database** (using two
+separate logged-in browser sessions, admin/1234): this app fetches all data exactly once when a
+browser tab first loads (`main.js` → `loadAllData()`), and never re-fetches after that — no
+polling, no realtime subscription. So if Session A has been open since before Session B saved a
+change to a project, Session A's in-memory copy is stale, and opening Edit Project in Session A
+populates the form from that stale copy. Reproduced exactly: Tab B edited a project's Drive Link
+and saved (confirmed persisted in the DB); Tab A, open since before that save, then opened Edit
+Project on the same project and saw the old (empty) value — the literal bug report. This can
+happen soon after another save or much later — purely a function of how long the viewing tab has
+been open, not a database failure.
+
+**Fix**: `openEditProject()` (`src/sections/projects/addEditProject.js`) now re-fetches that one
+project's current row from Supabase before populating the form, replacing this tab's local copy
+if it differs. Adds one network round-trip when opening Edit — no visible behavior change
+otherwise, and TEST_MODE (mock client, no live DB) skips it entirely.
+
+**Secondary bug fixed alongside it**: `saveProject()`'s edit path called `syncProject()` but
+never checked whether the save actually succeeded — unlike two sibling functions in the same file
+(`saveSnagQuick`, `saveMilestonesOnly`) which already roll back and show an error on failure. Now
+matches that pattern: a failed save rolls back the optimistic local update and shows "Could not
+save" instead of silently closing the panel as if it worked. This was a real gap (found by code
+reading, not reproduced live) but not the cause of this specific report — the live reproduction
+above showed the underlying database writes succeeding correctly.
+
+**Known related gap, not fixed here (flagging, not silently expanding scope)**: the same
+"loads once, never refreshes" architecture underlies every other edit panel in the app (Update
+Progress, Milestones, Snags, etc.) — any of them could show stale data the same way if a tab's
+been open since before another session's save. Only Edit Project was reported and fixed. Revisit
+if the same complaint surfaces elsewhere.
+
+Verified live against the real Supabase project (`qxxcwctbaefwhjjlmiyi`) using the real admin
+account, reproducing the exact bug before the fix and confirming it resolved after, on a real
+project (id 3, "Arun Seth — Supply only") using its Drive Link field as the test value — reset
+back to its original empty value afterward, no test data left behind.

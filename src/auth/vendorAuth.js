@@ -35,8 +35,6 @@ export async function vendorRegister(){
   if(!email||password.length<6){ err.classList.remove('hidden'); document.getElementById('vendreg-err-msg').textContent='Email and a password (6+ characters) are required.'; return; }
   const missingField=VENDOR_FIELDS.find(f=>f.required&&!String(state.vendRegDetails[f.key]||'').trim());
   if(missingField){ err.classList.remove('hidden'); document.getElementById('vendreg-err-msg').textContent='"'+missingField.label+'" is required.'; return; }
-  const missingDoc=VENDOR_KYC_DOCS.find(d=>!state.vendRegFiles[d.key]);
-  if(missingDoc){ err.classList.remove('hidden'); document.getElementById('vendreg-err-msg').textContent='Please upload: '+missingDoc.label; return; }
   const {data,error}=await db.auth.signUp({email,password});
   if(error){ console.error('Supabase auth signUp failed',error); err.classList.remove('hidden'); document.getElementById('vendreg-err-msg').textContent=error.message; return; }
   const userId=data.user?data.user.id:null;
@@ -44,11 +42,11 @@ export async function vendorRegister(){
     // Only now does a real auth.uid() exist, so only now can the vendor-kyc storage policy
     // allow these uploads (see the staging note in openVendorRegister above).
     for(const d of VENDOR_KYC_DOCS){
+      if(!state.vendRegFiles[d.key]) continue; // KYC uploads are optional — nothing selected, nothing to upload
       const urls=await uploadFiles([state.vendRegFiles[d.key]],'vendor-kyc');
       if(urls.length) state.vendRegDetails[d.key]=urls[0];
+      else { err.classList.remove('hidden'); document.getElementById('vendreg-err-msg').textContent='Account created, but uploading "'+d.label+'" failed — check console.'; return; }
     }
-    const missingUpload=VENDOR_KYC_DOCS.find(d=>!state.vendRegDetails[d.key]);
-    if(missingUpload){ err.classList.remove('hidden'); document.getElementById('vendreg-err-msg').textContent='Account created, but uploading "'+missingUpload.label+'" failed — check console.'; return; }
     const row={
       user_id:userId, email,
       company_name:state.vendRegDetails.companyName||'', trade_name:state.vendRegDetails.tradeName||'',
