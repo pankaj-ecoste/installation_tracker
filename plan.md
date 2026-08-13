@@ -548,3 +548,45 @@ afterward via `DATABASE_URL` directly (none of these tables have a delete RLS po
 app's own client can't remove them — expected, matches existing `requests`/`projects` delete
 gaps already known from earlier phases). Final state confirmed: all 6 sequences sit at or above
 their real max id, production data otherwise completely unchanged from before this session.
+
+### v2-5: Finance role can now add ledger rows, not just edit them (2026-08-13)
+
+**Request from the team**: the Finance tab has a "+ Add ledger row" button (and its per-project
+"+ Add RA Bill" twin). Admin sees it. A staff member logged in under the **Finance** role does
+not, even though the Role Permissions grid (Team Management tab) shows "Edit finance data" as ✅
+for Finance. The team wants Finance staff to be able to add new ledger rows, not just edit
+existing ones.
+
+**Root cause**: "Add ledger row" was never wired to `editFinance` (the permission shown/toggle-
+able in the Role Permissions grid). It's gated by a separate, hardcoded `addFinanceRow`
+permission that isn't in `PERM_LABELS` at all — so it never appears in the admin's permissions
+table and admin has no way to grant it. It's `true` only for `admin`; `manager` and `finance`
+both have it hardcoded `false`, matching a deliberate decision recorded in
+`supabase/migrations/0004_rls_policies.sql`'s finance_ledger comment ("admin only... manager/
+finance can edit rows but not add new ones; preserved exactly as specified even though it looks
+asymmetric") from the RLS-hardening phase. The team is now explicitly changing that decision for
+Finance.
+
+**Scope of this change**: grant `addFinanceRow` to the `finance` role only (not `manager`/
+`dispatch_head`/others) — that's the specific gap reported. Two layers both currently block
+Finance, both need the change:
+1. Front end — `ROLES.finance.can.addFinanceRow` in `src/lib/constants.js` (controls the
+   "+ Add ledger row" / "+ Add RA Bill" button visibility via `canDo('addFinanceRow')` in
+   `teamAuth.js` and `financeTab.js`, and the same check inside `openAddFinanceRow()`).
+2. Database — the `finance_ledger_insert` RLS policy in `0004_rls_policies.sql` currently only
+   allows `app_jwt_team_role() = 'admin'`. Even with the button visible, a Finance user's insert
+   would still be rejected by Postgres. New migration `0007_finance_ledger_insert_finance_role.sql`
+   adds `'finance'` to the allowed roles for INSERT (matches the existing UPDATE policy, which
+   already allows `admin`, `manager`, `finance`).
+
+**Not changed**: `manager`'s `addFinanceRow` stays `false` (not part of this request); the RLS
+UPDATE policy (already includes finance, unchanged).
+
+**Verified**: migration `0007` applied to the live production database via
+`scripts/apply-migrations.mjs`. RLS confirmed directly against production in a rolled-back
+transaction (simulated JWT claims per role, no row persisted): `finance` role insert now
+succeeds, `admin` still succeeds, `supervisor` still correctly blocked. Then verified live in the
+browser logged in as an actual Finance-role team member (Rashi) against the dev server pointed at
+production data: both the top-level "+ Add ledger row" button and the per-project "+ Add RA Bill"
+button are now visible and open the same "Add Ledger Row" panel Admin sees — cancelled out without
+saving, no test data left in `finance_ledger`.
