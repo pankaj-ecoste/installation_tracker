@@ -44,6 +44,9 @@
         <label class="form-label">Password / PIN</label>
         <input class="form-input" type="password" id="tl-pass" placeholder="Enter your PIN" onkeydown="if(event.key==='Enter')teamLogin()">
       </div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#666;margin-bottom:14px;cursor:pointer">
+        <input type="checkbox" id="tl-remember"> Remember me
+      </label>
       <div class="error-msg hidden" id="tl-error"></div>
       <button class="btn btn-green" style="width:100%;padding:10px" onclick="teamLogin()">Sign in</button>
       <button class="btn btn-outline" style="width:100%;padding:8px;margin-top:8px" onclick="backToClient()">← Back to client portal</button>
@@ -163,6 +166,9 @@
       <p style="font-size:13px;color:#555;margin-bottom:18px">Enter your name and project access code.</p>
       <div class="form-group" style="margin-bottom:10px"><label class="form-label">Your name</label><input class="form-input" id="login-name" placeholder="e.g. Rahul Mehta"></div>
       <div class="form-group" style="margin-bottom:12px"><label class="form-label">Project access code</label><input class="form-input" id="login-code" placeholder="Enter your access code" autocomplete="off" data-lpignore="true" data-1p-ignore onkeydown="if(event.key==='Enter')doClientLogin()"></div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#666;margin-bottom:12px;cursor:pointer">
+        <input type="checkbox" id="login-remember"> Remember me
+      </label>
       <div class="error-msg hidden" id="login-error"></div>
       <button class="btn btn-green" style="width:100%;padding:9px;margin-top:8px" onclick="doClientLogin()">View my project</button>
       <div class="login-hint">Don't have your access code? Contact your sales person.</div>
@@ -477,6 +483,9 @@
       </div>
       <div class="form-group" style="margin-bottom:10px"><label class="form-label">Email</label><input class="form-input" id="vend-email" placeholder="you@company.com"></div>
       <div class="form-group" style="margin-bottom:14px"><label class="form-label">Password</label><input class="form-input" type="password" id="vend-password" placeholder="Password"></div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#666;margin-bottom:14px;cursor:pointer">
+        <input type="checkbox" id="vend-remember"> Remember me
+      </label>
       <div class="error-msg hidden" id="vend-error"></div>
       <button class="btn btn-green" style="width:100%;padding:10px" onclick="vendorLogin()">Sign in</button>
       <button class="btn btn-outline" style="width:100%;padding:8px;margin-top:8px" onclick="openVendorRegister()">New vendor? Register here</button>

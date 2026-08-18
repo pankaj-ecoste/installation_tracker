@@ -1,5 +1,5 @@
 import { state } from '../lib/state.js';
-import { db } from '../lib/supabaseClient.js';
+import { db, setVendorAuthStorage } from '../lib/supabaseClient.js';
 import { VENDOR_FIELDS, VENDOR_KYC_DOCS } from '../lib/constants.js';
 import { fileUploadRowHTML, uploadFiles } from '../lib/uploads.js';
 import { closePanel, openPanel, showSection } from '../sections/navigation.js';
@@ -75,7 +75,12 @@ export async function vendorRegister(){
 export async function vendorLogin(){
   const email=document.getElementById('vend-email').value.trim();
   const password=document.getElementById('vend-password').value;
+  const remember=document.getElementById('vend-remember').checked;
   const err=document.getElementById('vend-error');
+  // v2-6: must run before signInWithPassword — it swaps db to the right session storage
+  // (localStorage if remembered, in-memory only otherwise) so the resulting session lands in
+  // the right place from the start. See setVendorAuthStorage() in supabaseClient.js.
+  setVendorAuthStorage(remember);
   const {data,error}=await db.auth.signInWithPassword({email,password});
   if(error){ err.classList.remove('hidden'); err.textContent=error.message; return; }
   const {data:profile,error:profErr}=await db.from('vendor_profiles').select('*').eq('user_id',data.user.id).single();
@@ -84,3 +89,18 @@ export async function vendorLogin(){
   renderVendorPortal();
 }
 export async function vendorLogout(){ await db.auth.signOut(); state.currentVendor=null; showSection('vendor-login'); }
+
+// v2-6: restores a "remembered" vendor session on app startup, before the login screen would
+// otherwise show. Supabase Auth's default client (localStorage-backed) already auto-loads any
+// persisted session on creation — an unremembered login never wrote one there in the first
+// place (see setVendorAuthStorage) — so this just needs to ask for the current session.
+// Returns true if a session was restored. See plan.md and main.js's init().
+export async function restoreVendorSession(){
+  const {data:{session}}=await db.auth.getSession();
+  if(!session) return false;
+  const {data:profile,error:profErr}=await db.from('vendor_profiles').select('*').eq('user_id',session.user.id).single();
+  state.currentVendor={user:session.user, profile:profErr?null:profile};
+  showSection('vendor-portal');
+  renderVendorPortal();
+  return true;
+}

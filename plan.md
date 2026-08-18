@@ -590,3 +590,95 @@ browser logged in as an actual Finance-role team member (Rashi) against the dev 
 production data: both the top-level "+ Add ledger row" button and the per-project "+ Add RA Bill"
 button are now visible and open the same "Add Ledger Row" panel Admin sees — cancelled out without
 saving, no test data left in `finance_ledger`.
+
+### v2-6: "Remember Me" on all three login flows (starting 2026-08-18)
+
+**Request from the team**: after refreshing the app, users are always dropped back to the login
+screen and have to re-enter credentials — even seconds after logging in. The team wants a
+"Remember Me" checkbox on login so that, when checked, a refresh keeps them signed in.
+
+**Investigation before designing**: none of the three login flows (Team, Client Portal, Vendor
+Portal) persist anything today. `state.currentUser`, `state.loggedInClient`, and the team JWT
+(`currentTeamToken` in `src/lib/supabaseClient.js`) are all plain in-memory JS state, wiped on
+every reload. `src/main.js`'s `init()` unconditionally shows the client-login screen first; the
+one `if(state.currentUser) showTeamDashboard()` line is dead code on a fresh page load. Vendor
+login uses real Supabase Auth (`db.auth.signInWithPassword`), which *would* persist to
+`localStorage` by default (Supabase's own default), but `main.js` never checks for an existing
+session on startup, so today it has no visible effect either — confirmed all three flows
+currently force a fresh login on every refresh, with no exceptions.
+
+**Decisions finalized with the team before building (2026-08-18)**:
+1. **Scope**: all three flows get the checkbox — Team, Client Portal, Vendor Portal.
+2. **Duration**: a remembered login stays valid for **30 days**.
+3. **Unchecked behavior**: unchanged from today — nothing is persisted, a refresh always asks
+   for credentials again. Checking the box is what changes behavior, not the default.
+
+**Design**:
+- **Team login**: `team-login` Edge Function currently signs a fixed 12h JWT. Add an optional
+  `remember` flag to the request body; sign a 30-day-expiry JWT when true, keep 12h otherwise. On
+  the client, only write `{token, member, expiresAt}` to `localStorage` (`ecoste_team_session`)
+  when the checkbox was checked — unchecked logins keep today's in-memory-only behavior exactly.
+  `main.js` checks this key on startup (before showing any login screen) and, if present and
+  unexpired, restores `setTeamAuthToken()` + `state.currentUser` and jumps straight to
+  `showTeamDashboard()`. Expired/invalid entries are cleared. `lockTeam()` clears the key on
+  logout.
+- **Client portal**: there's no server token here, just a one-time access-code check against
+  `client-login`. When remembered, store `{name, accessCode, expiresAt}` in `localStorage`
+  (`ecoste_client_session`) — never the returned project data directly. On startup, if present
+  and unexpired, silently replay the same `client-login` call to re-validate and refresh project
+  data (so a revoked/changed access code can't be used from stale local storage). `clientLogout()`
+  clears the key.
+- **Vendor portal**: reuses Supabase Auth's own session handling rather than inventing a parallel
+  mechanism. Mirrors the existing `setTeamAuthToken()` pattern of swapping the shared `db` client:
+  before calling `signInWithPassword`, reconfigure `db` with `storage: localStorage` if
+  remembered, or an in-memory-only storage adapter if not — so an unremembered vendor session
+  never touches `localStorage` at all and is lost on refresh, matching the other two flows exactly.
+  `main.js` checks `db.auth.getSession()` on startup (after the team/client checks) to restore
+  `state.currentVendor` and show the vendor portal.
+- **TEST_MODE**: no live Supabase project to call, so team/client "remember" in TEST_MODE stores
+  the in-memory member/project object directly instead of a real token — dev-only convenience,
+  not used in production.
+- **UI**: one checkbox added per login form (`tl-remember`, `login-remember`, `vend-remember`),
+  unchecked by default, placed directly under the password/PIN/access-code field. No other
+  markup on the login screens changes.
+
+**Built (2026-08-18)**:
+- `src/lib/rememberMe.js` (new) — shared localStorage read/write/clear + 30-day expiry helpers
+  for the Team and Client sessions.
+- `supabase/functions/team-login/index.ts` — accepts `remember` in the request body, signs a
+  30-day JWT when true (12h otherwise, unchanged default). Deployed to production.
+- `src/lib/supabaseClient.js` — added `setVendorAuthStorage(remember)`, which swaps `db` to a
+  plain in-memory storage adapter for an unremembered vendor login (so its Supabase Auth session
+  never touches `localStorage`), mirroring the existing `setTeamAuthToken()` client-swap pattern.
+  Also added a `getSession()` stub to the TEST_MODE mock client's `auth` object so
+  `restoreVendorSession()` has something safe to call in dev.
+- `src/auth/teamAuth.js` / `clientAuth.js` / `vendorAuth.js` — each login function now reads its
+  checkbox and saves/clears the appropriate stored session; each gained a `restore*Session()`
+  export for startup; `lockTeam()` / `clientLogout()` / (vendor sign-out already clears its own
+  Supabase Auth session) clear the stored session on logout.
+- `src/main.js` — on startup, tries `restoreTeamSession()` → `restoreClientSession()` →
+  `restoreVendorSession()` in order (at most one flow is ever logged in at a time) before
+  falling back to the client-login screen.
+- `index.html` — one "Remember me" checkbox added to each of the three login forms
+  (`tl-remember`, `login-remember`, `vend-remember`), unchecked by default.
+
+**Verified live in the browser (TEST_MODE, `localhost:5174`)**:
+- Team login (admin/1234) with the box checked → refresh → stayed on the dashboard, no re-login.
+  `localStorage.ecoste_team_session` held the member + a 30-day `expiresAt`.
+- Team logout ("Lock") → `ecoste_team_session` cleared.
+- Client portal login (AJMERA-BW) with the box checked → refresh → stayed on the client portal
+  (re-validated the access code against the mock backend rather than trusting stored data).
+- Client sign-out → `ecoste_client_session` cleared.
+- Team login **unchecked** → nothing written to `localStorage` → refresh → back at the login
+  screen, exactly matching pre-existing behavior (the agreed default-unchanged requirement).
+- `npm run build` succeeds with no errors.
+- The live production Edge Function deploy (`npx supabase functions deploy team-login`) was
+  confirmed successful, and the production dev server (`localhost:5173`, real Supabase project)
+  still loads the client-login screen correctly with the new checkbox present.
+
+**Not verified live**: Vendor Portal's remember-me swap (`setVendorAuthStorage`) is a no-op in
+TEST_MODE by design (real Supabase Auth session storage doesn't exist in the mock client), so it
+can only be exercised against a real vendor account on the live project. Skipped for this
+session per the team's call — the mechanism mirrors `setTeamAuthToken()`'s already-proven
+client-swap pattern exactly, but hasn't been click-tested end-to-end. Worth a real login test
+next time a vendor account is available.

@@ -82,7 +82,10 @@ export function makeMockClient(seedProjects, seedDpr, seedTeam, seedLots){
       if(!u) return {data:null, error:{message:'Invalid login credentials (test mode — you need to register this vendor first)'}};
       return {data:{user:{id:u.id,email:u.email}}, error:null};
     },
-    async signOut(){ return {error:null}; }
+    async signOut(){ return {error:null}; },
+    // TEST_MODE never persists a vendor session (no real storage backing this mock), so there's
+    // never anything to restore on startup — see restoreVendorSession() in vendorAuth.js.
+    async getSession(){ return {data:{session:null}, error:null}; }
   };
   const storage={
     from(){ return {
@@ -112,4 +115,28 @@ export function setTeamAuthToken(token){
   db = currentTeamToken
     ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global: { headers: { Authorization: `Bearer ${currentTeamToken}` } } })
     : createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+}
+
+/* ══ VENDOR "REMEMBER ME" ══
+   v2-6 (see plan.md). Vendor login uses real Supabase Auth (auth.signInWithPassword), which
+   persists to localStorage by default — that default is exactly right for a "remembered" login,
+   so the remembered case needs no special handling. For an *unremembered* login we swap `db` to
+   a client backed by a plain in-memory store instead, so the session token never touches
+   localStorage and is gone on refresh, matching the Team/Client flows' unchecked behavior. Must
+   be called before auth.signInWithPassword() so the resulting session lands in the right store. */
+function makeMemoryStorage(){
+  const store = new Map();
+  return {
+    getItem: k => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => { store.set(k, v); },
+    removeItem: k => { store.delete(k); }
+  };
+}
+export function setVendorAuthStorage(remember){
+  if (TEST_MODE) return; // mock client has no real auth session storage
+  const authOpts = remember
+    ? { persistSession: true }
+    : { persistSession: true, storage: makeMemoryStorage() };
+  const globalOpts = currentTeamToken ? { headers: { Authorization: `Bearer ${currentTeamToken}` } } : undefined;
+  db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: authOpts, global: globalOpts });
 }

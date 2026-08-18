@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
 
-  let body: { username?: string; pin?: string };
+  let body: { username?: string; pin?: string; remember?: boolean };
   try {
     body = await req.json();
   } catch {
@@ -39,6 +39,7 @@ Deno.serve(async (req) => {
   }
   const username = (body.username || '').trim();
   const pin = (body.pin || '').trim();
+  const remember = body.remember === true;
   if (!username || !pin) return jsonResponse({ error: GENERIC_ERROR }, 400);
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
@@ -69,7 +70,7 @@ Deno.serve(async (req) => {
   })
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .setIssuedAt()
-    .setExpirationTime('12h')
+    .setExpirationTime(remember ? '30d' : '12h') // v2-6: "Remember me" — see plan.md
     .sign(key);
 
   return jsonResponse({

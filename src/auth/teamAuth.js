@@ -8,6 +8,7 @@ import { renderProjects } from '../sections/projects/projectCards.js';
 import { updateNewVendorBadge } from '../sections/vendors/newVendorsTab.js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY, TEST_MODE } from '../lib/config.js';
 import { setTeamAuthToken } from '../lib/supabaseClient.js';
+import { saveTeamSession, loadTeamSession, clearTeamSession } from '../lib/rememberMe.js';
 
 /* ══ TEAM AUTH ══ */
 export function showTeamLogin(){
@@ -22,6 +23,7 @@ export function showTeamLogin(){
 export async function teamLogin(){
   const user=document.getElementById('tl-user').value.trim().toLowerCase();
   const pass=document.getElementById('tl-pass').value.trim();
+  const remember=document.getElementById('tl-remember').checked;
   const err=document.getElementById('tl-error');
   if(!user||!pass){ err.classList.remove('hidden'); err.textContent='Please enter username and PIN.'; return; }
 
@@ -30,13 +32,16 @@ export async function teamLogin(){
     member=state.teamMembers.find(m=>m.username===user&&m.pin===pass&&m.active);
     if(!member){ err.classList.remove('hidden'); err.textContent='Invalid username or PIN.'; return; }
     member.lastLogin=new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+    // TEST_MODE has no live Supabase project to sign a real token against, so "remember me"
+    // just stores the in-memory member directly — dev-only convenience, see plan.md v2-6.
+    if(remember) saveTeamSession(null,member); else clearTeamSession();
   } else {
     let res, data;
     try{
       res=await fetch(SUPABASE_URL+'/functions/v1/team-login',{
         method:'POST',
         headers:{'Content-Type':'application/json','apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+SUPABASE_ANON_KEY},
-        body:JSON.stringify({username:user,pin:pass})
+        body:JSON.stringify({username:user,pin:pass,remember})
       });
       data=await res.json();
     }catch(e){ console.error('team-login request failed',e); err.classList.remove('hidden'); err.textContent='Could not reach the server — check your connection.'; return; }
@@ -45,12 +50,28 @@ export async function teamLogin(){
     const idx=state.teamMembers.findIndex(m=>m.id===data.member.id);
     if(idx>=0){ Object.assign(state.teamMembers[idx],data.member); member=state.teamMembers[idx]; }
     else { member=data.member; state.teamMembers.push(member); }
+    if(remember) saveTeamSession(data.token,member); else clearTeamSession();
   }
   err.classList.add('hidden');
   state.currentUser=member;
   document.getElementById('tl-user').value='';
   document.getElementById('tl-pass').value='';
   showTeamDashboard();
+}
+
+// v2-6: restores a "remembered" team session on app startup, before the login screen would
+// otherwise show. Returns true if a session was restored. See plan.md and main.js's init().
+export function restoreTeamSession(){
+  const saved=loadTeamSession();
+  if(!saved) return false;
+  if(!TEST_MODE){
+    if(!saved.token) return false;
+    setTeamAuthToken(saved.token);
+  }
+  const idx=state.teamMembers.findIndex(m=>m.id===saved.member.id);
+  if(idx>=0){ Object.assign(state.teamMembers[idx],saved.member); state.currentUser=state.teamMembers[idx]; }
+  else { state.teamMembers.push(saved.member); state.currentUser=saved.member; }
+  return true;
 }
 
 export function showTeamDashboard(){
@@ -106,5 +127,5 @@ export function showTeamDashboard(){
   renderMetrics(); renderProjects();
 }
 
-export function lockTeam(){ state.currentUser=null; setTeamAuthToken(null); showClientSection(); }
+export function lockTeam(){ state.currentUser=null; setTeamAuthToken(null); clearTeamSession(); showClientSection(); }
 export function backToClient(){ showClientSection(); }
