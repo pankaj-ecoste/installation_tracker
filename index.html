@@ -119,9 +119,12 @@
       <div id="dpr-list"></div>
     </div>
     <div id="tab-material-view" class="hidden">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
         <h3 style="font-size:15px;font-weight:600">Material movement tracker</h3>
-        <button class="btn btn-green btn-sm" id="btn-add-lot" onclick="openAddLot()">+ Add lot dispatch</button>
+        <div style="display:flex;align-items:center;gap:8px">
+          <input type="text" id="mat-search" placeholder="Search project..." oninput="renderMaterial()" style="min-width:150px">
+          <button class="btn btn-green btn-sm" id="btn-add-lot" onclick="openAddLot()">+ Add lot dispatch</button>
+        </div>
       </div>
       <div id="material-list"></div>
     </div>
@@ -439,6 +442,11 @@
       <div class="form-group" style="margin-top:10px"><label class="form-label">Storage location</label><input class="form-input" id="lot_storage" placeholder="e.g. Ground floor storeroom"></div>
       <div class="form-group" style="margin-top:10px"><label class="form-label">Dispatch notes</label><input class="form-input" id="lot_dispatch_notes" placeholder="e.g. Framing + grille for floors 1-10"></div>
       <div class="form-group" style="margin-top:10px"><label class="form-label">LR copy (Lorry Receipt)</label><div style="font-size:11px;color:#888;margin-bottom:4px">Tap to open your camera directly (rear camera on phone) to photograph the LR, or choose an existing image/PDF.</div><input type="file" id="lot_lr_copy" accept="image/*,application/pdf" capture="environment" style="font-size:12px"><div id="lot_lr_copy-list" style="font-size:11px;color:#1D9E75;margin-top:4px"></div></div>
+      <div class="form-group" style="margin-top:10px"><label class="form-label">E-way bill (optional)</label><div style="font-size:11px;color:#888;margin-bottom:4px">Tap to open your camera directly (rear camera on phone) to photograph it, or choose an existing image/PDF.</div><input type="file" id="lot_eway_bill" accept="image/*,application/pdf" capture="environment" style="font-size:12px"><div id="lot_eway_bill-list" style="font-size:11px;color:#1D9E75;margin-top:4px"></div></div>
+      <div class="form-group" style="margin-top:10px"><label class="form-label">Delivery chalan (optional)</label><div style="font-size:11px;color:#888;margin-bottom:4px">Tap to open your camera directly (rear camera on phone) to photograph it, or choose an existing image/PDF.</div><input type="file" id="lot_delivery_chalan" accept="image/*,application/pdf" capture="environment" style="font-size:12px"><div id="lot_delivery_chalan-list" style="font-size:11px;color:#1D9E75;margin-top:4px"></div></div>
+      <div class="form-group" style="margin-top:10px"><label class="form-label">LR copy receiving (optional)</label><div style="font-size:11px;color:#888;margin-bottom:4px">Tap to open your camera directly (rear camera on phone) to photograph it, or choose an existing image/PDF.</div><input type="file" id="lot_lr_copy_receiving" accept="image/*,application/pdf" capture="environment" style="font-size:12px"><div id="lot_lr_copy_receiving-list" style="font-size:11px;color:#1D9E75;margin-top:4px"></div></div>
+      <div class="form-group" style="margin-top:10px"><label class="form-label">Packing list (optional)</label><div style="font-size:11px;color:#888;margin-bottom:4px">Tap to open your camera directly (rear camera on phone) to photograph it, or choose an existing image/PDF.</div><input type="file" id="lot_packing_list" accept="image/*,application/pdf" capture="environment" style="font-size:12px"><div id="lot_packing_list-list" style="font-size:11px;color:#1D9E75;margin-top:4px"></div></div>
+      <div class="form-group" style="margin-top:10px"><label class="form-label">Other (optional)</label><div style="font-size:11px;color:#888;margin-bottom:4px">Tap to open your camera directly (rear camera on phone) to photograph it, or choose an existing image/PDF.</div><input type="file" id="lot_other_document" accept="image/*,application/pdf" capture="environment" style="font-size:12px"><div id="lot_other_document-list" style="font-size:11px;color:#1D9E75;margin-top:4px"></div></div>
       <div style="font-size:11px;color:#888;margin-top:4px">Actual arrival date, condition on arrival, and arrival notes are now filled by the site supervisor via the daily DPR, not here.</div>
     </div>
     <div class="form-card"><div class="form-card-title">Items in this lot</div>

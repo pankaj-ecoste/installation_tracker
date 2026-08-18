@@ -682,3 +682,172 @@ can only be exercised against a real vendor account on the live project. Skipped
 session per the team's call — the mechanism mirrors `setTeamAuthToken()`'s already-proven
 client-swap pattern exactly, but hasn't been click-tested end-to-end. Worth a real login test
 next time a vendor account is available.
+
+### v2-7: 5 more document uploads on Add/Edit Lot Dispatch (starting 2026-08-18)
+
+**Request from the dispatch team**: the "Add Lot Dispatch" form (Material tab) today has one
+upload field, "LR copy (Lorry Receipt)" — tap opens the rear camera directly to photograph the
+document, or the user can choose an existing image/PDF instead. The dispatch team wants 5 more
+document upload fields added the same way, so all dispatch paperwork is captured per lot:
+1. E-way Bill
+2. Delivery Chalan
+3. LR Copy Receiving
+4. Packing List
+5. Other
+
+**Decisions finalized with the team before building (2026-08-18)**:
+1. **Behavior**: identical to the existing LR Copy field — tap opens the rear camera
+   (`capture="environment"`) to take a photo directly, or the user can pick an existing
+   image/PDF instead. No new interaction pattern.
+2. **File count**: single file each (matches LR Copy exactly) — not multi-file, including "Other".
+3. **Placement**: all 5 new fields go directly after the existing LR Copy field, in the order
+   listed above, so all 6 document fields are grouped together.
+4. **Scope**: purely additive — the existing LR Copy field, its column, and its behavior are
+   untouched. Nothing about the current dispatch flow changes for users who don't use the new
+   fields.
+5. **Optional**: all 6 document fields (LR Copy + the 5 new ones) are optional. The lot form must
+   still submit successfully with none of them attached — matches LR Copy's existing behavior
+   today (`saveLot()` only validates that a project is selected; there's no required-file check on
+   `lot_lr_copy` currently). The 5 new fields will follow the same no-validation pattern by
+   default, so no extra code is needed to keep them optional — just confirming it explicitly so it
+   isn't accidentally added later.
+
+**Design** (mirrors the existing `lr_copy_url` plumbing exactly, per lot):
+- **DB migration**: add 5 nullable `text` columns to `material_lots` — `eway_bill_url`,
+  `delivery_chalan_url`, `lr_copy_receiving_url`, `packing_list_url`, `other_document_url`.
+- **`src/lib/mappers.js`**: extend `lotToRow` / `rowToLot` to map all 5 new columns both ways,
+  same pattern as `lr_copy_url` / `lrCopyUrl`.
+- **`index.html`**: add 5 more upload blocks in the Add/Edit Lot form markup, immediately after
+  the LR Copy block — each `<input type="file" accept="image/*,application/pdf"
+  capture="environment">` plus its own status/link `<div>`, same structure as the existing
+  `lot_lr_copy` block.
+- **`src/sections/material/materialTab.js`**:
+  - `openAddLot()` / `openEditLot()`: wire each new field's `onchange` handler to
+    `uploadFiles([file],'<folder>')` and reset/prefill it the same way `lot_lr_copy` is handled
+    today (blank on Add, "✓ Already uploaded — choose a file to replace" on Edit if a URL exists).
+  - `saveLot()`: include all 5 new URLs in the payload sent to `lotToRow`.
+  - `renderLotCard()`: show each uploaded document as its own labeled link (e.g. "📄 E-way bill"),
+    next to the existing "📄 LR copy" link, only when present.
+
+**Built (2026-08-18)**:
+- `supabase/migrations/0008_lot_dispatch_documents.sql` (new) — adds the 5 nullable columns to
+  `material_lots`. Applied live against production (`qxxcwctbaefwhjjlmiyi`).
+- `src/lib/mappers.js` — `lotToRow`/`rowToLot` extended for all 5 new columns, same pattern as
+  `lr_copy_url`.
+- `src/lib/state.js` — added `lotEwayBillUrl`, `lotDeliveryChalanUrl`, `lotLrCopyReceivingUrl`,
+  `lotPackingListUrl`, `lotOtherDocumentUrl` alongside the existing `lotLrCopyUrl`.
+- `index.html` — 5 new upload blocks added right after LR Copy, each labeled "(Optional)",
+  same camera-first markup as the existing field.
+- `src/sections/material/materialTab.js` — added a `LOT_DOC_FIELDS` table + `resetLotDocField()`
+  helper (id/folder/state-key/lot-key per field) to wire all 5 fields in `openAddLot()` and
+  `openEditLot()` without duplicating the LR Copy field's existing code; `saveLot()` now includes
+  all 5 URLs in the save payload; `renderLotCard()` shows each uploaded doc as its own labeled
+  link (e.g. "📄 E-way bill") next to "📄 LR copy", only when present.
+- `supabase/migrations/0009_lot_documents_storage_policy.sql` (new) — **a real bug caught by live
+  testing**: the 5 new folders (`eway-bills`, `delivery-chalans`, `lr-copies-receiving`,
+  `packing-lists`, `other-documents`) weren't in the storage RLS insert-policy allowlist from
+  `0005_storage_policies.sql`, so every upload 400'd with "new row violates row-level security
+  policy". Fixed by re-issuing `uploads_insert_team` with the 5 new folder names added. Applied
+  live; confirmed fixed by re-testing the same upload.
+
+**Verified live in the browser** (`localhost:5175`, real production Supabase project,
+logged in as admin): opened Add Lot Dispatch on Ajmera (Wadala Mumbai) — B-Wing, confirmed all
+6 upload fields render in order with the camera-first hint text; uploaded a test PDF to the
+E-way Bill field, confirmed "✓ Uploaded"; saved the lot with only that one field filled (all
+other 5 left blank) and one product row — saved successfully, confirming the optional/no-file
+requirement holds; the new lot showed a "📄 E-way bill" link (and no links for the untouched
+fields) on the Material tab. `npm run build` succeeds. Test lot removed from production
+afterward via a scoped, id-matched delete (not a bulk/destructive operation).
+
+### v2-8: newest-added-first ordering for projects and lots (starting 2026-08-18)
+
+**Request from the dispatch team**: on the Material Movement Tracker, projects currently list in
+creation order oldest-first (looked alphabetical to the team, but that's incidental — it's really
+`db.from('projects').select('*').order('id')`, ascending). They want the most recently added
+project to appear at the top instead.
+
+**Investigation before designing**: project order is loaded once in `src/data/loadAllData.js`
+(`.order('id')` ascending) into `state.projects`, and that same array/order feeds every tab that
+lists projects — All Projects, Dashboard, Gantt, Pipeline, Material, Requests, etc. — not just
+Material. Lot order within a project card comes the same way, from `state.materialLots`
+(`loadAllData.js`, also `.order('id')` ascending), filtered per-project in
+`materialTab.js:renderMaterial()`. Confirmed no other code depends on either array's ascending
+order for correctness — every consumer (`alerts.js`, `dprTab.js`, `materialTab.js`) only does
+`.filter()`/`.find()` by id, or takes `.length`/`Math.max(id)` for numbering — so reordering only
+changes display, nothing else. This also brings `projects`/`material_lots` in line with the
+pattern already used for `dpr_log`, `requests`, and `activity_log`, which already load
+`{ascending:false}` for "most recent first".
+
+**Decisions finalized with the team before building (2026-08-18)**:
+1. **Scope**: applies app-wide, not just the Material tab — every tab that lists projects
+   (All Projects, Dashboard, Gantt, Pipeline, Material, etc.) switches to newest-added-first,
+   since they all share the same underlying load order.
+2. **Lots too**: within a project card, individual lots also flip to newest-dispatched-first
+   (not just the project cards themselves).
+
+**Design**:
+- `src/data/loadAllData.js`: change `db.from('projects').select('*').order('id')` →
+  `.order('id',{ascending:false})`, and the two `material_lots` load calls the same way (initial
+  load + the auto-seed-then-reload fallback).
+- `src/sections/material/materialTab.js`: no separate sort needed for lots — since
+  `state.materialLots` itself now loads newest-first, `renderMaterial()`'s existing
+  `state.materialLots.filter(l=>l.projId===p.id)` naturally lists lots newest-first without a
+  code change there.
+
+**Built (2026-08-18)**: `src/data/loadAllData.js` — both `projects` load calls (initial +
+auto-seed fallback) and both `material_lots` load calls switched to `.order('id',{ascending:false})`.
+No other file changed, as designed.
+
+**Verified live in the browser** (`localhost:5175`, real production project, admin login):
+on All Projects, the project that used to render first under the old ascending order (Ajmera
+(Wadala Mumbai) — B-Wing) now renders last, and `civitech` (highest id) renders first — confirms
+the flip is app-wide, not Material-tab-only. On the Material tab, Ajmera (Wadala Mumbai) —
+B-Wing's lots showed "Lot 2" (Feb 2026) before "Lot 1" (Dec 2025), reversed from the original
+oldest-first order. `npm run build` succeeds.
+
+### v2-9: search box on the Material tab (starting 2026-08-18)
+
+**Request from the dispatch team**: with 67 projects, the Material Movement Tracker has no way to
+jump to a specific project — the team wants a search box by project name.
+
+**Investigation before designing**: the All Projects tab already has this exact pattern —
+`index.html:86`, `<input type="text" id="f-search" placeholder="Search project..."
+oninput="renderProjects()">`, filtered in `src/sections/projects/projectCards.js:13,18` by
+project name or tower substring (case-insensitive). Nothing like it exists yet on the Material
+tab (`index.html:121-127`, `tab-material-view`), which just has a heading + "+ Add lot dispatch"
+button above `#material-list`.
+
+**Decisions finalized with the team before building (2026-08-18)**:
+1. **Match fields**: name + tower only, mirroring the existing All Projects search exactly (not
+   also matching city).
+2. **Placement**: same row as the "Material movement tracker" heading, alongside the existing
+   "+ Add lot dispatch" button.
+
+**Design**:
+- `index.html`: add `<input type="text" id="mat-search" placeholder="Search project..."
+  oninput="renderMaterial()">` into the `tab-material-view` heading row (`index.html:122-125`),
+  next to the "+ Add lot dispatch" button.
+- `src/sections/material/materialTab.js`: in `renderMaterial()`, read `#mat-search`'s value
+  (lowercased) and filter `vp` (from `visibleProjects()`) by `p.name`/`p.tower` substring match
+  before rendering project cards — same filter logic as `projectCards.js:13,18`, just applied to
+  the Material tab's project list instead of the All Projects grid. Purely additive: no existing
+  Material tab behavior changes for a blank search box.
+
+**Built (2026-08-18)**: `index.html` — `#mat-search` input added to the `tab-material-view`
+heading row, next to "+ Add lot dispatch". `src/sections/material/materialTab.js` —
+`renderMaterial()` now reads `#mat-search`, filters `visibleProjects()` by name/tower substring
+match before rendering, and shows a distinct "No projects match your search." empty state
+(vs. "No projects visible." when there are no visible projects at all, regardless of search).
+
+**Verified live in the browser** (`localhost:5175`, real production project, admin login):
+typed "ajme" into the Material tab's search box, list narrowed to only the 4 Ajmera projects
+(both spellings/wings currently in the data). `npm run build` succeeds.
+
+**Cross-cutting note for v2-7, v2-8, v2-9 (2026-08-18)**: the team asked to confirm these changes
+reach the dispatch team's panel too, not just Admin. Confirmed this needs no extra work — the
+Material tab is one shared component (`index.html`'s `tab-material-view` +
+`src/sections/material/materialTab.js`), not a separate admin-only screen. The `dispatch_head`
+role (`src/lib/constants.js:13`) already has `manageDispatch:true` and `addLot:true`, and
+`src/auth/teamAuth.js:98` shows the Material nav tab to any role with `manageDispatch` —
+dispatch_head and supervisor, not just admin. So all three of v2-7/v2-8/v2-9 will appear
+identically for a dispatch_head login once built, automatically.

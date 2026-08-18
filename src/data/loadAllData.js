@@ -24,13 +24,13 @@ export async function syncProject(p){
 export async function loadAllData(){
   try{
     // PROJECTS
-    let {data:projRows,error:projErr}=await db.from('projects').select('*').order('id');
+    let {data:projRows,error:projErr}=await db.from('projects').select('*').order('id',{ascending:false});
     if(projErr) throw projErr;
     if(!projRows.length){
       const seedRows=SEED_PROJECTS.map(p=>({id:p.id,...projectToRow(p)}));
       const {error:seedErr}=await db.from('projects').insert(seedRows);
       if(seedErr) throw seedErr;
-      ({data:projRows}=await db.from('projects').select('*').order('id'));
+      ({data:projRows}=await db.from('projects').select('*').order('id',{ascending:false}));
     }
     state.projects=projRows.map(rowToProject);
     state.nextId=state.projects.length?Math.max(...state.projects.map(p=>p.id))+1:1;
@@ -60,13 +60,13 @@ export async function loadAllData(){
     state.nextMemberId=state.teamMembers.length?Math.max(...state.teamMembers.map(m=>m.id))+1:1;
 
     // MATERIAL LOTS
-    let {data:lotRows,error:lotErr}=await db.from('material_lots').select('*').order('id');
+    let {data:lotRows,error:lotErr}=await db.from('material_lots').select('*').order('id',{ascending:false});
     if(lotErr) throw lotErr;
     if(!lotRows.length){
       const seedRows=SEED_LOTS.map(l=>({id:l.id,...lotToRow(l)}));
       const {error:seedErr}=await db.from('material_lots').insert(seedRows);
       if(seedErr) throw seedErr;
-      ({data:lotRows}=await db.from('material_lots').select('*').order('id'));
+      ({data:lotRows}=await db.from('material_lots').select('*').order('id',{ascending:false}));
     }
     state.materialLots=lotRows.map(rowToLot);
     state.nextLotId=state.materialLots.length?Math.max(...state.materialLots.map(l=>l.id))+1:1;

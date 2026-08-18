@@ -33,8 +33,11 @@ export function getTotalDispatched(projId){
 
 export function renderMaterial(){
   const el=document.getElementById('material-list'); if(!el) return;
-  const vp=visibleProjects();
-  if(!vp.length){el.innerHTML='<div class="empty">No projects visible.</div>';return;}
+  const sch=document.getElementById('mat-search')?.value.toLowerCase()||'';
+  const allVp=visibleProjects();
+  if(!allVp.length){el.innerHTML='<div class="empty">No projects visible.</div>';return;}
+  const vp=allVp.filter(p=>!sch||(p.name||'').toLowerCase().includes(sch)||(p.tower||'').toLowerCase().includes(sch));
+  if(!vp.length){el.innerHTML='<div class="empty">No projects match your search.</div>';return;}
 
   let html='';
   vp.forEach(p=>{
@@ -105,7 +108,15 @@ export function renderLotCard(lot,p){
         +'<div><span style="color:#888">Storage: </span><b>'+(lot.storage||'—')+'</b></div>'
         +(lot.arrivalGeoLocation?'<div><span style="color:#888">Arrival GPS: </span><b>📍 '+lot.arrivalGeoLocation+'</b></div>':'')
         +(lot.arrivalPhotoUrls&&lot.arrivalPhotoUrls.length?'<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">'+lot.arrivalPhotoUrls.map(u=>'<a href="'+u+'" target="_blank"><img src="'+u+'" style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid #e0e0e0"></a>').join('')+'</div>':'')
-        +(lot.lrCopyUrl?'<div style="margin-top:4px"><a href="'+lot.lrCopyUrl+'" target="_blank" style="font-size:12px;color:#1D9E75">📄 LR copy</a></div>':'')
+        +(lot.lrCopyUrl||lot.ewayBillUrl||lot.deliveryChalanUrl||lot.lrCopyReceivingUrl||lot.packingListUrl||lot.otherDocumentUrl?
+          '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px">'
+            +(lot.lrCopyUrl?'<a href="'+lot.lrCopyUrl+'" target="_blank" style="font-size:12px;color:#1D9E75">📄 LR copy</a>':'')
+            +(lot.ewayBillUrl?'<a href="'+lot.ewayBillUrl+'" target="_blank" style="font-size:12px;color:#1D9E75">📄 E-way bill</a>':'')
+            +(lot.deliveryChalanUrl?'<a href="'+lot.deliveryChalanUrl+'" target="_blank" style="font-size:12px;color:#1D9E75">📄 Delivery chalan</a>':'')
+            +(lot.lrCopyReceivingUrl?'<a href="'+lot.lrCopyReceivingUrl+'" target="_blank" style="font-size:12px;color:#1D9E75">📄 LR copy receiving</a>':'')
+            +(lot.packingListUrl?'<a href="'+lot.packingListUrl+'" target="_blank" style="font-size:12px;color:#1D9E75">📄 Packing list</a>':'')
+            +(lot.otherDocumentUrl?'<a href="'+lot.otherDocumentUrl+'" target="_blank" style="font-size:12px;color:#1D9E75">📄 Other</a>':'')
+          +'</div>':'')
       +'</div>'
       // Items table
       +'<div style="border-top:1px solid #f0f0f0;padding-top:8px">'
@@ -124,6 +135,29 @@ export function renderLotCard(lot,p){
       +(lot.arrivalNotes?'<div style="margin-top:6px;color:#888">Notes: '+lot.arrivalNotes+'</div>':'')
     +'</div>'
   +'</div>';
+}
+
+/* ── Lot document upload fields (v2-7): 5 fields alongside the existing LR copy field,
+   same camera-first/optional behavior, wired the same way for each. ── */
+const LOT_DOC_FIELDS=[
+  {id:'lot_eway_bill', folder:'eway-bills', stateKey:'lotEwayBillUrl', lotKey:'ewayBillUrl'},
+  {id:'lot_delivery_chalan', folder:'delivery-chalans', stateKey:'lotDeliveryChalanUrl', lotKey:'deliveryChalanUrl'},
+  {id:'lot_lr_copy_receiving', folder:'lr-copies-receiving', stateKey:'lotLrCopyReceivingUrl', lotKey:'lrCopyReceivingUrl'},
+  {id:'lot_packing_list', folder:'packing-lists', stateKey:'lotPackingListUrl', lotKey:'packingListUrl'},
+  {id:'lot_other_document', folder:'other-documents', stateKey:'lotOtherDocumentUrl', lotKey:'otherDocumentUrl'}
+];
+function resetLotDocField(id, folder, stateKey, existingUrl){
+  state[stateKey]=existingUrl||'';
+  const input=document.getElementById(id); if(!input) return;
+  input.value='';
+  const list=document.getElementById(id+'-list');
+  if(list) list.textContent=existingUrl?'✓ Already uploaded — choose a file to replace':'';
+  input.onchange=async function(){
+    const file=this.files[0]; if(!file) return;
+    if(list) list.textContent='Uploading...';
+    const urls=await uploadFiles([file],folder);
+    if(urls.length){ state[stateKey]=urls[0]; if(list) list.textContent='✓ Uploaded'; }
+  };
 }
 
 /* ── Lot form helpers ── */
@@ -162,6 +196,7 @@ export function openAddLot(){
     const urls=await uploadFiles([file],'lr-copies');
     if(urls.length){ state.lotLrCopyUrl=urls[0]; document.getElementById('lot_lr_copy-list').textContent='✓ Uploaded'; }
   };
+  LOT_DOC_FIELDS.forEach(f=>resetLotDocField(f.id,f.folder,f.stateKey,''));
   document.getElementById('lot-error').classList.add('hidden');
   renderLotItems();
   openPanel('panel-add-lot');
@@ -220,6 +255,7 @@ export function openEditLot(id){
     const urls=await uploadFiles([file],'lr-copies');
     if(urls.length){ state.lotLrCopyUrl=urls[0]; document.getElementById('lot_lr_copy-list').textContent='✓ Uploaded'; }
   };
+  LOT_DOC_FIELDS.forEach(f=>resetLotDocField(f.id,f.folder,f.stateKey,lot[f.lotKey]));
   document.getElementById('lot-error').classList.add('hidden');
   renderLotItems();
   openPanel('panel-add-lot');
@@ -244,6 +280,11 @@ export async function saveLot(){
     storage:g('lot_storage'),
     arrivalNotes:g('lot_arrival_notes'),
     lrCopyUrl:state.lotLrCopyUrl,
+    ewayBillUrl:state.lotEwayBillUrl,
+    deliveryChalanUrl:state.lotDeliveryChalanUrl,
+    lrCopyReceivingUrl:state.lotLrCopyReceivingUrl,
+    packingListUrl:state.lotPackingListUrl,
+    otherDocumentUrl:state.lotOtherDocumentUrl,
     items:state.lotItems.filter(it=>it.product.trim())
   };
   if(state.editingLotId){

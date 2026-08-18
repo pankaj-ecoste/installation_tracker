@@ -87,7 +87,9 @@ export function lotToRow(l){
     proj_id:l.projId, lot_no:l.lotNo, dispatch_date:l.dispatchDate||null, expected_arrival:l.expectedArrival||null,
     actual_arrival:l.actualArrival||null, vehicle:l.vehicle, driver:l.driver, dispatch_notes:l.dispatchNotes,
     condition:l.condition, bundle_matched:l.bundleMatched, storage:l.storage, arrival_notes:l.arrivalNotes, items:l.items,
-    arrival_acked_at:l.arrivalAckedAt||null, arrival_geo_location:l.arrivalGeoLocation||null, arrival_photo_urls:l.arrivalPhotoUrls||[], lr_copy_url:l.lrCopyUrl||null
+    arrival_acked_at:l.arrivalAckedAt||null, arrival_geo_location:l.arrivalGeoLocation||null, arrival_photo_urls:l.arrivalPhotoUrls||[], lr_copy_url:l.lrCopyUrl||null,
+    eway_bill_url:l.ewayBillUrl||null, delivery_chalan_url:l.deliveryChalanUrl||null, lr_copy_receiving_url:l.lrCopyReceivingUrl||null,
+    packing_list_url:l.packingListUrl||null, other_document_url:l.otherDocumentUrl||null
   };
 }
 export function rowToLot(r){
@@ -95,7 +97,9 @@ export function rowToLot(r){
     id:r.id, projId:r.proj_id, lotNo:r.lot_no, dispatchDate:r.dispatch_date||'', expectedArrival:r.expected_arrival||'',
     actualArrival:r.actual_arrival||'', vehicle:r.vehicle||'', driver:r.driver||'', dispatchNotes:r.dispatch_notes||'',
     condition:r.condition||'', bundleMatched:r.bundle_matched||'', storage:r.storage||'', arrivalNotes:r.arrival_notes||'', items:r.items||[],
-    arrivalAckedAt:r.arrival_acked_at||'', arrivalGeoLocation:r.arrival_geo_location||'', arrivalPhotoUrls:r.arrival_photo_urls||[], lrCopyUrl:r.lr_copy_url||''
+    arrivalAckedAt:r.arrival_acked_at||'', arrivalGeoLocation:r.arrival_geo_location||'', arrivalPhotoUrls:r.arrival_photo_urls||[], lrCopyUrl:r.lr_copy_url||'',
+    ewayBillUrl:r.eway_bill_url||'', deliveryChalanUrl:r.delivery_chalan_url||'', lrCopyReceivingUrl:r.lr_copy_receiving_url||'',
+    packingListUrl:r.packing_list_url||'', otherDocumentUrl:r.other_document_url||''
   };
 }
 
