@@ -16,9 +16,17 @@ import { renderAllChecklistDropdowns, renderProjects } from '../projects/project
 /* ══ DPR ══ */
 export function renderDPR(){
   const vp=visibleProjects();
-  const visible=state.dprLog.filter(d=>vp.some(p=>(d.project||'').includes(p.name)));
+  let visible=state.dprLog.filter(d=>vp.some(p=>(d.project||'').includes(p.name)));
+  const dateFilter=document.getElementById('dpr-date-filter')?.value;
+  if(dateFilter) visible=visible.filter(d=>{
+    // Compare local calendar-date parts, not toISOString() (which converts to UTC and would
+    // shift the date back a day in any positive-offset timezone, e.g. IST).
+    const parsed=new Date(d.date); if(isNaN(parsed)) return false;
+    const local=parsed.getFullYear()+'-'+String(parsed.getMonth()+1).padStart(2,'0')+'-'+String(parsed.getDate()).padStart(2,'0');
+    return local===dateFilter;
+  });
   const el=document.getElementById('dpr-list');
-  if(!visible.length){ el.innerHTML='<div class="empty">No DPRs found for your projects.</div>'; return; }
+  if(!visible.length){ el.innerHTML='<div class="empty">'+(dateFilter?'No DPRs found for that date.':'No DPRs found for your projects.')+'</div>'; return; }
   // Average working per day, per project — computed from all DPR history for that project,
   // used to flag any day that comes in significantly below (or above) the norm.
   const avgPerDayByProj={};
@@ -224,8 +232,8 @@ export function renderDPRForm(selectedProjId){
       '<div class="form-row"><div class="form-group"><label class="form-label">Actual arrival date</label><input class="form-input" type="date" id="dpr-arrival-date" readonly disabled style="background:#f0f0f0"><div style="font-size:11px;color:#888;margin-top:2px">Always today\'s date.</div></div><div class="form-group"><label class="form-label">Condition on arrival</label><select class="form-input" id="dpr-arrival-condition"><option value="">— Select —</option><option value="good">Good</option><option value="partial">Partial damage</option><option value="damaged">Damaged</option></select></div></div>'+
       '<div class="form-row" style="margin-top:10px"><div class="form-group"><label class="form-label">Bundle count matched?</label><select class="form-input" id="dpr-arrival-bundle"><option value="">— Select —</option><option value="yes">Yes</option><option value="no">No</option></select></div><div class="form-group"><label class="form-label">Arrival notes</label><input class="form-input" id="dpr-arrival-notes" placeholder="e.g. 2 bundles wet, dried on site"></div></div>'+
       '<div class="form-group" style="margin-top:10px"><label class="form-label">Arrival photos (up to 10)</label>'+
-        '<div style="font-size:11px;color:#888;margin-bottom:4px">Tap to open your camera directly (rear camera on phone), or choose existing photos. You can add multiple, one at a time or several together.</div>'+
-        '<input type="file" id="dpr-arrival-photo" accept="image/*" capture="environment" multiple style="font-size:12px">'+
+        '<div style="font-size:11px;color:#888;margin-bottom:4px">Tap to take a photo or choose from your gallery. You can add multiple, one at a time or several together.</div>'+
+        '<input type="file" id="dpr-arrival-photo" accept="image/*" multiple style="font-size:12px">'+
         '<div id="dpr-arrival-photo-list" style="font-size:11px;color:#1D9E75;margin-top:4px"></div>'+
       '</div>'+
       '<div class="form-group" style="margin-top:10px">'+

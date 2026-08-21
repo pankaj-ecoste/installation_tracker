@@ -851,3 +851,95 @@ role (`src/lib/constants.js:13`) already has `manageDispatch:true` and `addLot:t
 `src/auth/teamAuth.js:98` shows the Material nav tab to any role with `manageDispatch` —
 dispatch_head and supervisor, not just admin. So all three of v2-7/v2-8/v2-9 will appear
 identically for a dispatch_head login once built, automatically.
+
+### v2-10: date filter on the DPR Log tab (starting 2026-08-21)
+
+**Request from the team**: the DPR Log tab lists every Daily Progress Report across all visible
+projects in one feed (68 projects' worth), each card showing its own "DPR Date". Team wants a
+date filter so they can narrow the feed down to only the DPRs logged on one particular date.
+
+**Investigation before designing**: the feed is `src/sections/dpr/dprTab.js`'s `renderDPR()`
+(renders into `#dpr-list`, `index.html:119`), currently filtered only by project visibility
+(`visibleProjects()`). Each entry's `d.date` is stored and displayed as a pre-formatted string
+(e.g. `"21 Aug 2026"`, produced by `fmtDate()` at save time in `saveDPR()`), not an ISO date —
+confirmed by reading `mappers.js`'s `dprToRow`/`rowToDpr` (straight pass-through, no reformatting)
+and the `dpr_log.date` column (`text`, per Phase B's notes above). An HTML `<input type="date">`
+filter yields `"2026-08-21"` (ISO), a different shape. The codebase already bridges exactly this
+gap in two existing places — `openEditDPR()` (`dprTab.js:114`) and `getInstalledForProject()`
+(`materialTab.js:22`) both do `new Date(d.date)` successfully on these same stored strings — so
+reusing that identical parsing approach for the filter introduces no new risk.
+
+**Decisions finalized with the team before building (2026-08-21)**:
+1. **Scope**: purely additive — one new date-input filter control + one added filter step inside
+   `renderDPR()`. No schema/migration change, no change to `saveDPR()`, mappers, or Supabase.
+2. **Default**: filter starts empty (shows all DPRs, today's existing behavior); clearing the date
+   input (native browser "×") returns to the unfiltered view.
+
+**Design**:
+- `index.html`: add `<input type="date" id="dpr-date-filter" oninput="renderDPR()">` into the
+  `tab-dpr-view` heading row (`index.html:114-118`), next to the existing "+ Add DPR" button —
+  same placement pattern as the Material tab's `#mat-search` (v2-9).
+- `src/sections/dpr/dprTab.js`: in `renderDPR()`, after the existing `visible` array is built
+  (line 19), read `#dpr-date-filter`'s value; if set, further filter `visible` to entries where
+  `new Date(d.date)` matches the filter date. `renderDPR` is already exposed globally via
+  `src/utils/domGlobals.js`, so no extra wiring needed for the `oninput` handler.
+
+**Built (2026-08-21)**: `index.html` — `#dpr-date-filter` date input added to the `tab-dpr-view`
+heading row, next to "+ Add DPR". `src/sections/dpr/dprTab.js` — `renderDPR()` filters `visible`
+by the selected date when set, and shows a distinct "No DPRs found for that date." empty state.
+
+**Real bug caught during live verification, fixed before shipping**: the first implementation
+compared dates via `new Date(d.date).toISOString().slice(0,10) === filterValue` — the same
+pattern already used elsewhere in this file (`openEditDPR`) — but `.toISOString()` converts to
+**UTC**, which shifts the date back a day in any positive-offset timezone. Confirmed live: in
+IST (UTC+5:30, this team's timezone), `new Date('21 Aug 2026').toISOString()` returns
+`"2026-08-20T18:30:00.000Z"` — filtering for 21 Aug matched zero rows even though 3 real DPRs
+were dated that day. The pre-existing `openEditDPR` use of this same pattern is harmless only
+because it populates a `readonly disabled` date field that's never actually saved (DPRs always
+save with today's date); this new filter had no such safety net, so the bug was live-breaking.
+Fixed by comparing local calendar-date parts (`getFullYear()`/`getMonth()`/`getDate()`) instead
+of the UTC-converting `toISOString()`.
+
+**Verified live in the browser** (`localhost:5174`, real production Supabase project, admin
+login): filtering to 2026-08-21 correctly narrowed 22 total DPR entries down to the 3 actually
+dated "21 Aug 2026"; filtering to a date with no entries showed "No DPRs found for that date.";
+clearing the filter restored all 22. `npm run build` succeeds.
+
+### v2-11: allow choosing from gallery on DPR material-arrival photos (starting 2026-08-21)
+
+**Request from the team**: in Add DPR → "Material arrival acknowledgement" → "Arrival photos",
+tapping the file picker on mobile opens the camera directly with no way to pick an existing photo
+from the gallery — staff want that option added.
+
+**Root cause, confirmed by reading the code**: `dprTab.js:228`'s file input carries
+`capture="environment"`, which is what forces mobile browsers straight into the rear camera,
+bypassing the native "Camera / Gallery / Files" chooser. Notably the helper text right above it
+(`dprTab.js:227`) already claims *"Tap to open your camera directly... or choose existing
+photos"* — the text promised gallery access that the attribute was actually blocking, exactly
+matching the staff complaint. Confirmed this is the only file input in the app with `capture`
+set — `dpr-photos` (main DPR photos, `dprTab.js:196`) and `dpr-snag-photo`
+(`dprTab.js:248`) don't have it.
+
+**Decisions finalized with the team before building (2026-08-21)**:
+1. **Fix**: remove `capture="environment"` from the `dpr-arrival-photo` input only. No JS change
+   needed — `pickFilesOrWarn`/`uploadFiles` and its existing `onchange` handler
+   (`dprTab.js:274-280`) behave identically regardless of whether the file came from camera or
+   gallery.
+2. **Wording tweak (included)**: update the helper text at `dprTab.js:227` from "Tap to open your
+   camera directly (rear camera on phone), or choose existing photos." to something like "Tap to
+   take a photo or choose from your gallery." — cosmetic only, to match the corrected behavior.
+
+**Scope check**: single-attribute removal + one line of copy, both confined to this one field.
+Nothing else in the Add DPR form, upload pipeline, or storage layer changes.
+
+**Built (2026-08-21)**: `src/sections/dpr/dprTab.js` — removed `capture="environment"` from the
+`dpr-arrival-photo` input (`accept`/`multiple` unchanged) and updated its helper text to "Tap to
+take a photo or choose from your gallery. You can add multiple, one at a time or several
+together."
+
+**Verified live in the browser** (`localhost:5174`, real production Supabase project, admin
+login): opened Add DPR, confirmed `dpr-arrival-photo` no longer has the `capture` attribute
+(`accept="image/*"`, `multiple:true` unchanged) and the helper text reads as updated. Also
+confirmed the other 4 file inputs in the same form (`dpr-photos`, `dpr-snag-photo`,
+`dpr-wcc-upload`, `dpr-report-pdf`) were untouched — none had `capture` before or after.
+`npm run build` succeeds.
