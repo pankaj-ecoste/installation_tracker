@@ -7,7 +7,7 @@
 
 export function projectToRow(p){
   return {
-    access_code:p.accessCode, created_by:p.createdBy, name:p.name, tower:p.tower,
+    access_code:p.accessCode, created_by:p.createdBy, name:p.name, tower:p.tower, tower_count:p.towerCount||1,
     developer:p.developer, city:p.city, state:p.state, supervisor:p.supervisor,
     vendor:p.vendor, supervisor_wa:p.supervisorWA, status:p.status,
     planned_qty:p.plannedQty, installed_qty:p.installedQty, ra_bill_qty:p.raBillQty,
@@ -31,7 +31,7 @@ export function projectToRow(p){
 }
 export function rowToProject(r){
   return {
-    id:r.id, accessCode:r.access_code, createdBy:r.created_by, name:r.name, tower:r.tower,
+    id:r.id, accessCode:r.access_code, createdBy:r.created_by, name:r.name, tower:r.tower, towerCount:r.tower_count||1,
     developer:r.developer, city:r.city, state:r.state, supervisor:r.supervisor,
     vendor:r.vendor, supervisorWA:r.supervisor_wa, status:r.status,
     plannedQty:r.planned_qty, installedQty:r.installed_qty, raBillQty:r.ra_bill_qty,

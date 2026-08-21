@@ -943,3 +943,138 @@ login): opened Add DPR, confirmed `dpr-arrival-photo` no longer has the `capture
 confirmed the other 4 file inputs in the same form (`dpr-photos`, `dpr-snag-photo`,
 `dpr-wcc-upload`, `dpr-report-pdf`) were untouched — none had `capture` before or after.
 `npm run build` succeeds.
+
+### v2-12: make "No. of Towers/Blocks" editable on Edit Project (starting 2026-08-21)
+
+**Request from the team**: on All Projects → Edit (pencil icon), the "No. of Towers/Blocks" field
+sits fixed at `1` and can't be changed, unlike every other field on that form.
+
+**Root cause, confirmed by reading the code**: this field was never a real project column — it's a
+create-time-only form helper. On **Add**, raising it generates that many separate project rows (one
+per tower/block), each becoming its own independent project with its own access code
+(`formHelpers.js:96-108`, `addEditProject.js:286-295`). Once a project already exists, it already
+**is** one tower/block row, so `openEditProject()` hardcodes the field to `'1'` and disables it
+(`addEditProject.js:198-199`) — and even if it weren't disabled, the edit-save path only ever reads
+`state.formTowers[0].name` (`addEditProject.js:262`), never the count. There's no `towerCount` (or
+similar) column anywhere in the schema (`supabase/migrations/0001_baseline_schema.sql`) or in
+`mappers.js` — the number is discarded after generating rows at create time.
+
+**Decision finalized with the team (2026-08-21)**: make the field a plain editable number, stored on
+the project, with no side effects — changing it in Edit does **not** create/remove any project rows
+(that stays exclusive to Add). It becomes a reference figure the team can correct after creation.
+
+**Design**:
+1. New migration `supabase/migrations/0010_project_tower_count.sql`: `ALTER TABLE projects ADD COLUMN
+   tower_count integer NOT NULL DEFAULT 1;`
+2. `src/lib/mappers.js`: `projectToRow` writes `tower_count:p.towerCount||1`; `rowToProject` reads
+   `towerCount:r.tower_count||1`.
+3. `src/sections/projects/addEditProject.js`:
+   - `openEditProject()` (~line 198-199): set the input's value from `p.towerCount||1` instead of the
+     hardcoded `'1'`, and drop the `disabled=true` line.
+   - `saveProject()` `baseData` (~line 234-258): add `towerCount:parseInt(document.getElementById('f-tower-count').value)||1`
+     so both the Add and Edit paths persist whatever value is in the field.
+   - Add path (~line 286-295, one row created per tower): each generated row still gets
+     `towerCount:1` — the multi-row-generation behavior is untouched; only Edit exposes the count as
+     an editable reference number afterward.
+4. No changes to `formHelpers.js` `renderTowerRows()` (Tower/Block name-row generation logic stays
+   exactly as is) or to `index.html`'s markup beyond nothing (the same input just stops being
+   disabled).
+
+**Scope check**: one migration, two mapper lines, and a handful of lines in `addEditProject.js`.
+Doesn't touch DPR, Dispatch, Material, or Finance — `towerCount` isn't read anywhere else yet.
+
+**Built (2026-08-21)**: `supabase/migrations/0010_project_tower_count.sql` (`tower_count integer not
+null default 1`, applied to the live production project). `src/lib/mappers.js` — `projectToRow`/
+`rowToProject` map `towerCount`↔`tower_count`. `src/sections/projects/addEditProject.js` —
+`openEditProject()` now sets the field from `p.towerCount||1` instead of hardcoding `'1'`, and no
+longer disables it; `saveProject()` reads the field into `towerCount` and includes it on both the
+edit path and each row created on Add (where it's fixed at `1` per new row, matching "one row =
+one tower"). `src/sections/projects/formHelpers.js` — `renderTowerRows()` now branches on
+`state.editingId`: in Edit it always renders just the single "Tower / Block" name field (ignoring
+the count), so raising the number never shows the Add-only "will create N sub-projects" row-adder
+UI or touches `formTowers`.
+
+**Verified live in the browser** (`localhost:5175`, real production Supabase project, admin
+login): opened Edit on "Tharwani inftastructure" (the exact project from the team's screenshot),
+confirmed "No. Of Towers/Blocks" was no longer disabled, changed it 1 → 3, confirmed the Tower/
+Block field stayed a single input (no extra rows appeared) and total project count stayed at 37
+after saving. Reopened Edit — the 3 persisted. Reverted to 1 and re-saved to leave the real
+project's data as it was before testing; confirmed it read back as 1. `npm run build` succeeds.
+
+### v2-13: auto-calculate "Days Available to Complete Installation" (starting 2026-08-21)
+
+**Request from the team**: on Edit Project, "Days Available to Complete Installation (from Day
+One)" is a free-typed number today with no relation to the project's actual dates — e.g. the
+Tharwani project shows `5` while its PO Date (14 Aug 2026) to Committed Completion (18 Nov 2026)
+is actually ~96 days apart. The team wants it auto-calculated as `Committed Completion − Date of
+PO / Work Order`.
+
+**Confirmed with the team (2026-08-21)**: `daysAvailable` also drives the DPR tab's "Days Left"
+and daily-target math (`dprTab.js:339-342,389,420`), but those are anchored to **Installation
+Commencement Date**, not PO Date — a different date pair from the one requested here. This is
+intentional per the team, not a mix-up: `daysAvailable` becomes a single computed number
+(Committed Completion − PO Date) that DPR then measures elapsed progress against from Install
+Commencement Date onward.
+
+**Decisions finalized with the team (2026-08-21)**:
+1. **Fully auto-calculated, read-only** — no manual override. The field always shows Committed
+   Completion − PO Date, recalculating live as either date is edited on the form.
+2. **Backfill existing data now** — every existing project with both dates set gets its stored
+   `days_available` overwritten to match, in the same pass as this change (one-time SQL update),
+   so DPR's Days Left / daily-target numbers are consistent with the new rule immediately rather
+   than only for projects someone happens to re-save later.
+3. **Missing dates / negative range**: if either date is blank, the field shows blank (matches
+   today's `daysAvailable:0` fallback → DPR already renders `—`/`#DIV/0!` for a falsy value, so no
+   new empty state needed). If Committed Completion is before PO Date (bad data), clamp to `0`
+   rather than show a negative number — same `Math.max(0, …)` pattern already used for
+   `dprDaysLeft` (`dprTab.js:342`).
+
+**Design**:
+1. `src/sections/projects/formHelpers.js`: add `computeDaysAvailable(poDate, committedDate)` (plain
+   day-count diff, `Math.max(0, …)`, returns `''` if either date missing) and
+   `renderDaysAvailable()` (reads `#f-po-date`/`#f-commit-date`, writes the result into
+   `#f-days-available`).
+2. `index.html`:
+   - `#f-days-available` (line 215) gets `readonly` (not `disabled`, so the value stays legible —
+     unlike the Tower/Block lesson from v2-12, this one needs a visible explanation rather than
+     just unlocking) plus a small hint: "Auto-calculated: Committed Completion − PO Date."
+   - `#f-po-date` (line 214) and `#f-commit-date` (line 208) both get
+     `onchange="renderDaysAvailable()"` added.
+3. `src/sections/projects/addEditProject.js`:
+   - `openEditProject()` (~line 211): replace the direct `p.daysAvailable||''` assignment with a
+     call to `renderDaysAvailable()` after both date fields are set, so reopening Edit always shows
+     the live-computed number, not the stored one.
+   - `saveProject()` (~line 242): replace reading `#f-days-available`'s raw value with
+     `computeDaysAvailable(document.getElementById('f-po-date').value, document.getElementById('f-commit-date').value)`
+     directly, so the saved number can never drift from what the two date fields actually say.
+4. `src/utils/domGlobals.js`: export `renderDaysAvailable` alongside the other form-helper globals
+   (needed for the inline `onchange` handlers), same pattern as `renderTowerRows`.
+5. One-time SQL update against production (not a schema migration — no column change): 
+   `update projects set days_available = greatest(0, committed_date - po_date) where po_date is not null and committed_date is not null;`
+
+**Scope check**: no schema change (column already exists, nullable integer). Touches the Edit
+Project form and one backfill query only — DPR's own formulas (`dprDayNo`/`dprDaysLeft`) are
+unchanged, they just now receive a more accurate `daysAvailable` input.
+
+**Built (2026-08-21)**: `src/sections/projects/formHelpers.js` — added `computeDaysAvailable()` and
+`renderDaysAvailable()`. `index.html` — `#f-days-available` is now `readonly` with a hint line
+below it; `#f-po-date` and `#f-commit-date` both get `onchange="renderDaysAvailable()"`.
+`src/sections/projects/addEditProject.js` — `openEditProject()` calls `renderDaysAvailable()`
+instead of assigning the stored value directly; `saveProject()` computes the value fresh from the
+two date fields at save time rather than trusting the (now read-only) display field.
+`src/utils/domGlobals.js` — exported `renderDaysAvailable`. One-time production backfill applied
+via `supabase db query --linked` (5 of 69 projects had both dates set; e.g. Tharwani went from a
+stale manually-typed `5` to the correct `96`).
+
+**Verified live in the browser** (real production Supabase project, admin login): opened Edit on
+"Tharwani inftastructure" — Days Available correctly showed the backfilled `96` with the
+"Auto-calculated: Committed Completion − PO Date" hint visible. Changed Committed Completion from
+18-11-2026 to 25-12-2026 and confirmed the field live-recalculated to `133` with no page reload.
+Confirmed the field rejects manual typing (selected it and typed "999" — stayed at `133`,
+read-only holds). Cancelled out without saving to leave the real project's data untouched.
+`npm run build` succeeds.
+
+(Note: this verification pass hit unrelated browser-automation flakiness — a second tab sharing
+the same Supabase auth session caused intermittent silent logouts/dead clicks, and the local Vite
+dev server dropped its connection once mid-session and auto-reconnected. Neither was caused by
+this change; closing the extra tab and retrying resolved it.)

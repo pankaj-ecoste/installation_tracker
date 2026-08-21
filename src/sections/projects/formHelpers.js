@@ -7,6 +7,16 @@ import { renderFinance } from '../finance/financeTab.js';
 import { renderMetrics } from '../metrics.js';
 import { renderProjects } from './projectCards.js';
 
+/* ══ DAYS AVAILABLE (auto-calculated from PO Date → Committed Completion) ══ */
+export function computeDaysAvailable(poDate,committedDate){
+  if(!poDate||!committedDate) return '';
+  return Math.max(0,Math.round((new Date(committedDate)-new Date(poDate))/86400000));
+}
+export function renderDaysAvailable(){
+  const el=document.getElementById('f-days-available'); if(!el) return;
+  el.value=computeDaysAvailable(document.getElementById('f-po-date').value,document.getElementById('f-commit-date').value);
+}
+
 /* ══ MILESTONE TEMPLATES ══ */
 export function onOrderTypeChange(){
   const type=document.getElementById('f-order-type').value;
@@ -94,11 +104,17 @@ export function confirmAddMilestoneToForm(){
 
 /* ══ VENDOR ROWS ══ */
 export function renderTowerRows(){
+  const list=document.getElementById('f-towers-list'); if(!list) return;
+  if(state.editingId){
+    // Editing an existing project — it already IS one tower/block row, so the count field above
+    // is just an editable reference number now (no side effects) and never drives row generation.
+    list.innerHTML='<div class="form-group"><label class="form-label">Tower / Block</label><input class="form-input" placeholder="e.g. B-Wing" value="'+(state.formTowers[0]?state.formTowers[0].name:'')+'" oninput="formTowers[0].name=this.value"></div>';
+    return;
+  }
   const count=Math.max(1,parseInt(document.getElementById('f-tower-count').value)||1);
   // resize formTowers to match count, defaulting new entries to "Tower N"
   while(state.formTowers.length<count) state.formTowers.push({name:'Tower '+(state.formTowers.length+1)});
   while(state.formTowers.length>count) state.formTowers.pop();
-  const list=document.getElementById('f-towers-list'); if(!list) return;
   if(count===1){
     list.innerHTML='<div class="form-group"><label class="form-label">Tower / Block</label><input class="form-input" placeholder="e.g. B-Wing" value="'+state.formTowers[0].name+'" oninput="formTowers[0].name=this.value"></div>';
   } else {

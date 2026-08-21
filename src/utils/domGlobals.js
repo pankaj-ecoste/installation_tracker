@@ -19,7 +19,7 @@ import { getInstalledForProject, getTotalDispatched, renderMaterial, timelineMet
 import { renderMetrics } from '../sections/metrics.js';
 import { showSection, openPanel, closePanel, showClientSection, setTab } from '../sections/navigation.js';
 import { renderChecklist, loadChecklistTemplate, addChecklistItem, toggleChecklistItem, removeChecklistItem, renderSnagList, addSnag, cycleSnagStatus, openAddSnagForProject, saveSnagQuick, openAddProject, openEditProject, saveProject, showFormErr, askDelete, confirmDelete, openMilestonesPanel, renderExistingMilestonesStandalone, updateExistingMilestoneStandalone, addMilestoneStandalone, renderPendingMsStandalone, saveMilestonesOnly, openUpdate, addMilestone, renderPendingMs, saveUpdate, addComment } from '../sections/projects/addEditProject.js';
-import { onOrderTypeChange, renderFormMilestones, renderExistingMilestones, updateExistingMilestone, addMilestoneToForm, confirmAddMilestoneToForm, renderTowerRows, renderVendorRows, addVendorRow, renderProductQuickPicks, quickAddProduct, renderProductRows, addProductRow, renderConstraintList, addConstraintToForm, removeFormConstraint, addDPRConstraint, removeDPRConstraint, toggleNoConstraints, addUpdateConstraint, cycleConstraintStatus, editConstraintNextAction, renderUpdateConstraints, escalateConstraint, escalateSnag, cycleSnagStatusOnProject } from '../sections/projects/formHelpers.js';
+import { onOrderTypeChange, renderFormMilestones, renderExistingMilestones, updateExistingMilestone, addMilestoneToForm, confirmAddMilestoneToForm, renderTowerRows, renderDaysAvailable, renderVendorRows, addVendorRow, renderProductQuickPicks, quickAddProduct, renderProductRows, addProductRow, renderConstraintList, addConstraintToForm, removeFormConstraint, addDPRConstraint, removeDPRConstraint, toggleNoConstraints, addUpdateConstraint, cycleConstraintStatus, editConstraintNextAction, renderUpdateConstraints, escalateConstraint, escalateSnag, cycleSnagStatusOnProject } from '../sections/projects/formHelpers.js';
 import { renderProjects, toggleChecklistDropdown, renderChecklistDropdown, renderAllChecklistDropdowns, acknowledgeChecklist, renderCard, toggleCard, renderDetail } from '../sections/projects/projectCards.js';
 import { fieldRowHTML, captureDPRArrivalGeoLocation, captureGeoLocation, reqFieldChanged, renderRequestFields, openAddRequest, openEditRequest, genRequestNumber, saveRequest, notifyProjectTeamNewRequest, notifyNewRequest, renderRequests, sendVisitReportEmail, tatBadge, reviewWaitBadge, toggleRequestTimeline, fmtDateTime, slaGap, renderRequestStageTimeline, renderRequestCard, viewRequestReadOnly, updateRequestFields, acknowledgeRequest, confirmAcknowledge, sendAssignmentEmails, changePlannedDate, advanceRequestStatus, convertRequestToProject, confirmConvertRequestToProject, exportProjectsCSV, parseCSV, importProjectsCSV, exportRequestsCSV } from '../sections/requests/requestsTab.js';
 import { renderTeamMgmt, togglePerm, openAddMember, openEditMember, updateRolePreview, saveMember, toggleMemberStatus, deleteMember } from '../sections/team/teamMgmtTab.js';
@@ -169,6 +169,7 @@ export function installDomGlobals(){
     addMilestoneToForm,
     confirmAddMilestoneToForm,
     renderTowerRows,
+    renderDaysAvailable,
     renderVendorRows,
     addVendorRow,
     renderProductQuickPicks,

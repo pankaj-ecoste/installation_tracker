@@ -13,7 +13,7 @@ import { approvedVendors, renderFinance } from '../finance/financeTab.js';
 import { renderGantt } from '../gantt/ganttTab.js';
 import { renderMetrics } from '../metrics.js';
 import { closePanel, openPanel } from '../navigation.js';
-import { renderConstraintList, renderExistingMilestones, renderFormMilestones, renderProductQuickPicks, renderProductRows, renderTowerRows, renderUpdateConstraints, renderVendorRows } from './formHelpers.js';
+import { computeDaysAvailable, renderConstraintList, renderDaysAvailable, renderExistingMilestones, renderFormMilestones, renderProductQuickPicks, renderProductRows, renderTowerRows, renderUpdateConstraints, renderVendorRows } from './formHelpers.js';
 import { renderProjects } from './projectCards.js';
 
 /* ══ ADD/EDIT PROJECT ══ */
@@ -195,8 +195,7 @@ export async function openEditProject(id){
   state.formTowers=[{name:p.tower||''}];
   document.getElementById('proj-panel-title').textContent='Edit project';
   document.getElementById('f-name').value=p.name;
-  document.getElementById('f-tower-count').value='1';
-  document.getElementById('f-tower-count').disabled=true;
+  document.getElementById('f-tower-count').value=String(p.towerCount||1);
   document.getElementById('f-dev').value=p.developer;
   document.getElementById('f-city').value=p.city;
   document.getElementById('f-state-inp').value=p.state;
@@ -209,7 +208,7 @@ export async function openEditProject(id){
   document.getElementById('f-drive').value=p.driveLink||'';
   document.getElementById('f-order-type').value=p.orderType||'';
   document.getElementById('f-po-date').value=p.poDate||'';
-  document.getElementById('f-days-available').value=p.daysAvailable||'';
+  renderDaysAvailable();
   document.getElementById('f-material-first-lot').value=p.materialFirstLotDate||'';
   document.getElementById('f-install-commencement').value=p.installCommencementDate||'';
   document.getElementById('f-ms-hint').textContent=state.formMilestones.length?state.formMilestones.length+' milestones loaded':'Select order type to load templates';
@@ -240,7 +239,7 @@ export async function saveProject(){
     vendors, products, unit,
     orderType:document.getElementById('f-order-type').value,
     poDate:document.getElementById('f-po-date').value,
-    daysAvailable:parseInt(document.getElementById('f-days-available').value)||0,
+    daysAvailable:computeDaysAvailable(document.getElementById('f-po-date').value,document.getElementById('f-commit-date').value)||0,
     materialFirstLotDate:document.getElementById('f-material-first-lot').value,
     installCommencementDate:document.getElementById('f-install-commencement').value,
     driveLink:document.getElementById('f-drive').value.trim(),
@@ -256,6 +255,7 @@ export async function saveProject(){
     actualDate:'',
     createdBy:state.currentUser?state.currentUser.username:'admin'
   };
+  const towerCount=parseInt(document.getElementById('f-tower-count').value)||1;
 
   if(state.editingId){
     const existing=state.projects.find(p=>p.id===state.editingId);
@@ -263,7 +263,7 @@ export async function saveProject(){
     const dupe=state.projects.find(p=>p.accessCode===code&&p.id!==state.editingId);
     if(dupe){ showFormErr('Code "'+code+'" already used.'); return; }
     const data={
-      ...baseData, accessCode:code, tower,
+      ...baseData, accessCode:code, tower, towerCount,
       supervisor:existing?.supervisor||'—', supervisorWA:existing?.supervisorWA||'',
       installedQty:existing?.installedQty||0, jmrQty:existing?.jmrQty||0,
       raBillAmt:existing?.raBillAmt||0, paymentCollected:existing?.paymentCollected||0,
@@ -294,7 +294,7 @@ export async function saveProject(){
   for(let i=0;i<towerNames.length;i++){
     const thisCode=towerNames.length>1?(code+'-'+towerNames[i].toUpperCase().replace(/[^A-Z0-9]/g,'')):code;
     const data={
-      ...baseData, accessCode:thisCode, tower:towerNames[i],
+      ...baseData, accessCode:thisCode, tower:towerNames[i], towerCount:1,
       supervisor:'—', supervisorWA:'',
       installedQty:0, jmrQty:0, raBillAmt:0, paymentCollected:0, raBillReady:false
     };
