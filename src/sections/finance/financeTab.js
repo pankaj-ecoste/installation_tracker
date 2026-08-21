@@ -136,8 +136,11 @@ export async function saveFinanceRow(){
 }
 export function renderFinance(){
   const el=document.getElementById('finance-table-wrap'); if(!el) return;
-  const vp=visibleProjects();
-  if(!vp.length){ el.innerHTML='<div class="empty">No projects visible.</div>'; return; }
+  const sch=document.getElementById('fin-search')?.value.toLowerCase()||'';
+  const allVp=visibleProjects();
+  if(!allVp.length){ el.innerHTML='<div class="empty">No projects visible.</div>'; return; }
+  const vp=allVp.filter(p=>!sch||(p.name||'').toLowerCase().includes(sch)||(p.tower||'').toLowerCase().includes(sch));
+  if(!vp.length){ el.innerHTML='<div class="empty">No projects match your search.</div>'; return; }
   const cols=[['product','Product'],['contractor','Contractor'],['woQty','WO qty'],['contractValue','Contract value'],['paymentGiven','Released to vendor'],['raBillStatus','RA bill status'],['raBillBalance','RA balance'],['workStatus','Status']];
   el.innerHTML=vp.map(p=>{
     const rows=state.financeLedger.filter(f=>f.projId===p.id);

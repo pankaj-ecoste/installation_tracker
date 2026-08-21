@@ -135,7 +135,10 @@
     <div id="tab-finance-view" class="hidden">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
         <h3 style="font-size:15px;font-weight:600">Finance ledger — vendor & client mapping</h3>
-        <button class="btn btn-green btn-sm" id="btn-add-finance-row" onclick="openAddFinanceRow()">+ Add ledger row</button>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="text" id="fin-search" placeholder="Search project..." oninput="renderFinance()" style="min-width:150px">
+          <button class="btn btn-green btn-sm" id="btn-add-finance-row" onclick="openAddFinanceRow()">+ Add ledger row</button>
+        </div>
       </div>
       <div id="finance-table-wrap"></div>
     </div>

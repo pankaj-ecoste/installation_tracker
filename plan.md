@@ -1078,3 +1078,37 @@ read-only holds). Cancelled out without saving to leave the real project's data 
 the same Supabase auth session caused intermittent silent logouts/dead clicks, and the local Vite
 dev server dropped its connection once mid-session and auto-reconnected. Neither was caused by
 this change; closing the extra tab and retrying resolved it.)
+
+### v2-14: search box on the Finance tab (starting 2026-08-21)
+
+**Request from the team**: with 69 projects, the Finance ledger has no way to jump to a specific
+project — team wants a search box by project name, same idea as v2-9's Material tab search.
+
+**Investigation before designing**: same situation as v2-9 — the pattern already exists twice
+(All Projects' `#f-search`, Material's `#mat-search`, both filtering by name/tower substring). The
+Finance tab (`index.html:135-141`, `tab-finance-view`) has no equivalent: just a heading + "+ Add
+ledger row" button above `#finance-table-wrap`, and `renderFinance()`
+(`src/sections/finance/financeTab.js:137`) renders every project from `visibleProjects()`
+unfiltered.
+
+**Design** (matching v2-9 exactly, just applied to Finance instead of Material):
+1. `index.html`: add `<input type="text" id="fin-search" placeholder="Search project..."
+   oninput="renderFinance()">` into the `tab-finance-view` heading row, next to "+ Add ledger row".
+2. `src/sections/finance/financeTab.js`: in `renderFinance()`, read `#fin-search`'s value
+   (lowercased) and filter `vp` by `p.name`/`p.tower` substring match before rendering ledger
+   cards — identical filter logic to `materialTab.js:36,39`. Distinct "No projects match your
+   search." empty state, separate from "No projects visible."
+3. No `domGlobals.js` change needed — `renderFinance` is already exported globally.
+
+**Scope check**: two small, additive changes (one input, one filter line) mirroring an
+already-proven pattern used twice elsewhere in this app. No other Finance behavior changes.
+
+**Built (2026-08-21)**: `index.html` — `#fin-search` input added to the `tab-finance-view` heading
+row, next to "+ Add ledger row". `src/sections/finance/financeTab.js` — `renderFinance()` now
+reads `#fin-search`, filters `visibleProjects()` by name/tower substring match before rendering
+ledger cards, and shows "No projects match your search." as a distinct empty state.
+
+**Verified live in the browser** (real production Supabase project, admin login): opened Finance,
+typed "tharwani" into the new search box — list narrowed from all 69 projects down to just
+"Tharwani inftastructure"; typed a nonsense string — got the "No projects match your search."
+empty state; cleared the box — full list returned. `npm run build` succeeds.
