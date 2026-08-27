@@ -15,7 +15,14 @@ import { renderAllChecklistDropdowns, renderProjects } from '../projects/project
 
 /* ══ DPR ══ */
 export function renderDPR(){
-  const vp=visibleProjects();
+  let vp=visibleProjects();
+  const search=document.getElementById('dpr-search')?.value.trim().toLowerCase()||'';
+  // Single search box matches either the project (name/tower) or the supervisor assigned
+  // to that project — typing a supervisor's name brings up every project of theirs.
+  if(search) vp=vp.filter(p=>(p.name||'').toLowerCase().includes(search)||(p.tower||'').toLowerCase().includes(search)||(p.supervisor||'').toLowerCase().includes(search));
+  // vp is already narrowed to matching projects above (by project name/tower or by the
+  // project's assigned supervisor) — matching entries purely off that keeps this correct
+  // even when a DPR entry's own free-text supervisor field was edited to something else.
   let visible=state.dprLog.filter(d=>vp.some(p=>(d.project||'').includes(p.name)));
   const dateFilter=document.getElementById('dpr-date-filter')?.value;
   if(dateFilter) visible=visible.filter(d=>{
@@ -26,7 +33,7 @@ export function renderDPR(){
     return local===dateFilter;
   });
   const el=document.getElementById('dpr-list');
-  if(!visible.length){ el.innerHTML='<div class="empty">'+(dateFilter?'No DPRs found for that date.':'No DPRs found for your projects.')+'</div>'; return; }
+  if(!visible.length){ el.innerHTML='<div class="empty">'+(dateFilter||search?'No DPRs found matching your search/filter.':'No DPRs found for your projects.')+'</div>'; return; }
   // Average working per day, per project — computed from all DPR history for that project,
   // used to flag any day that comes in significantly below (or above) the norm.
   const avgPerDayByProj={};

@@ -115,6 +115,7 @@
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
         <h3 style="font-size:15px;font-weight:600">Daily progress reports</h3>
         <div style="display:flex;align-items:center;gap:8px">
+          <input type="text" id="dpr-search" placeholder="Search by project or supervisor..." oninput="renderDPR()" style="min-width:200px">
           <input type="date" id="dpr-date-filter" title="Filter by DPR date" oninput="renderDPR()">
           <button class="btn btn-green btn-sm" id="btn-add-dpr" onclick="openAddDPR()">+ Add DPR</button>
         </div>

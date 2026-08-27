@@ -1171,3 +1171,33 @@ things stacked:
   incident is one more reason it's pure latent risk with no offsetting benefit: it never actually
   helped here since the account was also inactive, and it stays a bcrypt-defeating exposure for
   as long as it exists. Worth prioritizing its removal.
+
+### v2-15: search box on the DPR Log tab, by project or supervisor (starting 2026-08-27)
+
+**Request from the team**: on the DPR Log tab, add a search that finds DPRs by supervisor name
+(showing every project that supervisor works on) as well as by project name — same underlying
+need as v2-9/v2-14's Material/Finance search, but the DPR tab only had a date filter, no text
+search at all.
+
+**Design decisions confirmed with the user before building**: (1) one combined search box, not
+two separate ones — matches the single-box pattern already used on All Projects/Material/Finance
+tabs; (2) the search also filters the checklist-summary cards at the top of the DPR list (Pre-Mockup
+Checklist, Site Readiness, etc. — shown per visible project, not per DPR entry), not just the
+individual DPR report cards below them, so the whole tab stays consistent.
+
+**Design**:
+1. `index.html` (`tab-dpr-view` heading row, next to the existing `#dpr-date-filter`): add
+   `<input type="text" id="dpr-search" placeholder="Search by project or supervisor...">`.
+2. `src/sections/dpr/dprTab.js` — `renderDPR()`: read `#dpr-search` (lowercased) and filter
+   `visibleProjects()` itself by `p.name`/`p.tower`/`p.supervisor` substring match, before it's
+   used for anything else. Because both the checklist-summary section and the DPR-entries list are
+   derived from that same filtered `vp`, one filter step covers both — no separate filter needed
+   on the DPR entries themselves. Matching against the project's own `supervisor` field (not each
+   DPR entry's free-text supervisor field) is what makes "search by supervisor" correctly return
+   every project of theirs, even if a given day's entry has that field edited to something else.
+   Distinct empty-state message when search/date filter yields nothing vs. no DPRs at all.
+
+**Built and verified live in the browser (2026-08-27, `support` login, local dev server)**: opened
+DPR Log, typed "Karan" — narrowed from the full list down to just "Pioneer — 1" (Karan's project),
+checklist section and DPR entry cards both filtered together; typed "Amartaru" — narrowed to just
+that project's checklist card + its one DPR entry; cleared the box — full list returned.
