@@ -1112,3 +1112,62 @@ ledger cards, and shows "No projects match your search." as a distinct empty sta
 typed "tharwani" into the new search box — list narrowed from all 69 projects down to just
 "Tharwani inftastructure"; typed a nonsense string — got the "No projects match your search."
 empty state; cleared the box — full list returned. `npm run build` succeeds.
+
+### Incident: `admin` account locked out — forgotten PIN + inactive flag (2026-08-27)
+
+**Report**: the team could not log in with the `admin` username/PIN. Not a bug in the app's
+normal operation — a support/recovery request, since Phase C (2026-08-07) intentionally made PINs
+one-way bcrypt hashes, so there is no way to look up or "reverse" a forgotten one.
+
+**Root cause, confirmed by direct DB inspection (`DATABASE_URL`, read-only queries first)**: two
+things stacked:
+1. **No admin-recovery path exists in this app.** `team-set-pin` (the only function that can ever
+   set a new `pin_hash`) requires the caller to already present a valid **admin** JWT
+   (`supabase/functions/team-set-pin/index.ts:32`) — by design, so a non-admin can't grant
+   themselves admin. But this means there is no "forgot PIN" flow for an admin: if the only
+   working admin account is the one that's locked out, nothing in the app itself can get back in.
+   This gap has existed silently since Phase C and was never exercised until now.
+2. **The `admin` team member (id 1) was also flagged `active = false`** — found by querying
+   `team_members` directly, restricted to `role='admin'` and non-sensitive columns only (no
+   PIN/hash values were ever pulled into this session). `team_login_verify()` requires
+   `active = true` (`0003_auth_hardening.sql:62`), so even a correct PIN would have been rejected.
+   **No audit trail exists for why or when it went inactive** — `teamMgmtTab.js`'s member-edit
+   flow never writes to `activity_log` when the Active toggle changes (checked: zero matches for
+   any deactivation-related event). Its last real activity/`last_login` was 24 Aug 2026, then
+   nothing — consistent with either an accidental toggle or a deliberate one; genuinely
+   undeterminable from the data. User confirmed they weren't aware of/didn't intend the
+   deactivation.
+   - **Also found, incidentally**: a second, active admin-role account already exists
+     (`shashank`, id 21, logged in the same day this was reported) — had `admin` only been
+     deactivated (PIN still known), that account could have self-served the fix via Team
+     Management with zero DB intervention. Worth knowing for next time a team-role account is
+     locked out.
+
+**Fix applied (2026-08-27)**, confirmed with the user before executing:
+1. `select set_member_pin_hash(1, '122246')` — sets a **new** PIN via the same bcrypt path the
+   app itself uses, run directly against the DB. Deliberately a *reset*, not a lookup — the old
+   PIN/hash was never read back into this session at all, even though the frozen legacy plaintext
+   `pin` column (kept since Phase C as a rollback margin, still not dropped) could technically
+   have been read. Resetting is strictly safer and fully solves "forgot the PIN" either way.
+2. `update team_members set active = true where id = 1`.
+3. Verified in two independent steps before calling it done: (a) `select * from
+   team_login_verify('admin', '122246')` directly in Postgres returned exactly one row (Neelam,
+   role admin, active), (b) a live HTTP call to the deployed `team-login` Edge Function with the
+   same credentials returned `200`, a real signed JWT, and updated `lastLogin` to today —
+   confirms the whole path end-to-end, not just the DB function in isolation, per this project's
+   standing verification rule.
+
+**Structural gaps flagged for the future (not fixed here, need a decision)**:
+- **No break-glass admin recovery mechanism.** If this had been the *only* admin account, the fix
+  above (direct DB access) is still available to a session with `DATABASE_URL`, but that's an
+  informal safety net, not a designed recovery path. Worth deciding: keep ≥2 active admin
+  accounts as standing policy, and/or build a documented recovery runbook, and/or add a proper
+  service-role-gated "admin emergency reset" tool.
+- **No audit log for `team_members.active`/role/permission changes.** Team Management writes no
+  `activity_log` entry when a member is activated/deactivated or their role changes — this is why
+  the root cause of `admin` going inactive couldn't be determined. Worth adding if this kind of
+  question comes up again.
+- **The legacy plaintext `pin` column is still not dropped** (flagged since Phase C/E) — this
+  incident is one more reason it's pure latent risk with no offsetting benefit: it never actually
+  helped here since the account was also inactive, and it stays a bcrypt-defeating exposure for
+  as long as it exists. Worth prioritizing its removal.
