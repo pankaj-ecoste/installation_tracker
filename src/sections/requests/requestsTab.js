@@ -1,7 +1,7 @@
 import { state } from '../../lib/state.js';
 import { db } from '../../lib/supabaseClient.js';
 import { logActivity } from '../../lib/activityLog.js';
-import { MS_MAIN, MS_MAINORDER_STEPS, MS_MOCKUP_STEPS, MS_POSTMOCKUP_STEPS, MS_PREMAINSURVEY_STEPS, MS_PREMOCKUP, MS_SAMPLING, NEELAM_WA, POSTPO_DOC_CATEGORIES, POSTPO_FIELDS, PREPO_FIELDS, SURVEY_FIELDS, VISIT_FIELDS, getAdminEmail, milestoneKeyFor, notifyByGmail, reqFieldGroup, reqTypeLabel } from '../../lib/constants.js';
+import { MS_MAIN, MS_MAINORDER_STEPS, MS_MOCKUP_STEPS, MS_POSTMOCKUP_STEPS, MS_PREMAINSURVEY_STEPS, MS_PREMOCKUP, MS_SAMPLING, NEELAM_WA, POSTPO_DOC_CATEGORIES, POSTPO_FIELDS, PREPO_FIELDS, SURVEY_FIELDS, VISIT_FIELDS, getAdminEmail, getManagementCcEmails, milestoneKeyFor, notifyByGmail, reqFieldGroup, reqTypeLabel } from '../../lib/constants.js';
 import { canDo, daysDiff, fmtDate, visibleProjects } from '../../lib/helpers.js';
 import { projectToRow, requestToRow, rowToProject, rowToRequest } from '../../lib/mappers.js';
 import { fileUploadRowHTML, pickFilesOrWarn, uploadFiles } from '../../lib/uploads.js';
@@ -248,14 +248,34 @@ export async function saveRequest(){
     // "next" id and colliding on the primary key (see plan.md v2-4 for the incident this fixed).
     const {data:inserted,error}=await db.from('requests').insert(requestToRow(newReq)).select().single();
     if(error){ console.error('Supabase insert failed',error); err.classList.remove('hidden'); document.getElementById('req-err-msg').textContent='Could not save — check console. (Have you run the requests table SQL in Supabase yet?)'; return; }
-    state.requests.unshift(rowToRequest(inserted));
-    logActivity('New request', rowToRequest(inserted).requestNumber+' — '+reqTypeLabel(type)+' request logged by '+createdBy);
-    // Auto-emailer removed on new request submission per request — the in-app Notifications
-    // panel (red badge on Requests tab + Recent Activity feed) already surfaces this.
+    const savedReq=rowToRequest(inserted);
+    state.requests.unshift(savedReq);
+    logActivity('New request', savedReq.requestNumber+' — '+reqTypeLabel(type)+' request logged by '+createdBy);
+    notifyManagementNewRequest(savedReq);
   }
   closePanel('panel-add-request');
   renderRequests();
 }
+// v2-18: fires on every new request save (all 7 types) — opens a pre-filled Gmail compose tab
+// to the primary admin, Cc'ing the rest of management, so staff just has to hit Send. Uses only
+// fields common to all 3 field groups (visit/order/survey) since this covers every request type.
+export function notifyManagementNewRequest(r){
+  const d=r.details||{};
+  const label=reqTypeLabel(r.requestType);
+  const project=d.developerName||d.projectName||'—';
+  const subject='New '+label+' request — '+r.requestNumber+' — '+project;
+  const body='A new '+label+' request has been raised in the Installation Tracker.\n\n'+
+    'Request number: '+r.requestNumber+'\n'+
+    'Type: '+label+'\n'+
+    'Raised by: '+(d.salesName||r.createdBy)+'\n'+
+    'Developer/Project: '+project+'\n'+
+    'Client representative: '+(d.contactPerson||'—')+(d.mobile?' ('+d.mobile+')':'')+'\n'+
+    'Location: '+(d.locationForVisit||'—')+', '+(d.city||'—')+', '+(d.state||'—')+'\n\n'+
+    'Please review and act on this request in the app:\n'+window.location.origin+'\n\n'+
+    'Regards,\nEcoste Installation Tracker';
+  notifyByGmail(getAdminEmail(), subject, body, getManagementCcEmails());
+}
+
 export function notifyProjectTeamNewRequest(r){
   const d=r.details||{};
   const salesName=d.salesName||r.createdBy;

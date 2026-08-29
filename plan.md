@@ -1321,3 +1321,55 @@ logged in as admin, opened the "Test Developer — Test Developer" project (the 
 original bug report — has DPR logs and material lots on it), clicked delete, confirmed "Yes,
 Delete" — no error alert, project disappeared from the list, project count dropped from 39 to 38.
 Fix confirmed end-to-end.
+
+### v2-18: Gmail-compose notification to management on New Request save (starting 2026-08-29)
+
+**Request from the team**: when a new request is raised (any of the 7 request types), a mail
+notification should go to all management. No third-party email API/service — same no-API pattern
+already used elsewhere in the app (`notifyByGmail`/`gmailComposeLink` in `src/lib/constants.js`,
+used today for JMR-upload and checklist-completion notifications): staff clicks Save, a Gmail
+compose tab opens pre-filled with all management on Cc, a proper subject/body, and a link to the
+app — staff just has to hit Send.
+
+**Context found while investigating**: `requestsTab.js` already had two unused notification
+functions (`notifyProjectTeamNewRequest`, `notifyNewRequest`) with a comment saying "Auto-emailer
+removed on new request submission per request" — this predates the restructuring (present in the
+original `complete.html` from the very first commit), and `plan.md` has no record of why, so it's
+not a decision made during this project. Not reusing those two: `notifyNewRequest` opens a
+WhatsApp link to `NEELAM_WA`, which is still the placeholder `'91XXXXXXXXXX'`, not a real number
+(would silently break), and both were written Pre-PO-specific rather than for all 7 types.
+
+**Design decisions confirmed with the user before building**:
+1. Fires on saving any of the 7 request types (Pre-Mockup, Mockup, Post-Mockup, Pre-Main Survey,
+   Sampling Survey, Main Order, Post-Main Order) — not just Pre-PO.
+2. To: the primary admin (`getAdminEmail()`, same helper already used elsewhere). Cc: the rest of
+   management — every other active `admin`/`manager` team member with an email on file. Matches
+   the existing `notifyJMRUpload` To-admin/Cc-others pattern. Checked live data: 3 admins (Neelam,
+   Shashank, support/admin) + 2 managers (Aditya, Shashi — Shashi has no email on file so is
+   skipped), so Cc will currently carry 3 addresses.
+
+**Design**:
+1. `src/lib/constants.js`:
+   - `gmailComposeLink(to, subject, body, cc)` / `notifyByGmail(to, subject, body, cc)` — add an
+     optional 4th `cc` param (backward compatible; existing 3-arg callers unaffected) instead of
+     each caller manually string-building `&cc=...` the way `notifyJMRUpload` currently does.
+   - New `getManagementCcEmails()`: active `admin`/`manager` team members with a non-empty email,
+     excluding the primary admin's own address (that's already in To), deduped.
+2. `src/sections/requests/requestsTab.js` — new `notifyManagementNewRequest(r)`: builds a subject/
+   body generic enough for all 3 field groups (visit/order/survey) using fields common to all of
+   them (`developerName`/`projectName`, `salesName`, `contactPerson`, `mobile`,
+   `locationForVisit`/`city`/`state`), includes `window.location.origin` as the app link, and
+   calls `notifyByGmail(getAdminEmail(), subject, body, getManagementCcEmails())`. Called from
+   `saveRequest()`'s insert branch right after `logActivity(...)`, replacing the stale
+   "Auto-emailer removed" comment.
+
+**Built and verified live in the browser (2026-08-29, `support` login, local dev server against
+the real production Supabase project)**: opened New Request, filled a Pre-Mockup request, clicked
+Save Request — request saved (PRE-0013), panel closed, and a Gmail compose tab opened
+automatically with: To = Shalini Gupta (sales01@ecoste.in, the primary admin), Cc = Aditya Chavan
+(project.west@ecoste.in), Shashank Soni (projectmanager@ecoste.in), Neelam Routhan
+(sales07@ecoste.in) — correctly excluding the primary admin and skipping Shashi (no email on
+file); subject "New Pre-Mockup request — PRE-0013 — TEST v2-18 Developer"; body with request
+number, type, raised-by, developer, client rep + phone, location, the app link, and a signature.
+Did not click Send (that's the staff member's manual step by design) — discarded the compose draft
+and deleted the test request row (id 19) from production afterward to keep production data clean.

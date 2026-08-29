@@ -230,12 +230,21 @@ export function getAdminEmail(){
   const adminMember=state.teamMembers.find(m=>m.role==='admin'&&m.email);
   return adminMember?adminMember.email:ADMIN_EMAIL;
 }
-
-export function gmailComposeLink(to, subject, body){
-  return 'https://mail.google.com/mail/?view=cm&fs=1&to='+encodeURIComponent(to)+'&su='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
+// Rest of management (active admins/managers with an email on file, minus the primary admin
+// already used as To: elsewhere) — for Cc'ing everyone in management on a notification.
+export function getManagementCcEmails(){
+  const primary=getAdminEmail();
+  const emails=state.teamMembers
+    .filter(m=>m.active&&['admin','manager'].includes(m.role)&&m.email&&m.email!==primary)
+    .map(m=>m.email);
+  return [...new Set(emails)].join(',');
 }
-export function notifyByGmail(to, subject, body){
-  window.open(gmailComposeLink(to, subject, body), '_blank');
+
+export function gmailComposeLink(to, subject, body, cc){
+  return 'https://mail.google.com/mail/?view=cm&fs=1&to='+encodeURIComponent(to)+'&su='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body)+(cc?'&cc='+encodeURIComponent(cc):'');
+}
+export function notifyByGmail(to, subject, body, cc){
+  window.open(gmailComposeLink(to, subject, body, cc), '_blank');
 }
 // Per the doc: JMR photo/report upload notifies Finance, Admin, and Site Incharge together (via cc).
 export function notifyJMRUpload(p, urls){
