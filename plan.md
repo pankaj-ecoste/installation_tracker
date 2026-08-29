@@ -1269,3 +1269,55 @@ clean. The denial/blocked path (save refused + guided message when location acce
 **not** live-tested — skipped per the user's choice, since it exercises the same
 try/catch/reject-with-message pattern already proven at the material-arrival capture point
 (`captureDPRArrivalGeoLocation()`), just wired to block instead of falling back to blank.
+
+### v2-17: fix "Could not delete from database" on Delete Project (starting 2026-08-29)
+
+**Report from the team**: admin tries to delete a project ("Test Developer — —") and gets "Could
+not delete from database — check console." for any project that actually has data on it.
+
+**Root cause**: `confirmDelete()` (`src/sections/projects/addEditProject.js:316`) does a plain
+`db.from('projects').delete().eq('id', state.deletingId)`. But `projects.id` is referenced by
+foreign keys from `dpr_log.proj_id`, `material_lots.proj_id`, `finance_ledger.proj_id`, and
+`requests.linked_project_id` (`0001_baseline_schema.sql`), none declared with an `ON DELETE`
+clause — Postgres defaults to `NO ACTION`, so the delete is rejected (FK-violation, error 23503)
+the instant the project has any DPR log, material lot, finance ledger row, or a request that was
+converted into it. RLS is not the cause — the `admin`-only `projects_delete` policy
+(`0004_rls_policies.sql:100-102`) is correct and unrelated to this failure.
+
+**Design decisions confirmed with the user before building**:
+1. Cascade: deleting a project also deletes its `dpr_log`, `material_lots`, and `finance_ledger`
+   rows — these are purely project-scoped operational data with no meaning once the project is
+   gone, and this matches the "This cannot be undone" warning already shown on the confirm dialog.
+2. `requests.linked_project_id` is the one exception: **unlink, don't delete** — `ON DELETE SET
+   NULL`, not CASCADE. The request row is the historical record of who asked for the project and
+   when; deleting it along with the project would erase that audit trail for no benefit, since
+   nothing currently reads `linked_project_id` after conversion.
+
+**Design**:
+1. New migration `supabase/migrations/0012_project_delete_cascade.sql`:
+   - `alter table dpr_log drop constraint dpr_log_proj_id_fkey, add constraint
+     dpr_log_proj_id_fkey foreign key (proj_id) references projects(id) on delete cascade;`
+   - same pattern for `material_lots_proj_id_fkey` and `finance_ledger_proj_id_fkey`.
+   - `alter table requests drop constraint requests_linked_project_id_fkey, add constraint
+     requests_linked_project_id_fkey foreign key (linked_project_id) references projects(id) on
+     delete set null;`
+   - (Exact auto-generated constraint names need confirming against the live schema before
+     writing the final `drop constraint` statements — Postgres names them
+     `<table>_<column>_fkey` by default, which matches here since none were named explicitly in
+     `0001_baseline_schema.sql`, but this should be verified, not assumed, when the migration is
+     written.)
+2. No application-code change needed — `confirmDelete()` already just deletes the `projects` row;
+   the cascade does the rest at the database level.
+
+**Migration applied to production (2026-08-29)**: constraint names confirmed first via a live
+`pg_constraint` query (all four were the default `<table>_<column>_fkey` names, `confdeltype: 'a'`
+i.e. NO ACTION, confirming the root cause); ran `supabase db query --linked --file
+supabase/migrations/0012_project_delete_cascade.sql` using a fresh Personal Access Token from the
+user; re-ran the same `pg_constraint` query and confirmed `confdeltype` flipped to `'c'` (CASCADE)
+for dpr_log/material_lots/finance_ledger and `'n'` (SET NULL) for requests.
+
+**Verified live in the browser (2026-08-29, `support` login, real production Supabase project)**:
+logged in as admin, opened the "Test Developer — Test Developer" project (the same one from the
+original bug report — has DPR logs and material lots on it), clicked delete, confirmed "Yes,
+Delete" — no error alert, project disappeared from the list, project count dropped from 39 to 38.
+Fix confirmed end-to-end.
