@@ -1201,3 +1201,71 @@ individual DPR report cards below them, so the whole tab stays consistent.
 DPR Log, typed "Karan" — narrowed from the full list down to just "Pioneer — 1" (Karan's project),
 checklist section and DPR entry cards both filtered together; typed "Amartaru" — narrowed to just
 that project's checklist card + its one DPR entry; cleared the box — full list returned.
+
+### v2-16: automatic GPS location capture on every DPR save (starting 2026-08-27)
+
+**Request from the team**: every DPR save (Add DPR and Edit DPR both use the same `saveDPR()`)
+must automatically capture the device's on-site GPS location at the moment of saving — proof the
+report was actually filed from site, not filled in later from anywhere else.
+
+**Design decisions confirmed with the user before building**:
+1. If location capture fails or is denied, the save is **blocked** (not saved with a blank
+   location) — with a guided error message telling the supervisor what to do. This is stricter
+   than the existing material-arrival location capture (`captureDPRArrivalGeoLocation()`,
+   best-effort, never enforced — see plan.md's mobile-audit notes), and deliberately so, per the
+   team's explicit ask.
+2. Capture is automatic, triggered by clicking "Save DPR" itself — no separate manual "capture"
+   button/step first. The browser's native permission prompt (if not already granted) appears at
+   that point.
+3. The captured location displays on each DPR card in the Daily Progress Reports log (same
+   visibility as the rest of the DPR card), not tucked into the internal-only section.
+
+**Design**:
+1. New migration `supabase/migrations/0011_dpr_geo_location.sql` — `alter table dpr_log add
+   column geo_location text default ''`, same text format as `material_lots.arrival_geo_location`
+   ("lat, lng — reverse-geocoded address").
+2. `src/lib/mappers.js` — `dprToRow`/`rowToDpr` read/write the new `geo_location` column.
+3. `src/sections/requests/requestsTab.js` — exported the existing `reverseGeocodeAddress()`
+   helper (was module-private) so `dprTab.js` can reuse the same free OpenStreetMap Nominatim
+   lookup instead of duplicating it.
+4. `src/sections/dpr/dprTab.js` — new `captureDPRSaveLocation()`: wraps
+   `navigator.geolocation.getCurrentPosition` in a Promise that **rejects** (not resolves blank)
+   on denial/timeout/unsupported, with a guided error message. `saveDPR()` now `await`s this right
+   after the existing synchronous snag-validation checks (so a supervisor fixing a typo isn't
+   re-prompted for location on every retry) and before anything is written to the DB — a rejection
+   shows the message via the existing `#dpr-error`/`#dpr-err-msg` elements and returns without
+   saving, exactly like the pre-existing snag-validation failures do. The "Save DPR" button
+   (`index.html`, given `id="dpr-save-btn"`) is disabled and relabeled "📍 Getting your
+   location..." → "Saving..." during the flow, and reset on every exit path (both error returns,
+   the two Supabase error branches, and the success path) plus on `openAddDPR()`/`openEditDPR()`
+   as a defensive reset. Captured location is stored on `newDpr.geoLocation` and rendered as a
+   `📍 ...` line under "Supervisor:" on each DPR card in `renderDPR()`.
+
+**Not changed**: the existing material-arrival location capture (separate manual button, separate
+field, still best-effort/not mandatory) — this is a distinct, new capture point for the DPR itself.
+
+**Scope check — production DB migration**: applying `0011_dpr_geo_location.sql` needs to go
+against the real Supabase project. Per [[project_supabase_migration_state]] (remote migration
+history is unsynced), this should be applied with `supabase db query --linked --file
+supabase/migrations/0011_dpr_geo_location.sql`, not `supabase db push` — confirming with the user
+before running it, since it's a change to shared production infrastructure.
+
+**Migration applied to production (2026-08-29)**: confirmed missing first — a direct read against
+the live REST API (`select id,geo_location from dpr_log`) returned `42703 column dpr_log.geo_location
+does not exist` before applying. User provided a fresh Supabase Personal Access Token; ran
+`supabase db query --linked --file supabase/migrations/0011_dpr_geo_location.sql`, then confirmed
+the column exists by re-running the same read (returned `geo_location:""` instead of erroring).
+
+**Verified live in the browser (2026-08-29, `support` login, real production Supabase project)**:
+opened Add DPR for Amartaru, clicked Save DPR — Chrome's native location-permission prompt
+appeared (a JS-level stub was attempted first but doesn't reach page-world code from the
+extension's isolated content-script world, so this needed the user to click Allow on the real
+prompt), location was captured and reverse-geocoded, and the DPR saved successfully. The new
+entry (Amartaru, 29 Aug 2026) showed "📍 19.076090, 72.877426 — Lal Bahadur Shastri Marg, Kismat
+Nagar, Kurla West, ... Mumbai ... 400070, India" on its card in the DPR log — confirms capture,
+reverse-geocoding, DB write, and display all work end-to-end. Test entry deleted afterward
+(`delete from dpr_log where id = 73`, confirmed gone via a follow-up read) to keep production data
+clean. The denial/blocked path (save refused + guided message when location access is denied) was
+**not** live-tested — skipped per the user's choice, since it exercises the same
+try/catch/reject-with-message pattern already proven at the material-arrival capture point
+(`captureDPRArrivalGeoLocation()`), just wired to block instead of falling back to blank.

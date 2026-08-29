@@ -12,6 +12,28 @@ import { renderMetrics } from '../metrics.js';
 import { closePanel, openPanel } from '../navigation.js';
 import { renderConstraintList } from '../projects/formHelpers.js';
 import { renderAllChecklistDropdowns, renderProjects } from '../projects/projectCards.js';
+import { reverseGeocodeAddress } from '../requests/requestsTab.js';
+
+// Captures the device's current GPS position and resolves it, alongside a best-effort
+// reverse-geocoded address, into the same "lat, lng — address" text format already used for
+// material-arrival locations. Rejects (rather than resolving with a blank) on denial/timeout —
+// saving a DPR is meant to be blocked without a location, per the team's requirement that every
+// DPR prove where it was filed from.
+function captureDPRSaveLocation(){
+  return new Promise((resolve,reject)=>{
+    if(!navigator.geolocation){ reject(new Error('Location capture is not supported on this device/browser — a DPR cannot be saved without it.')); return; }
+    navigator.geolocation.getCurrentPosition(
+      async pos=>{
+        const lat=pos.coords.latitude, lng=pos.coords.longitude;
+        const coords=lat.toFixed(6)+', '+lng.toFixed(6);
+        const address=await reverseGeocodeAddress(lat,lng);
+        resolve(address?coords+' — '+address:coords);
+      },
+      err=>reject(new Error('Location access is required to save a DPR. Please allow location access when your browser asks, then tap "Save DPR" again. ('+err.message+')')),
+      {enableHighAccuracy:true, timeout:10000}
+    );
+  });
+}
 
 /* ══ DPR ══ */
 export function renderDPR(){
@@ -76,6 +98,7 @@ export function renderDPR(){
           <div style="font-weight:700;font-size:14px">${d.project}</div>
           <div style="font-size:12px;color:#666;margin-top:2px">DPR Date: ${d.date} &nbsp;·&nbsp; Day No: <b>${d.dayNo||'—'}</b> &nbsp;·&nbsp; Days left: <b>${d.daysLeft!=null?d.daysLeft:'—'}</b></div>
           <div style="font-size:12px;color:#666">Supervisor: ${d.supervisor}</div>
+          ${d.geoLocation?`<div style="font-size:11px;color:#1D9E75;margin-top:2px">📍 ${d.geoLocation}</div>`:''}
           ${(canDo('addDPR')||(state.currentUser&&state.currentUser.name===d.supervisor))?`<button class="btn btn-outline btn-sm" style="margin-top:6px" onclick="openEditDPR(${d.id})">✏️ Edit this DPR</button>`:''}
         </div>
         <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
@@ -114,6 +137,8 @@ export function openAddDPR(){
   state.dprPendingConstraints=[];
   openPanel('panel-add-dpr');
   document.getElementById('dpr-panel-title').textContent='Add Daily Progress Report';
+  const saveBtn=document.getElementById('dpr-save-btn');
+  if(saveBtn){ saveBtn.disabled=false; saveBtn.textContent='Save DPR'; }
   renderDPRForm(vp[0].id);
 }
 export function openEditDPR(id){
@@ -122,6 +147,8 @@ export function openEditDPR(id){
   state.editingDprId=id;
   state.dprPendingConstraints=(d.constraints||[]).filter(c=>c!=='None');
   openPanel('panel-add-dpr');
+  const saveBtn=document.getElementById('dpr-save-btn');
+  if(saveBtn){ saveBtn.disabled=false; saveBtn.textContent='Save DPR'; }
   renderDPRForm(d.projId);
   // Prefill with the existing entry's values, on top of the fresh form the project
   // selector just built — this is what makes it an edit instead of a blank new entry.
@@ -454,6 +481,22 @@ export async function saveDPR(){
     if(err){ err.classList.remove('hidden'); document.getElementById('dpr-err-msg').textContent='Please enter "Units affected" for the snag before saving — Severity is set from that.'; err.scrollIntoView({behavior:'smooth',block:'center'}); }
     return;
   }
+  // Location capture is mandatory for every DPR save — proves the report was actually filed
+  // from site, not just filled in later from anywhere. Runs after the cheap synchronous
+  // validations above (so a supervisor fixing a typo doesn't get re-prompted for location on
+  // every retry) but before anything is written — a denied/failed capture blocks the save
+  // entirely, with a guided message telling them what to do.
+  const saveBtn=document.getElementById('dpr-save-btn');
+  if(saveBtn){ saveBtn.disabled=true; saveBtn.textContent='📍 Getting your location...'; }
+  let geoLocation;
+  try{
+    geoLocation=await captureDPRSaveLocation();
+  }catch(e){
+    if(saveBtn){ saveBtn.disabled=false; saveBtn.textContent='Save DPR'; }
+    if(err){ err.classList.remove('hidden'); document.getElementById('dpr-err-msg').textContent=e.message; err.scrollIntoView({behavior:'smooth',block:'center'}); }
+    return;
+  }
+  if(saveBtn) saveBtn.textContent='Saving...';
   const noC=document.getElementById('dpr-no-constraints').checked;
   // Bug fix: if the user typed a constraint but forgot to click "+ Add",
   // it was being silently dropped and the DPR incorrectly saved as "no constraints".
@@ -489,7 +532,8 @@ export async function saveDPR(){
     escalations:document.getElementById('dpr-escalations').value.trim(),
     next:document.getElementById('dpr-next').value.trim()||'—',
     framingMaterial:'',
-    sectionSize:''
+    sectionSize:'',
+    geoLocation
   };
   // If editing, capture what this entry contributed before, so the project rollup can be
   // corrected by the difference rather than double-counting the new figures on top.
@@ -501,7 +545,7 @@ export async function saveDPR(){
   let savedDpr;
   if(state.editingDprId){
     const {data:updated,error}=await db.from('dpr_log').update(dprToRow(newDpr)).eq('id',state.editingDprId).select().single();
-    if(error){ console.error('Supabase update failed',error); alert('Could not save DPR changes — check console.'); return; }
+    if(error){ console.error('Supabase update failed',error); alert('Could not save DPR changes — check console.'); if(saveBtn){ saveBtn.disabled=false; saveBtn.textContent='Save DPR'; } return; }
     savedDpr=rowToDpr(updated);
     const idx=state.dprLog.findIndex(x=>x.id===state.editingDprId);
     if(idx>=0) state.dprLog[idx]=savedDpr; else state.dprLog.unshift(savedDpr);
@@ -510,7 +554,7 @@ export async function saveDPR(){
     // No client-supplied id — dpr_log.id is a real Postgres identity column, so letting the
     // database assign it atomically avoids two concurrent submissions colliding (see plan.md v2-4).
     const {data:inserted,error}=await db.from('dpr_log').insert(dprToRow(newDpr)).select().single();
-    if(error){ console.error('Supabase insert failed',error); alert('Could not save DPR to database — check console.'); return; }
+    if(error){ console.error('Supabase insert failed',error); alert('Could not save DPR to database — check console.'); if(saveBtn){ saveBtn.disabled=false; saveBtn.textContent='Save DPR'; } return; }
     savedDpr=rowToDpr(inserted);
     state.dprLog.unshift(savedDpr);
     logActivity('DPR submitted', (p?p.name+' — '+p.tower:'Project')+' — daily report for '+newDpr.date);
@@ -659,6 +703,7 @@ export async function saveDPR(){
     }];
     await syncProject(p);
   }
+  if(saveBtn){ saveBtn.disabled=false; saveBtn.textContent='Save DPR'; }
   closePanel('panel-add-dpr');
   if(state.activeTab==='dpr') renderDPR();
   if(state.activeTab==='material') renderMaterial();

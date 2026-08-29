@@ -36,7 +36,7 @@ export function fieldRowHTML(f, valObj, idPrefix){
 // Nominatim API (no key/billing setup needed). Best-effort only — if it's slow, offline, or
 // rate-limited, the caller still has the coordinates already captured, so this never blocks
 // or fails the location capture itself, just the address text appended alongside it.
-async function reverseGeocodeAddress(lat, lng){
+export async function reverseGeocodeAddress(lat, lng){
   try{
     const controller=new AbortController();
     const timeout=setTimeout(()=>controller.abort(), 6000);

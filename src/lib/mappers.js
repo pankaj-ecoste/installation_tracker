@@ -61,7 +61,8 @@ export function dprToRow(d){
     manpower:d.manpower, photos:d.photos, products:d.products, constraints:d.constraints,
     action_taken:d.actionTaken, remarks:d.remarks, internal_hindrance:d.internalHindrance,
     next_dispatch:d.nextDispatch, escalations:d.escalations, next:d.next,
-    framing_material:d.framingMaterial||'', section_size:d.sectionSize||'', photo_urls:d.photoUrls||[], report_pdf_url:d.reportPdfUrl||''
+    framing_material:d.framingMaterial||'', section_size:d.sectionSize||'', photo_urls:d.photoUrls||[], report_pdf_url:d.reportPdfUrl||'',
+    geo_location:d.geoLocation||''
   };
 }
 export function rowToDpr(r){
@@ -71,7 +72,8 @@ export function rowToDpr(r){
     manpower:r.manpower, photos:r.photos, products:r.products||[], constraints:r.constraints||[],
     actionTaken:r.action_taken||'', remarks:r.remarks||'', internalHindrance:r.internal_hindrance||'',
     nextDispatch:r.next_dispatch||'', escalations:r.escalations||'', next:r.next||'—',
-    framingMaterial:r.framing_material||'', sectionSize:r.section_size||'', photoUrls:r.photo_urls||[], reportPdfUrl:r.report_pdf_url||''
+    framingMaterial:r.framing_material||'', sectionSize:r.section_size||'', photoUrls:r.photo_urls||[], reportPdfUrl:r.report_pdf_url||'',
+    geoLocation:r.geo_location||''
   };
 }
 
