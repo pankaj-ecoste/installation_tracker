@@ -1,4 +1,4 @@
--- Phase D: Row-Level Security. Named 0004 (not the architecture doc's original 0002) because
+ -- Phase D: Row-Level Security. Named 0004 (not the architecture doc's original 0002) because
 -- Phase C already shipped as 0003_auth_hardening.sql — see plan.md's "Next session should
 -- start with" note. apply-migrations.mjs re-applies every file in filename order on every run
 -- and everything here is idempotent (drop-if-exists policies, create-or-replace functions), so
@@ -174,7 +174,9 @@ create policy material_lots_update on material_lots for update
    updateRequestFields() is a shared helper called from many different flows/roles (acknowledge,
    mark reviewed, convert to project, admin-only planned-date override, supervisor visit-report
    fill-in) — baseline for UPDATE, same reasoning as projects.
-   INSERT: addRequest (admin, manager, viewer) — new-request form, single clear gate. */
+   INSERT: addRequest (admin, manager, viewer) — new-request form, single clear gate.
+   DELETE: askDeleteRequest (admin only, v2-19) — cleans up accidental duplicate requests,
+   matches projects_delete's shape exactly. */
 alter table requests enable row level security;
 drop policy if exists requests_select_open on requests;
 create policy requests_select_open on requests for select using (true);
@@ -187,6 +189,10 @@ drop policy if exists requests_update on requests;
 create policy requests_update on requests for update
   using (app_is_active_team_member())
   with check (app_is_active_team_member());
+
+drop policy if exists requests_delete on requests;
+create policy requests_delete on requests for delete
+  using (app_is_active_team_member() and app_jwt_team_role() = 'admin');
 
 /* ══ FINANCE_LEDGER ══
    Single-flow table (only financeTab.js writes here) — safe to replicate the exact gates.

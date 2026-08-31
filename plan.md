@@ -1373,3 +1373,59 @@ file); subject "New Pre-Mockup request — PRE-0013 — TEST v2-18 Developer"; b
 number, type, raised-by, developer, client rep + phone, location, the app link, and a signature.
 Did not click Send (that's the staff member's manual step by design) — discarded the compose draft
 and deleted the test request row (id 19) from production afterward to keep production data clean.
+
+### v2-19: Delete-request button in the admin panel (starting 2026-08-31)
+
+**Request from the team**: staff sometimes accidentally submit multiple requests for the same
+task (e.g. duplicate saves), and there is no way to clean these up. Add a delete button to the
+Requests list, admin-only.
+
+**Root cause / gap found**: the `requests` table has no delete path anywhere today — no delete
+button in the UI, no `deleteRequest` entry in the roles/permissions matrix, and (checked
+`supabase/migrations/0004_rls_policies.sql`) no `requests_delete` RLS policy at all. Same class of
+gap that caused the "Could not delete from database" bug fixed for Projects in v2-17 — if a delete
+button were added without the RLS policy, it would 400 silently.
+
+**Design decisions confirmed with the user before building**:
+1. Admin-only, mirroring the existing "Delete Project" pattern exactly (same confirm-dialog panel,
+   same permission-matrix shape as `deleteProject`).
+2. No activity-log entry for this delete — user's call: only admin can do it, and the request can
+   always be raised again if actually needed, so an audit trail isn't worth it here.
+
+**Design**:
+1. `src/lib/constants.js` — add `deleteRequest` to `ROLES.*.can` (`true` for admin, `false` for
+   manager/supervisor/finance/viewer/dispatch_head) and to `PERM_LABELS` (so it shows, toggleable,
+   in Team Management's permission matrix, same as `deleteProject`).
+2. `supabase/migrations/0004_rls_policies.sql` — add `requests_delete` policy: active team member
+   + `admin` role only, matching `projects_delete`'s shape exactly.
+3. `src/lib/state.js` — add `deletingKind:'project'` alongside the existing `deletingId`, so the
+   shared confirm panel knows which table to delete from.
+4. `src/sections/projects/addEditProject.js` — generalize `confirmDelete()` (currently hardcoded to
+   `projects`) to branch on `state.deletingKind`: delete from `requests` and update
+   `state.requests`/`renderRequests()` when kind is `'request'`, keep existing `projects` behavior
+   otherwise. `askDelete()` explicitly sets `deletingKind='project'`.
+5. `src/sections/requests/requestsTab.js` — new `askDeleteRequest(id)` (sets `deletingId`/
+   `deletingKind='request'`, shows the request number in the confirm text, opens the existing
+   `panel-confirm`). New 🗑 delete button in `renderRequestCard()`'s action row, next to ✏️ Edit,
+   gated by `canDo('deleteRequest')`, hidden for Sales/Viewer (same as Edit already is for them).
+6. `src/utils/domGlobals.js` — expose `askDeleteRequest` globally (onclick handler needs it).
+
+**Not changed**: `confirmDelete`'s no-activity-log behavior for projects stays as-is; this only
+extends the same (already-silent) delete path to requests, per the decision above.
+
+**Migration applied to the real production Supabase project** via `apply-migrations.mjs` — the
+`requests_delete` policy is confirmed live (queried `pg_policies` directly: `requests_delete` /
+`DELETE` now present alongside `requests_select_open`/`requests_insert`/`requests_update`).
+**Also noticed while applying, unrelated to this change, not fixed**: `0010_project_tower_count.sql`
+is not idempotent (`ADD COLUMN` without `IF NOT EXISTS`) and fails re-application with `column
+"tower_count" already exists` — pre-existing issue, flagged for a future session.
+
+**Built and verified live in the browser (2026-08-31, local dev server, `VITE_TEST_MODE=true` mock
+data to avoid touching production request rows)**: logged in as `admin`/`1234`, created a test
+Pre-Mockup request (PRE-0001), went to Requests — 🗑 "Delete request" button present next to ✏️
+Edit. Clicked it — confirm modal correctly read `Delete request "PRE-0001"?` (reusing
+`panel-confirm`/`confirmDelete` via the new `deletingKind` branch). Clicked "Yes, Delete" — request
+removed from the list, Requests tab badge cleared, no console errors; Project delete (🗑 on project
+cards) still worked unaffected. Logged in as `neelam`/`5678` (Ops Manager, `deleteRequest:false`),
+created another test request — confirmed no 🗑 button shows next to Edit for that role (permission
+gating works both ways). Cleaned up: closed temp dev servers, removed scratch log files.

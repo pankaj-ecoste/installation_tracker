@@ -29,6 +29,7 @@ export const state = {
   editingId: null,
   updatingId: null,
   deletingId: null,
+  deletingKind: 'project',
   pendingConstraints: [],
   dprPendingConstraints: [],
   pendingMilestones: [],

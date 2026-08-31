@@ -382,6 +382,16 @@ export function reviewWaitBadge(r){
   return '<span class="badge '+(over?'br':'ba')+'">'+(over?'🚨 Awaiting review — ':'⏳ Awaiting review: ')+Math.floor(hoursSince)+'h since visit'+(over?' (overdue)':'')+'</span>';
 }
 
+// Admin-only cleanup for accidental duplicate submissions (staff sometimes save the same
+// request twice) — reuses the same confirm panel as project delete (see askDelete/confirmDelete
+// in addEditProject.js), distinguished by state.deletingKind.
+export function askDeleteRequest(id){
+  const r=state.requests.find(x=>x.id===id); if(!r) return;
+  state.deletingId=id; state.deletingKind='request';
+  document.getElementById('confirm-msg').textContent='Delete request "'+r.requestNumber+'"?';
+  openPanel('panel-confirm');
+}
+
 export function toggleRequestTimeline(id){ state.requestTimelineExpanded[id]=!state.requestTimelineExpanded[id]; renderRequests(); }
 export function fmtDateTime(iso){ if(!iso) return ''; const dt=new Date(iso); return fmtDate(dt.toISOString().slice(0,10))+' '+dt.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}); }
 // Gap between a target timestamp and when it actually happened — used for the SLA-based
@@ -444,6 +454,7 @@ export function renderRequestCard(r){
       '<div style="display:flex;gap:6px;flex-shrink:0">'+
         (!isSalesViewer&&r.plannedDateLocked&&state.currentUser&&state.currentUser.role==='admin'?'<button class="icon-btn btn-sm" title="Change planned date (admin only)" onclick="changePlannedDate('+r.id+')">🔓📅</button>':'')+
         (isSalesViewer?'<button class="icon-btn btn-sm" title="View only" onclick="viewRequestReadOnly('+r.id+')">👁</button>':'<button class="icon-btn btn-sm" onclick="openEditRequest('+r.id+')">✏️</button>')+
+        (!isSalesViewer&&canDo('deleteRequest')?'<button class="icon-btn btn-sm danger" title="Delete request" onclick="askDeleteRequest('+r.id+')">🗑</button>':'')+
       '</div>'+
     '</div>'+
     // Sales-visible status summary — Project name, Developer, Location, State, and committed

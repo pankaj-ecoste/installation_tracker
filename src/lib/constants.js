@@ -5,12 +5,12 @@ import { TODAY } from './config.js';
 export { TODAY };
 
 export const ROLES = {
-  admin:      {label:'Admin',        color:'role-admin',      emoji:'👑', can:{addProject:true, editProject:true, deleteProject:true, updateProgress:true, addDPR:true, manageTeam:true, viewFinance:true, viewAll:true, editPermissions:true, editFinance:true, viewDPR:true, viewGantt:true, manageDispatch:true, addLot:true, addFinanceRow:true, addRequest:true, addMilestone:true}},
-  manager:    {label:'Ops Manager',  color:'role-manager',    emoji:'📋', can:{addProject:true, editProject:true, deleteProject:false,updateProgress:true, addDPR:true, manageTeam:false,viewFinance:true, viewAll:true, editPermissions:false,editFinance:true, viewDPR:true, viewGantt:true, manageDispatch:true, addLot:false, addFinanceRow:false, addRequest:true, addMilestone:true}},
-  supervisor: {label:'Supervisor',   color:'role-supervisor', emoji:'🏗', can:{addProject:false,editProject:false,deleteProject:false,updateProgress:false, addDPR:true, manageTeam:false,viewFinance:false,viewAll:false, editPermissions:false,editFinance:false,viewDPR:true, viewGantt:true, manageDispatch:false, addLot:false, addFinanceRow:false, addRequest:false, addMilestone:false}},
-  finance:    {label:'Finance',      color:'role-viewer',     emoji:'💰', can:{addProject:false,editProject:false,deleteProject:false,updateProgress:false,addDPR:false,manageTeam:false,viewFinance:true, viewAll:true, editPermissions:false,editFinance:true, viewDPR:true, viewGantt:true, manageDispatch:false, addLot:false, addFinanceRow:true, addRequest:false, addMilestone:false}},
-  viewer:     {label:'Sales/Viewer', color:'role-viewer',     emoji:'👁', can:{addProject:true, editProject:false,deleteProject:false,updateProgress:false,addDPR:false,manageTeam:false,viewFinance:false,viewAll:false, editPermissions:false,editFinance:false,viewDPR:false,viewGantt:true, manageDispatch:false, addLot:false, addFinanceRow:false, addRequest:true, addMilestone:false}},
-  dispatch_head: {label:'Dispatch Head', color:'role-manager', emoji:'📦', can:{addProject:false,editProject:false,deleteProject:false,updateProgress:false,addDPR:false,manageTeam:false,viewFinance:false,viewAll:true, editPermissions:false,editFinance:false,viewDPR:false,viewGantt:true, manageDispatch:true, addLot:true, addFinanceRow:false, addRequest:false, addMilestone:false}}
+  admin:      {label:'Admin',        color:'role-admin',      emoji:'👑', can:{addProject:true, editProject:true, deleteProject:true, updateProgress:true, addDPR:true, manageTeam:true, viewFinance:true, viewAll:true, editPermissions:true, editFinance:true, viewDPR:true, viewGantt:true, manageDispatch:true, addLot:true, addFinanceRow:true, addRequest:true, addMilestone:true, deleteRequest:true}},
+  manager:    {label:'Ops Manager',  color:'role-manager',    emoji:'📋', can:{addProject:true, editProject:true, deleteProject:false,updateProgress:true, addDPR:true, manageTeam:false,viewFinance:true, viewAll:true, editPermissions:false,editFinance:true, viewDPR:true, viewGantt:true, manageDispatch:true, addLot:false, addFinanceRow:false, addRequest:true, addMilestone:true, deleteRequest:false}},
+  supervisor: {label:'Supervisor',   color:'role-supervisor', emoji:'🏗', can:{addProject:false,editProject:false,deleteProject:false,updateProgress:false, addDPR:true, manageTeam:false,viewFinance:false,viewAll:false, editPermissions:false,editFinance:false,viewDPR:true, viewGantt:true, manageDispatch:false, addLot:false, addFinanceRow:false, addRequest:false, addMilestone:false, deleteRequest:false}},
+  finance:    {label:'Finance',      color:'role-viewer',     emoji:'💰', can:{addProject:false,editProject:false,deleteProject:false,updateProgress:false,addDPR:false,manageTeam:false,viewFinance:true, viewAll:true, editPermissions:false,editFinance:true, viewDPR:true, viewGantt:true, manageDispatch:false, addLot:false, addFinanceRow:true, addRequest:false, addMilestone:false, deleteRequest:false}},
+  viewer:     {label:'Sales/Viewer', color:'role-viewer',     emoji:'👁', can:{addProject:true, editProject:false,deleteProject:false,updateProgress:false,addDPR:false,manageTeam:false,viewFinance:false,viewAll:false, editPermissions:false,editFinance:false,viewDPR:false,viewGantt:true, manageDispatch:false, addLot:false, addFinanceRow:false, addRequest:true, addMilestone:false, deleteRequest:false}},
+  dispatch_head: {label:'Dispatch Head', color:'role-manager', emoji:'📦', can:{addProject:false,editProject:false,deleteProject:false,updateProgress:false,addDPR:false,manageTeam:false,viewFinance:false,viewAll:true, editPermissions:false,editFinance:false,viewDPR:false,viewGantt:true, manageDispatch:true, addLot:true, addFinanceRow:false, addRequest:false, addMilestone:false, deleteRequest:false}}
 };
 
 // Reusable checklist templates for site supervisors — pick one to pre-fill a project's checklist fast.
@@ -128,7 +128,7 @@ export const PERM_LABELS = {
   viewGantt:'View Gantt chart', manageTeam:'Manage team members',
   viewFinance:'View finance data', editFinance:'Edit finance data',
   viewAll:'View all projects', editPermissions:'Edit role permissions',
-  manageDispatch:'Manage material dispatch'
+  manageDispatch:'Manage material dispatch', deleteRequest:'Delete requests'
 };
 
 export const MS_MOCKUP = [

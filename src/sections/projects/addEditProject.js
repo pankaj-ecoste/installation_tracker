@@ -13,6 +13,7 @@ import { approvedVendors, renderFinance } from '../finance/financeTab.js';
 import { renderGantt } from '../gantt/ganttTab.js';
 import { renderMetrics } from '../metrics.js';
 import { closePanel, openPanel } from '../navigation.js';
+import { renderRequests } from '../requests/requestsTab.js';
 import { computeDaysAvailable, renderConstraintList, renderDaysAvailable, renderExistingMilestones, renderFormMilestones, renderProductQuickPicks, renderProductRows, renderTowerRows, renderUpdateConstraints, renderVendorRows } from './formHelpers.js';
 import { renderProjects } from './projectCards.js';
 
@@ -312,11 +313,18 @@ export async function saveProject(){
 export function showFormErr(msg){ document.getElementById('f-error').classList.remove('hidden'); document.getElementById('f-err-msg').textContent=msg; }
 
 /* ══ DELETE ══ */
-export function askDelete(id){ state.deletingId=id; const p=state.projects.find(x=>x.id===id); document.getElementById('confirm-msg').textContent='Delete "'+p.name+' — '+p.tower+'"?'; openPanel('panel-confirm'); }
+export function askDelete(id){ state.deletingId=id; state.deletingKind='project'; const p=state.projects.find(x=>x.id===id); document.getElementById('confirm-msg').textContent='Delete "'+p.name+' — '+p.tower+'"?'; openPanel('panel-confirm'); }
 export async function confirmDelete(){
-  const {error}=await db.from('projects').delete().eq('id',state.deletingId);
+  const table=state.deletingKind==='request'?'requests':'projects';
+  const {error}=await db.from(table).delete().eq('id',state.deletingId);
   if(error){ console.error('Supabase delete failed',error); alert('Could not delete from database — check console.'); return; }
-  state.projects=state.projects.filter(p=>p.id!==state.deletingId); closePanel('panel-confirm'); state.expanded={}; renderMetrics(); renderProjects(); updateBell();
+  if(state.deletingKind==='request'){
+    state.requests=state.requests.filter(r=>r.id!==state.deletingId);
+    closePanel('panel-confirm'); renderRequests(); updateBell();
+  } else {
+    state.projects=state.projects.filter(p=>p.id!==state.deletingId);
+    closePanel('panel-confirm'); state.expanded={}; renderMetrics(); renderProjects(); updateBell();
+  }
 }
 
 /* ══ UPDATE ══ */
