@@ -1429,3 +1429,47 @@ removed from the list, Requests tab badge cleared, no console errors; Project de
 cards) still worked unaffected. Logged in as `neelam`/`5678` (Ops Manager, `deleteRequest:false`),
 created another test request — confirmed no 🗑 button shows next to Edit for that role (permission
 gating works both ways). Cleaned up: closed temp dev servers, removed scratch log files.
+
+### v2-20: Uploaded request documents not visible anywhere (starting 2026-09-01)
+
+**Request from the team**: at request-filling time staff upload docs/files (WO/PO/PI, BOQ/CAD,
+Approvals, Sample PO, visit/survey photos, general documents). Admin, management, and sales
+currently have no way to see or open these from the app — they have to ask staff for the files
+again over WhatsApp/email. Team wants anyone who can already see a request in the Requests module
+to be able to click straight through to the uploaded file.
+
+**Root cause found**: every upload path (`req-docs`/`documentUrls`, the 3
+`POSTPO_DOC_CATEGORIES` uploads, `req-sample-po`, `visitPhotoUrls`) already saves correctly into
+`request.details` and persists to the DB via `saveRequest()`. But nothing ever renders those URLs
+back out anywhere — not on the request card, not in the edit/view panel. The data has been there
+all along; it was just never displayed.
+
+**Design decision confirmed with the user**: keep this change scoped to exactly one file,
+`src/sections/requests/requestsTab.js` — no DB/schema/RLS/permission changes, since this is a
+pure read-side rendering gap and the app is live in production (user's instruction: touch nothing
+else, improve bit by bit). Uploads already go to the public `uploads` storage bucket via
+`uploadFiles()`/`getPublicUrl()`, so a plain link works for any role without new policies.
+
+**Design**:
+1. `src/sections/requests/requestsTab.js`:
+   - Import `docLink` from `../../lib/uploads.js` (same helper already used for project docs —
+     handles both `{name,url}` and plain-URL-string entries).
+   - New small helper that builds a "📎 Documents" block from `r.details`, grouped by category
+     (general Documents / WO-PO-PI / BOQ-CAD / Approvals / Sample PO / Visit or Survey photos),
+     skipping any group with no files.
+   - Insert that block into `renderRequestCard()` so it shows for every role that already sees
+     that card — no new permission flag needed; `renderRequests()` already scopes which requests
+     each role sees (admin/manager/finance/dispatch_head: all; supervisor: assigned only;
+     sales/viewer: their own), this only fills in what's shown once a card renders.
+
+**Not changed**: no changes to `constants.js`, RLS policies, `state.js`, `domGlobals.js`, or any
+other file — purely additive rendering inside the existing card function.
+
+**Built and verified live in the browser (2026-09-01, local dev server, `VITE_TEST_MODE=true` mock
+data to avoid touching production request rows)**: logged in as `admin`/`1234`, created a test
+Pre-Mockup request (PRE-0001) with one uploaded document. Requests tab card immediately showed
+"Documents: 📎 Document 1" right under the status badges — clicked it, opened correctly in a new
+tab to the file's stored URL. Logged in as `neelam`/`5678` (Ops Manager, non-admin) — same card,
+same "Documents: 📎 Document 1" link visible and clickable (no 🗑 delete button, as expected for
+that role). Confirms the docs block renders for any role that can already see the card, no new
+permission gating needed. Cleaned up: closed the temp dev server (port 5178).

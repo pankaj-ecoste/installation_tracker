@@ -4,7 +4,7 @@ import { logActivity } from '../../lib/activityLog.js';
 import { MS_MAIN, MS_MAINORDER_STEPS, MS_MOCKUP_STEPS, MS_POSTMOCKUP_STEPS, MS_PREMAINSURVEY_STEPS, MS_PREMOCKUP, MS_SAMPLING, NEELAM_WA, POSTPO_DOC_CATEGORIES, POSTPO_FIELDS, PREPO_FIELDS, SURVEY_FIELDS, VISIT_FIELDS, getAdminEmail, getManagementCcEmails, milestoneKeyFor, notifyByGmail, reqFieldGroup, reqTypeLabel } from '../../lib/constants.js';
 import { canDo, daysDiff, fmtDate, visibleProjects } from '../../lib/helpers.js';
 import { projectToRow, requestToRow, rowToProject, rowToRequest } from '../../lib/mappers.js';
-import { fileUploadRowHTML, pickFilesOrWarn, uploadFiles } from '../../lib/uploads.js';
+import { docLink, fileUploadRowHTML, pickFilesOrWarn, uploadFiles } from '../../lib/uploads.js';
 import { updateBell } from '../alerts.js';
 import { renderDashboard } from '../dashboard/dashboardTab.js';
 import { approvedVendors, recalcFinanceComputed } from '../finance/financeTab.js';
@@ -426,6 +426,23 @@ export function renderRequestStageTimeline(r){
   '</div>';
 }
 
+// v2-20: uploaded docs were being saved into r.details all along but never shown anywhere —
+// this pulls every doc group (whichever ones this request actually has) into clickable links
+// so admin/management/sales can open them straight from the card instead of asking staff again.
+function renderRequestDocs(r){
+  const d=r.details||{};
+  const groups=[
+    {label:'Documents', docs:d.documentUrls},
+    ...POSTPO_DOC_CATEGORIES.map(c=>({label:c.label, docs:d[c.id]})),
+    {label:'Sample PO', docs:d['req-sample-po']},
+    {label:reqFieldGroup(r.requestType)==='survey'?'Survey photos':'Visit photos', docs:d.visitPhotoUrls}
+  ].filter(g=>g.docs&&g.docs.length);
+  if(!groups.length) return '';
+  return '<div style="margin-top:8px;padding-top:8px;border-top:1px solid #f0f0f0;font-size:12px">'+
+    groups.map(g=>'<div style="margin-bottom:4px"><b style="color:#666">'+g.label+':</b> '+
+      g.docs.map((doc,i)=>docLink(doc,i)).join('&nbsp;&nbsp;')+'</div>').join('')+
+  '</div>';
+}
 export function renderRequestCard(r){
   const d=r.details||{};
   const group=reqFieldGroup(r.requestType);
@@ -457,6 +474,7 @@ export function renderRequestCard(r){
         (!isSalesViewer&&canDo('deleteRequest')?'<button class="icon-btn btn-sm danger" title="Delete request" onclick="askDeleteRequest('+r.id+')">🗑</button>':'')+
       '</div>'+
     '</div>'+
+    renderRequestDocs(r)+
     // Sales-visible status summary — Project name, Developer, Location, State, and committed
     // completion date, per the spec, shown right on the card so sales doesn't need to dig in.
     (isSalesViewer?'<div style="background:#f5f5f3;border-radius:6px;padding:8px 10px;margin-top:8px;font-size:12px;color:#444">'+
