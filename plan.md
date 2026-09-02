@@ -1610,3 +1610,20 @@ exactly as before. It's just no longer what decides who may edit an entry.
 **Verified**: `npm run build` clean. Migration applied directly to the live production database
 (confirmed via `pg_policies`: both `dpr_log_insert`/`dpr_log_update` show the new id-based
 conditions) and the backfill counts above were read back from the real table, not assumed.
+
+**Audited the rest of the app for the same bug class** (per-row RLS ownership decided by a
+free-text field the client's button-visibility doesn't precisely mirror), since the team
+specifically doesn't want to keep re-reporting variants of this: read every `create policy` across
+all migrations and cross-checked each role-gated one against the matching `ROLES.can` flag in
+`constants.js` one by one — every single flag matches its policy exactly (including the
+deliberately-asymmetric `addFinanceRow`, which correctly excludes `manager` on both sides — no
+drift). `dpr_log` was the only table combining a per-row ownership RLS check with a free-text
+identity field: `projects`/`material_lots`/`requests` updates use a permissive "any active member"
+baseline (nothing to mismatch — DB accepts regardless of client button logic), `vendor_profiles`
+insert keys off real `auth.uid()` (not free text), and `dpr_log`/`material_lots`/`finance_ledger`/
+`vendor_profiles` have no delete policy at all but also have no delete button anywhere in the UI,
+so nothing is silently unusable. One related instance found, already handled correctly by someone
+before this session: `visibleProjects()` (`src/lib/helpers.js:59-67`) filters a Supervisor's
+visible projects against the same historically-inconsistent `project.supervisor` free-text field,
+but it already matches against both `username` and `name` with a comment explaining why — read-only
+visibility (fails soft, not an error), left as-is. No other code changes needed.
