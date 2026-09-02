@@ -73,7 +73,7 @@ export function rowToDpr(r){
     actionTaken:r.action_taken||'', remarks:r.remarks||'', internalHindrance:r.internal_hindrance||'',
     nextDispatch:r.next_dispatch||'', escalations:r.escalations||'', next:r.next||'—',
     framingMaterial:r.framing_material||'', sectionSize:r.section_size||'', photoUrls:r.photo_urls||[], reportPdfUrl:r.report_pdf_url||'',
-    geoLocation:r.geo_location||''
+    geoLocation:r.geo_location||'', createdById:r.created_by_id||null
   };
 }
 

@@ -3,7 +3,7 @@ import { state } from '../../lib/state.js';
 import { syncProject } from '../../data/loadAllData.js';
 import { logActivity } from '../../lib/activityLog.js';
 import { CHECKLIST_DEFS, blankChecklistData, checklistDoneItems, checklistTotalItems, getAdminEmail, isChecklistActive, notifyByGmail } from '../../lib/constants.js';
-import { canDo, daysDiff, fmt, fmtDate, visibleProjects } from '../../lib/helpers.js';
+import { daysDiff, fmt, fmtDate, visibleProjects } from '../../lib/helpers.js';
 import { dprToRow, lotToRow, rowToDpr } from '../../lib/mappers.js';
 import { pickFilesOrWarn, uploadFiles, uploadFilesWithNames } from '../../lib/uploads.js';
 import { updateBell } from '../alerts.js';
@@ -19,6 +19,19 @@ import { reverseGeocodeAddress } from '../requests/requestsTab.js';
 // material-arrival locations. Rejects (rather than resolving with a blank) on denial/timeout —
 // saving a DPR is meant to be blocked without a location, per the team's requirement that every
 // DPR prove where it was filed from.
+// Whether the current user may edit this DPR entry — admin/manager always can; anyone else only
+// if they're the one who actually submitted it. Mirrors the dpr_log_update RLS policy exactly
+// (created_by_id, set once at insert time from the authenticated JWT) so the Edit button is never
+// shown for an edit the database will then reject. Falls back to the legacy free-text
+// supervisor-name comparison only for entries saved before created_by_id existed (see plan.md
+// v2-22) — once an entry has a real owner id, that's what governs, not the free-text field.
+function canEditDPR(d){
+  if(!state.currentUser) return false;
+  if(state.currentUser.role==='admin'||state.currentUser.role==='manager') return true;
+  if(d.createdById) return d.createdById===state.currentUser.id;
+  return d.supervisor===state.currentUser.name;
+}
+
 function captureDPRSaveLocation(){
   return new Promise((resolve,reject)=>{
     if(!navigator.geolocation){ reject(new Error('Location capture is not supported on this device/browser — a DPR cannot be saved without it.')); return; }
@@ -99,7 +112,7 @@ export function renderDPR(){
           <div style="font-size:12px;color:#666;margin-top:2px">DPR Date: ${d.date} &nbsp;·&nbsp; Day No: <b>${d.dayNo||'—'}</b> &nbsp;·&nbsp; Days left: <b>${d.daysLeft!=null?d.daysLeft:'—'}</b></div>
           <div style="font-size:12px;color:#666">Supervisor: ${d.supervisor}</div>
           ${d.geoLocation?`<div style="font-size:11px;color:#1D9E75;margin-top:2px">📍 ${d.geoLocation}</div>`:''}
-          ${(canDo('addDPR')||(state.currentUser&&state.currentUser.name===d.supervisor))?`<button class="btn btn-outline btn-sm" style="margin-top:6px" onclick="openEditDPR(${d.id})">✏️ Edit this DPR</button>`:''}
+          ${canEditDPR(d)?`<button class="btn btn-outline btn-sm" style="margin-top:6px" onclick="openEditDPR(${d.id})">✏️ Edit this DPR</button>`:''}
         </div>
         <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
           <span class="badge bb">👷 Committed: ${d.committedMp||0} &nbsp;|&nbsp; Actual: ${d.actualMp||d.manpower||0}</span>
@@ -143,7 +156,7 @@ export function openAddDPR(){
 }
 export function openEditDPR(id){
   const d=state.dprLog.find(x=>x.id===id); if(!d) return;
-  if(!canDo('addDPR')&&d.supervisor!==(state.currentUser?state.currentUser.name:'')){ alert('You do not have permission to edit this DPR.'); return; }
+  if(!canEditDPR(d)){ alert('You do not have permission to edit this DPR.'); return; }
   state.editingDprId=id;
   state.dprPendingConstraints=(d.constraints||[]).filter(c=>c!=='None');
   openPanel('panel-add-dpr');
@@ -553,7 +566,10 @@ export async function saveDPR(){
   } else {
     // No client-supplied id — dpr_log.id is a real Postgres identity column, so letting the
     // database assign it atomically avoids two concurrent submissions colliding (see plan.md v2-4).
-    const {data:inserted,error}=await db.from('dpr_log').insert(dprToRow(newDpr)).select().single();
+    // created_by_id is set once here, at insert time, from whoever is actually authenticated —
+    // this (not the free-text "Supervisor" field) is what governs edit permission going forward.
+    // See plan.md v2-22.
+    const {data:inserted,error}=await db.from('dpr_log').insert({...dprToRow(newDpr),created_by_id:state.currentUser?state.currentUser.id:null}).select().single();
     if(error){ console.error('Supabase insert failed',error); alert('Could not save DPR to database — check console.'); if(saveBtn){ saveBtn.disabled=false; saveBtn.textContent='Save DPR'; } return; }
     savedDpr=rowToDpr(inserted);
     state.dprLog.unshift(savedDpr);

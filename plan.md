@@ -1473,3 +1473,140 @@ tab to the file's stored URL. Logged in as `neelam`/`5678` (Ops Manager, non-adm
 same "Documents: 📎 Document 1" link visible and clickable (no 🗑 delete button, as expected for
 that role). Confirms the docs block renders for any role that can already see the card, no new
 permission gating needed. Cleaned up: closed the temp dev server (port 5178).
+
+### v2-21: Fixed "A project with access code ... already exists" blocking Convert To Project (2026-09-02)
+
+**Report**: staff clicked "Convert To Project(S)" on a Mockup request for MAX ESTATE (AAR CEE
+CONTRACTS PVT.LTD.), request `PPO-0003`, and got `A project with access code "PPO0003" already
+exists — this request may already be converted.` — even though this specific request had never
+been converted (still showed the "Convert To Project(S)" button, not the "Converted to Project"
+badge).
+
+**Root cause, confirmed against live production data**: `genRequestNumber()`
+(`src/sections/requests/requestsTab.js`) computed its running number by counting requests of the
+exact same `requestType` (`state.requests.filter(r=>r.requestType===type).length+1`), but the
+human-readable prefix (`PPO`/`PRE`/`SUR`) is shared across several request types —
+`reqFieldGroup()` groups `mockup`/`post-mockup`/`main-order`/`post-main-order` under one `PPO`
+prefix, and `pre-mockup`/`pre-main-survey` under one `PRE` prefix. Counting per-type instead of
+per-prefix meant the first `mockup` request and the first `main-order` request could both compute
+to `PPO-0001` — a guaranteed collision, not a rare race. Since a project's access code is derived
+directly from its source request's number (`r.requestNumber.replace(/[^A-Za-z0-9]/g,'').toUpperCase()`),
+converting the second of two same-numbered requests always collides with whichever one converted
+first.
+
+Queried the live `requests` table directly and found this had already produced 3 real duplicate
+pairs in production: `PPO-0001` (main-order id 6 + mockup id 8, already converted to project 75 +
+mockup id 9, unconverted), `PPO-0003` (main-order id 11, converted to project 76 + mockup id 18,
+the reported MAX ESTATE request, unconverted), and `PRE-0008` (pre-mockup id 13, unconverted +
+pre-mockup id 17, converted to project 77).
+
+**Fix**: `genRequestNumber()` now scopes its "existing numbers" scan by `reqFieldGroup()` (the same
+grouping the prefix itself uses) instead of exact request type, and derives the next number from
+the max existing numeric suffix among same-prefix requests rather than a plain count — the latter
+also makes it resilient to the admin delete-request feature (v2-19): a count-based sequence would
+shrink after a delete and could re-mint an already-used number, while a max-based one can't go
+backwards. Built and pushed (`4757165`).
+
+**Data fix applied directly to production** (the code fix only prevents new collisions —
+`PPO-0003` was already duplicated in the database): renumbered the stuck MAX ESTATE request
+(id 18) from `PPO-0003` to `PPO-0005`, the next number not in use by any existing request or
+project access code (confirmed via direct query first). Convert To Project now has a free access
+code to use.
+
+**Not yet resolved, flagged for the user**: the other two duplicate pairs found above —
+`PPO-0001` (unconverted mockup request id 9) and `PRE-0008` (unconverted pre-mockup request id
+13) — will hit this exact same error if anyone tries to convert them, since their numbers still
+collide with an already-converted sibling request. Same renumber-and-unblock fix applies; holding
+off until confirmed with the user which numbers to reassign them.
+
+### v2-22: Fixed "Could not save DPR changes" on Edit DPR (2026-09-02)
+
+**Report**: a team member (screenshot shows a supervisor editing a DPR on mobile, "Next Dispatch"
+/ "Escalations" fields visible, Shalini among the people on a concurrent call) got `Could not save
+DPR changes — check console.` while saving an edited DPR entry.
+
+**Root cause, confirmed against the live code and live production data** — a permission mismatch
+between the client-side edit gate and the database's RLS policy, not a data or schema bug:
+
+1. The error text ("Could not save DPR **changes**", `src/sections/dpr/dprTab.js:548`) pins this
+   to the *edit-existing-DPR* path (`db.from('dpr_log').update(...).select().single()`), not the
+   create-new path (which has different error text, "...to database", line 557). The `UPDATE` is
+   being silently filtered to 0 rows by Postgres RLS, and `.single()` turns that into a hard
+   `PGRST116` error ("JSON object requested, multiple (or no) rows returned"), surfaced verbatim
+   by the generic alert.
+2. The DPR "Supervisor" field is a plain free-text `<input>` (`dprTab.js:225`), pre-filled from
+   the *project's* assigned supervisor for a new entry, but fully editable by whoever is saving —
+   it is never actually bound to the logged-in user's identity.
+3. `dpr_log`'s `UPDATE` RLS policy (`supabase/migrations/0004_rls_policies.sql:118-121`) only
+   allows the write if the caller's role is `admin`/`manager`, **or** the row's `supervisor` text
+   exactly (case-sensitively) matches the caller's own `team_members.name` via
+   `app_active_team_member_name()`.
+4. The client-side "✏️ Edit this DPR" button (`dprTab.js:102`) is shown whenever
+   `canDo('addDPR')` is true, and `addDPR` is `true` for the entire `supervisor` role
+   (`src/lib/constants.js:10`) — not scoped to "this is my own entry." So any Supervisor-role user
+   sees an Edit button on **every** DPR log entry system-wide, including entries logged by someone
+   else, even though only entries whose stored `supervisor` text matches their own name can
+   actually be saved server-side.
+5. Confirmed live against the real `dpr_log` table that this isn't theoretical: recent rows store
+   `supervisor` as a lowercase, username-like string (`"mahesh"`, `"karan"`, `"durgendra"`) while
+   the matching `team_members.name` is capitalized (`"Mahesh"`, `"Karan"`, `"Durgendra"`).
+   Postgres `=` is case-sensitive, so even editing one's own entry can fail this check purely on
+   casing, with no ownership confusion involved at all.
+
+So there are two independent, stacking causes: (a) the Edit button's visibility check is
+role-based, not ownership-based, letting a supervisor open entries that were never theirs to edit;
+and (b) even a genuinely-own entry has no guaranteed match between the free-text supervisor field
+and the editor's real team-member name, so the exact-match RLS check can fail on a typo/casing
+difference alone. Either path ends the same way: RLS silently blocks the update, `.single()`
+throws, the user sees "check console" with nothing actionable in the UI.
+
+**Decision (2026-09-02, user's call after seeing the root cause)**: fix this permanently now
+rather than hold for further discussion — the team losing confidence in the app from a repeat
+report matters more than the usual discuss-first pacing for this one.
+
+**Fix built**:
+1. `supabase/migrations/0013_dpr_log_owner_id.sql` (new) — adds `dpr_log.created_by_id integer
+   references team_members(id)`, the authenticated submitter's real id, set once at insert time
+   and never touched again. Ownership is now a stored fact, not a re-derived string comparison.
+   - `dpr_log_insert`'s `with check` now also requires `created_by_id = app_jwt_team_member_id()`
+     — the client always sets this at insert time, and the check stops it being spoofed to claim
+     (or leave null) someone else's entry.
+   - `dpr_log_update` now checks `admin`/`manager` (unchanged) **or** `created_by_id =
+     app_jwt_team_member_id()` — an id comparison, immune to the free-text field's casing/typo
+     problem entirely. The old free-text `supervisor = app_active_team_member_name()` check is
+     kept, but only as a fallback for rows where `created_by_id` is still null — it can never
+     re-trigger the original bug for any row this fix actually covers.
+   - **Backfill for existing rows**, run in two passes so real past entries aren't left worse off
+     than today: first matched `supervisor` text to `team_members.name` (case/whitespace-
+     insensitive), then — since a lot of real entries have the login *username* typed in instead
+     of the display name (e.g. "shubham" vs. "Shubham Salvi", confirmed live: 12 of the 14 rows
+     the first pass missed were exactly this) — a second pass matched against `team_members.username`
+     too. Final result on the live table: 94 of 96 existing DPR rows now have a real
+     `created_by_id`; the 2 that don't (`supervisor: "site supervisor"`, a placeholder from early
+     testing, no real person to attribute) fall back to the preserved legacy check, unchanged from
+     today — not a regression for any row.
+2. `src/lib/mappers.js` — `rowToDpr` now reads `created_by_id` back as `createdById` (read-only,
+   same convention as `id` itself: never written by `dprToRow`, only ever set explicitly at the
+   one insert call site so an edit can never alter a row's original owner).
+3. `src/sections/dpr/dprTab.js`:
+   - New `canEditDPR(d)` helper: `true` for admin/manager; otherwise `d.createdById ?
+     d.createdById===state.currentUser.id : d.supervisor===state.currentUser.name` — mirrors the
+     RLS policy's own logic exactly (id match once one exists, legacy name-match fallback only
+     when it doesn't), so the Edit button is never shown for an edit the database will then
+     reject.
+   - Both permission checks that used to compare against the free-text `d.supervisor` (the "✏️
+     Edit this DPR" button's visibility, `openEditDPR()`'s guard) now call `canEditDPR(d)` instead
+     of the old `canDo('addDPR')||state.currentUser.name===d.supervisor` — closing the actual
+     button-visibility bug (any supervisor could previously see Edit on every entry, not just
+     their own).
+   - The insert call in `saveDPR()` now sends `created_by_id: state.currentUser.id` explicitly
+     (the one and only place this column is ever set).
+   - Unused `canDo` import removed from this file (nothing else in it still used it).
+
+**Not changed**: the "Supervisor" field itself — still free text, still pre-fills from the
+project's assigned supervisor, still fully editable — keeps its existing display/content purpose
+exactly as before. It's just no longer what decides who may edit an entry.
+
+**Verified**: `npm run build` clean. Migration applied directly to the live production database
+(confirmed via `pg_policies`: both `dpr_log_insert`/`dpr_log_update` show the new id-based
+conditions) and the backfill counts above were read back from the real table, not assumed.
