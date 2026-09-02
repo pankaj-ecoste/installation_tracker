@@ -210,8 +210,20 @@ export function openEditRequest(id){
 export function genRequestNumber(type){
   const group=reqFieldGroup(type);
   const prefix=group==='order'?'PPO':group==='survey'?'SUR':'PRE';
-  const n=state.requests.filter(r=>r.requestType===type).length+1;
-  return prefix+'-'+String(n).padStart(4,'0');
+  // Numbers must be unique per prefix, not per exact request type — 'order' covers
+  // mockup/post-mockup/main-order/post-main-order and 'visit' covers pre-mockup/pre-main-survey,
+  // all sharing one prefix. Counting per-type let e.g. the first mockup and first main-order
+  // both become "PPO-0001", which later collides when either is converted to a project
+  // (the project access code is derived from the request number). Basing this on the max
+  // existing suffix (rather than a plain count) also survives request deletions, which would
+  // otherwise shrink a count-based sequence back into an already-used number.
+  let max=0;
+  for(const r of state.requests){
+    if(reqFieldGroup(r.requestType)!==group) continue;
+    const m=/^([A-Z]+)-(\d+)$/.exec(r.requestNumber||'');
+    if(m&&m[1]===prefix) max=Math.max(max,parseInt(m[2],10));
+  }
+  return prefix+'-'+String(max+1).padStart(4,'0');
 }
 
 export async function saveRequest(){
