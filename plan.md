@@ -1627,3 +1627,49 @@ before this session: `visibleProjects()` (`src/lib/helpers.js:59-67`) filters a 
 visible projects against the same historically-inconsistent `project.supervisor` free-text field,
 but it already matches against both `username` and `name` with a comment explaining why — read-only
 visibility (fails soft, not an error), left as-is. No other code changes needed.
+
+### v2-22 follow-up: closed a transitional gap 0013 introduced (2026-09-03)
+
+**Report**: the next morning, a team member (Durgendra, supervisor) got a *new* error saving a
+DPR — `Could not save DPR to database — check console.` This is the **insert** path's error text
+(`dprTab.js:570`), not the update-path text the original v2-22 report had (`...changes...`,
+`:561`) — a different failure than yesterday's, not a recurrence of the same one.
+
+**Root cause, confirmed against live production data, not guessed**: 0013's new `dpr_log_insert`
+policy requires the row's `created_by_id` to match the caller's JWT — correct for any client
+running the fixed JS, but it silently broke inserts from any browser tab/session still running the
+*pre-0013* bundle (a phone that had the app open/backgrounded since before the fix deployed,
+never force-refreshed) — that old code doesn't send `created_by_id` at all, so the field comes
+through `null`, and `null = <id>` is never true in SQL. Confirmed live: `dpr_log`'s id sequence
+(`dpr_log_id_seq`) had gaps at 103, 104, 105 that morning with no matching rows — the exact
+signature of RLS-rejected insert attempts (a rejected insert still consumes the identity sequence
+value via `nextval()` before the row is discarded, since sequence advancement isn't transactional
+in Postgres). Two earlier gaps that same range (99, 100) were separately traced to my own RLS
+verification script from the previous session, not real failures.
+
+**Fix — moved ownership assignment from the client to the database, permanently, not just
+patched for today**: the client-supplied `created_by_id` was the actual design flaw — any client
+build that doesn't send it (an old cached bundle yesterday, potentially any future client bug)
+hard-fails instead of just working, because insert-time ownership depended on the client getting
+it right. `supabase/migrations/0014_dpr_log_trigger_set_owner.sql` (new) replaces that with a
+`before insert` trigger (`dpr_log_set_created_by_id_trg`) that sets `new.created_by_id :=
+app_jwt_team_member_id()` unconditionally — deriving it from the same JWT claim the RLS policy
+already trusts, regardless of what the client sends or omits. The insert policy's `with check` no
+longer compares `created_by_id` at all (nothing left to compare — the trigger already guarantees
+it's correct before the row is checked); role gating (`admin`/`manager`/`supervisor`) is
+unchanged. This closes not just today's instance but the entire class of "client forgot to send
+the ownership field" failure for any future deploy that touches this table's insert path,
+including one running stale cached JS — exactly the scenario that bit us this time.
+
+**No client code change needed** — this is a pure server-side fix, which is also why it resolves
+immediately for anyone with a stale tab still open right now, with no app reload/redeploy required
+on their end. `npm run build` confirmed clean (bundle hash unchanged, `index-DCtF0Rdw.js`, since
+no JS actually changed).
+
+**Verified directly against production** in rolled-back transactions (no data persisted): an
+insert simulating the exact stale-client scenario (authenticated as shubham, `created_by_id`
+omitted entirely from the insert) now succeeds and is correctly attributed (`created_by_id: 3`);
+a simulated spoofing attempt (authenticated as shubham, insert explicitly claiming
+`created_by_id: 8`, mahesh's id) is silently corrected to `3` rather than merely rejected — the
+trigger closes spoofing more completely than the old with-check comparison did, as a side effect
+of fixing the actual bug.
