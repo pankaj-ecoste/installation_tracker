@@ -1524,6 +1524,35 @@ id 13 → `PRE-0013`. Verified afterward with a full duplicate-scan query
 (`select request_number, count(*) from requests group by request_number having count(*) > 1`) —
 zero duplicates remain anywhere in the table.
 
+**Permanent fix (2026-09-03) — same pattern as 0014's dpr_log fix**: the user asked directly for
+this class of error to be closed for good, not cleaned up one collision at a time as each one
+surfaces. Root problem: `genRequestNumber()` computing the "next" number client-side from whatever
+`state.requests` happens to hold, with nothing in the database enforcing uniqueness, is inherently
+unsafe under concurrency — two people submitting around the same time can land on the same number,
+and any future code path could introduce a duplicate too. `supabase/migrations/
+0015_requests_atomic_numbering.sql` (new) moves number assignment entirely server-side: a `before
+insert` trigger (`requests_set_request_number_trg`) assigns `request_number` from a dedicated
+Postgres sequence per prefix (`req_seq_ppo`/`req_seq_pre`/`req_seq_sur`, mirroring
+`reqFieldGroup()`'s exact grouping), unconditionally overriding whatever the client sends —
+sequences are inherently safe under concurrency, so two simultaneous inserts can never receive the
+same number regardless of either client's state. A `unique` constraint on `request_number` is
+added as a hard backstop on top, so even a future bug in the trigger itself could never silently
+reintroduce a duplicate. Each sequence was seeded past the highest number already in use in its
+prefix (post the three-duplicate cleanup above), so nothing collides with real historical data.
+
+**No client code change needed** — same reasoning as 0014: the client still computes and sends its
+own guess at the number (harmless now, always overridden), so this fix is effective immediately
+for every user including anyone on a stale cached tab, no app reload/redeploy required on their
+end. `genRequestNumber()` itself is now effectively dead code (safe to remove in a future cleanup
+pass, left alone here to keep this a database-only change).
+
+**Verified directly against production** in rolled-back transactions (no data persisted): a client
+sending a stale/wrong number (`PPO-9999`) was correctly ignored, with the trigger assigning the
+real next one instead; and — the test that actually proves the fix — two inserts fired
+*simultaneously* on two separate database connections (`Promise.all`, not sequential) received two
+different numbers (`PPO-0009`/`PPO-0010`), confirming the race condition that caused every
+duplicate found so far is now structurally impossible, not just less likely.
+
 ### v2-22: Fixed "Could not save DPR changes" on Edit DPR (2026-09-02)
 
 **Report**: a team member (screenshot shows a supervisor editing a DPR on mobile, "Next Dispatch"
