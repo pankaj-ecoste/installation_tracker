@@ -2,9 +2,12 @@ import { state } from '../lib/state.js';
 import { syncProject } from '../data/loadAllData.js';
 import { CHECKLIST_DEFS, TODAY, reqTypeLabel } from '../lib/constants.js';
 import { canDo, daysDiff, fmt, fmtDate, needsFinanceReview, needsRABill, pct, visibleProjects } from '../lib/helpers.js';
+import { openAddDPR } from './dpr/dprTab.js';
 import { renderMetrics } from './metrics.js';
 import { setTab, showSection } from './navigation.js';
+import { openUpdate } from './projects/addEditProject.js';
 import { renderProjects } from './projects/projectCards.js';
+import { renderRequests } from './requests/requestsTab.js';
 
 /* ══ ALERTS ══ */
 export function computeAlerts(){
@@ -43,7 +46,7 @@ export function computeAlerts(){
       const daysSinceDispatch=daysDiff(l.dispatchDate,TODAY.toISOString().slice(0,10));
       if(daysSinceDispatch>=0&&daysSinceDispatch<=7){
         const whenText=daysSinceDispatch===0?'today':daysSinceDispatch+' day(s) ago';
-        alerts.push({type:'dispatch',sev:daysSinceDispatch>=3?'amber':'red',proj:p,msg:'Material dispatched — '+l.lotNo,detail:'Dispatched '+whenText+'. Expected: '+(l.expectedArrival?fmtDate(l.expectedArrival):'—')});
+        alerts.push({type:'dispatch',sev:daysSinceDispatch>=3?'amber':'red',proj:p,lot:l,msg:'Material dispatched — '+l.lotNo,detail:'Dispatched '+whenText+'. Expected: '+(l.expectedArrival?fmtDate(l.expectedArrival):'—')});
       }
     });
     // DPR not being filled while the project is still active — this is what keeps Admin,
@@ -127,14 +130,18 @@ export function buildRequestActivityHTML(){
   let html='';
   if(newReqs.length){
     html+='<div class="section-hdr">🆕 New requests <span class="count-pill" style="background:#d4edda;color:#1a5e2a">'+newReqs.length+'</span></div>';
-    html+=newReqs.map(r=>'<div class="alert-card"><div class="alert-header"><div class="alert-icon amber">🆕</div><div class="alert-body"><div class="alert-proj">'+r.requestNumber+' — '+(r.details.developerName||r.details.projectName||'—')+'</div><div class="alert-msg">New '+reqTypeLabel(r.requestType)+' request needs acknowledgment</div><div class="alert-detail">Logged by '+r.createdBy+'</div></div></div></div>').join('');
+    html+=newReqs.map(r=>'<div class="alert-card"><div class="alert-header"><div class="alert-icon amber">🆕</div><div class="alert-body"><div class="alert-proj">'+r.requestNumber+' — '+(r.details.developerName||r.details.projectName||'—')+'</div><div class="alert-msg">New '+reqTypeLabel(r.requestType)+' request needs acknowledgment</div><div class="alert-detail">Logged by '+r.createdBy+'</div></div></div>'+
+      '<div class="alert-footer"><button class="btn btn-outline btn-sm" onclick="goToRequestCard('+r.id+')">View in Requests →</button></div>'+
+    '</div>').join('');
   }
   if(awaitingReview.length){
     html+='<div class="section-hdr">⏳ Awaiting your review <span class="count-pill" style="background:#fde8e8;color:#8b1a1a">'+awaitingReview.length+'</span></div>';
     html+=awaitingReview.map(r=>{
       const hoursSince=Math.floor((Date.now()-new Date(r.actualVisitDate).getTime())/3600000);
       const isOverdue=hoursSince>24;
-      return '<div class="alert-card"><div class="alert-header"><div class="alert-icon '+(isOverdue?'red':'amber')+'">'+(isOverdue?'🚨':'✅')+'</div><div class="alert-body"><div class="alert-proj">'+r.requestNumber+' — '+(r.details.developerName||r.details.projectName||'—')+'</div><div class="alert-msg">'+(isOverdue?'Visit done but not yet reviewed':'Visit/survey completed by '+(r.assignedSupervisor||'supervisor')+' — ready for review')+'</div><div class="alert-detail">'+hoursSince+'h since visit completed'+(isOverdue?' (overdue)':'')+'</div></div></div></div>';
+      return '<div class="alert-card"><div class="alert-header"><div class="alert-icon '+(isOverdue?'red':'amber')+'">'+(isOverdue?'🚨':'✅')+'</div><div class="alert-body"><div class="alert-proj">'+r.requestNumber+' — '+(r.details.developerName||r.details.projectName||'—')+'</div><div class="alert-msg">'+(isOverdue?'Visit done but not yet reviewed':'Visit/survey completed by '+(r.assignedSupervisor||'supervisor')+' — ready for review')+'</div><div class="alert-detail">'+hoursSince+'h since visit completed'+(isOverdue?' (overdue)':'')+'</div></div></div>'+
+        '<div class="alert-footer"><button class="btn btn-outline btn-sm" onclick="goToRequestCard('+r.id+')">View in Requests →</button></div>'+
+      '</div>';
     }).join('');
   }
   // Consolidated view across ALL checklist types on ALL projects — so Admin doesn't have
@@ -148,7 +155,8 @@ export function buildRequestActivityHTML(){
     html+='<div class="section-hdr">📋 Checklists awaiting review <span class="count-pill" style="background:#fde8e8;color:#8b1a1a">'+pendingChecklists.length+'</span></div>';
     html+=pendingChecklists.map(({p,def})=>{
       const hoursSince=Math.floor((Date.now()-new Date(p[def.completedField]).getTime())/3600000);
-      return '<div class="alert-card"><div class="alert-header"><div class="alert-icon amber">📋</div><div class="alert-body"><div class="alert-proj">'+p.name+' — '+p.tower+'</div><div class="alert-msg">'+def.label+' — fully completed, ready for review</div><div class="alert-detail">'+hoursSince+'h since completed'+'</div></div>'+
+      return '<div class="alert-card"><div class="alert-header"><div class="alert-icon amber">📋</div><div class="alert-body"><div class="alert-proj">'+p.name+' — '+p.tower+'</div><div class="alert-msg">'+def.label+' — fully completed, ready for review</div><div class="alert-detail">'+hoursSince+'h since completed'+'</div></div></div>'+
+      '<div class="alert-footer"><button class="btn btn-outline btn-sm" onclick="goToDPRChecklist('+p.id+')">View in DPR →</button>'+
         (state.currentUser&&state.currentUser.role==='admin'?'<button class="btn btn-green btn-sm" onclick="acknowledgeChecklist(\''+def.key+'\','+p.id+')">✅ Acknowledge</button>':'')+
       '</div></div>';
     }).join('');
@@ -162,6 +170,19 @@ export function buildRequestActivityHTML(){
   }
   return html;
 }
+// Routes each alert type to wherever it's actually actioned — a dispatch alert belongs on
+// the Material tab (at that lot), an RA-bill/JMR alert on Finance (the same "Set RA bill
+// amount"/"Review now" panel Finance's own inline banner uses), a missing-DPR alert straight
+// into the Add DPR form for that project — instead of always dumping every alert onto the
+// generic Team > Projects card, which is only the right destination for project-level alerts
+// (overdue, at-risk, milestone, constraint, no-progress, snag).
+function alertViewButtonHTML(a){
+  if(a.type==='dispatch') return '<button class="btn btn-outline btn-sm" onclick="goToMaterialLot('+a.proj.id+','+(a.lot?a.lot.id:'null')+')">View in Material →</button>';
+  if(a.type==='rabill'||a.type==='financereview') return '<button class="btn btn-outline btn-sm" onclick="goToFinanceProject('+a.proj.id+')">View in Finance →</button>';
+  if(a.type==='nodpr') return '<button class="btn btn-outline btn-sm" onclick="goToDPRForProject('+a.proj.id+')">Fill DPR →</button>';
+  return '<button class="btn btn-outline btn-sm" onclick="goToProject('+a.proj.id+')">View project →</button>';
+}
+
 export function buildNotifHTML(){
   const alerts=computeAlerts();
   const iconMap={overdue:'🚨',atrisk:'⚠️',milestone:'⏰',constraint:'🔴',rabill:'💰',noprogress:'📊',snag:'🔧',dispatch:'📦',nodpr:'📝',financereview:'⚠️'};
@@ -187,7 +208,7 @@ export function buildNotifHTML(){
       '</div>'+
       '<div class="alert-footer">'+
         '<a class="wa-btn" href="'+waLink+'" target="_blank">📲 WhatsApp '+a.proj.supervisor+'</a>'+
-        '<button class="btn btn-outline btn-sm" onclick="goToProject('+a.proj.id+')">View project →</button>'+
+        alertViewButtonHTML(a)+
         (a.type==='constraint'?'<button class="btn btn-amber btn-sm" onclick="quickSolve('+a.proj.id+',\''+a.c.text.replace(/'/g,"\\'")+'\')">✅ Mark solved</button>':'')+
       '</div>'+
     '</div>';
@@ -216,6 +237,50 @@ export function quickSolve(projId,text){
 export function goToProject(id){
   showSection('team'); setTab('projects'); state.expanded[id]=true; renderProjects();
   setTimeout(()=>{ const el=document.getElementById('card-'+id); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); },200);
+}
+
+// Briefly outlines the target element so it's obvious what the click landed on, not just
+// which tab — same treatment for every deep-link below.
+function flashHighlight(el){
+  if(!el) return;
+  el.classList.add('nav-highlight');
+  setTimeout(()=>el.classList.remove('nav-highlight'),2000);
+}
+
+export function goToMaterialLot(projId,lotId){
+  showSection('team'); setTab('material');
+  setTimeout(()=>{
+    const el=document.getElementById(lotId?('lot-'+lotId):('mat-proj-'+projId))||document.getElementById('mat-proj-'+projId);
+    if(el){ el.scrollIntoView({behavior:'smooth',block:'start'}); flashHighlight(el); }
+  },250);
+}
+
+export function goToFinanceProject(projId){
+  showSection('team'); setTab('finance');
+  setTimeout(()=>openUpdate(projId),250);
+}
+
+export function goToDPRForProject(projId){
+  showSection('team'); setTab('dpr');
+  setTimeout(()=>openAddDPR(projId),250);
+}
+
+export function goToRequestCard(reqId){
+  showSection('team'); setTab('requests');
+  const sf=document.getElementById('req-f-status');
+  if(sf&&sf.value){ sf.value=''; renderRequests(); }
+  setTimeout(()=>{
+    const el=document.getElementById('req-card-'+reqId);
+    if(el){ el.scrollIntoView({behavior:'smooth',block:'start'}); flashHighlight(el); }
+  },250);
+}
+
+export function goToDPRChecklist(projId){
+  showSection('team'); setTab('dpr');
+  setTimeout(()=>{
+    const el=document.getElementById('dpr-checklist-'+projId);
+    if(el){ el.scrollIntoView({behavior:'smooth',block:'start'}); flashHighlight(el); }
+  },250);
 }
 
 export function copyDigest(){

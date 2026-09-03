@@ -79,7 +79,7 @@ export function renderDPR(){
     avgPerDayByProj[p.id]=Math.round(total/entries.length);
   });
   const checklistSectionsHtml=vp.filter(p=>CHECKLIST_DEFS.some(def=>p[def.dataField])).map(p=>
-    '<div class="proj-card" style="cursor:default;margin-bottom:10px"><div class="proj-name" style="margin-bottom:4px">'+p.name+' — '+p.tower+'</div>'+renderAllChecklistDropdowns(p)+'</div>'
+    '<div class="proj-card" id="dpr-checklist-'+p.id+'" style="cursor:default;margin-bottom:10px"><div class="proj-name" style="margin-bottom:4px">'+p.name+' — '+p.tower+'</div>'+renderAllChecklistDropdowns(p)+'</div>'
   ).join('');
   el.innerHTML=checklistSectionsHtml+visible.map(d=>{
     const hasConstraint=d.constraints&&d.constraints[0]!=='None';
@@ -143,7 +143,7 @@ export function renderDPR(){
 }
 
 /* ══ ADD DPR FORM ══ */
-export function openAddDPR(){
+export function openAddDPR(selectedProjId){
   const vp=visibleProjects();
   if(!vp.length){ alert('No projects available. Add a project first.'); return; }
   state.editingDprId=null;
@@ -152,7 +152,7 @@ export function openAddDPR(){
   document.getElementById('dpr-panel-title').textContent='Add Daily Progress Report';
   const saveBtn=document.getElementById('dpr-save-btn');
   if(saveBtn){ saveBtn.disabled=false; saveBtn.textContent='Save DPR'; }
-  renderDPRForm(vp[0].id);
+  renderDPRForm(selectedProjId&&vp.some(p=>p.id===selectedProjId)?selectedProjId:vp[0].id);
 }
 export function openEditDPR(id){
   const d=state.dprLog.find(x=>x.id===id); if(!d) return;

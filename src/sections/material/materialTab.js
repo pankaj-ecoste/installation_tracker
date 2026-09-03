@@ -47,7 +47,7 @@ export function renderMaterial(){
     const remaining=Math.max(0,soQty-totalDispatched);
     const unitLabel='sqft';
 
-    html+='<div style="background:#fff;border:1px solid #e0e0e0;border-radius:10px;margin-bottom:16px;overflow:hidden">'
+    html+='<div id="mat-proj-'+p.id+'" style="background:#fff;border:1px solid #e0e0e0;border-radius:10px;margin-bottom:16px;overflow:hidden">'
       // Project header
       +'<div style="background:#085041;padding:12px 16px;display:flex;justify-content:space-between;align-items:center">'
         +'<div><div style="color:#fff;font-weight:700;font-size:14px">'+p.name+' — '+p.tower+'</div>'
@@ -88,7 +88,7 @@ export function renderLotCard(lot,p){
   // Highlight if this lot's arrival was acknowledged via DPR in the last 2 days
   const recentlyUpdated=lot.arrivalAckedAt&&(Date.now()-new Date(lot.arrivalAckedAt).getTime())<2*86400000;
 
-  return '<div style="border:1px solid '+(recentlyUpdated?'#f0a500':'#e0e0e0')+';border-radius:8px;margin-bottom:8px;overflow:hidden;'+(recentlyUpdated?'box-shadow:0 0 0 1px #f0a500':'')+'">'
+  return '<div id="lot-'+lot.id+'" style="border:1px solid '+(recentlyUpdated?'#f0a500':'#e0e0e0')+';border-radius:8px;margin-bottom:8px;overflow:hidden;'+(recentlyUpdated?'box-shadow:0 0 0 1px #f0a500':'')+'">'
     // Lot header
     +'<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f5f5f3;border-bottom:1px solid #e0e0e0">'
       +'<div style="font-weight:700;font-size:13px;flex:1">'+lot.lotNo+'</div>'

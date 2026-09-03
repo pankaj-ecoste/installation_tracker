@@ -465,7 +465,7 @@ export function renderRequestCard(r){
   // no editing, no visit report actions, nothing. Everyone else keeps normal access.
   const isSalesViewer=state.currentUser&&state.currentUser.role==='viewer';
   const linkedProject=r.linkedProjectId?state.projects.find(p=>p.id===r.linkedProjectId):null;
-  return '<div class="proj-card" style="cursor:default">'+
+  return '<div class="proj-card" id="req-card-'+r.id+'" style="cursor:default">'+
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">'+
       '<div>'+
         '<div class="proj-name">'+title+' <span style="font-weight:400;color:#888;font-size:12px">· '+r.requestNumber+'</span></div>'+

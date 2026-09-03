@@ -1740,4 +1740,70 @@ matching Completed's existing blanket-suppression behavior) while the project ca
 inline Overdue/stalled/open-constraint pills kept showing, confirming the two are correctly
 independent; Pipeline tab now shows a 4th "On Hold" column (blue header, matching the Not
 started/In progress/Completed columns' existing stacked layout) correctly listing the project.
+
+### v2-24: notification "View project" always went to Team > Projects, even for Material/Finance/DPR alerts (starting 2026-09-03)
+
+**Reported by the team**: a notification about Material or Finance (e.g. a dispatch pending
+arrival, or a JMR/RA-bill review) always sent them to Team > Projects when clicked, instead of the
+Material or Finance tab the alert was actually about. Same complaint applies to any module a
+notification points at (DPR, Requests).
+
+**Root cause**: every alert card in `buildNotifHTML()` (`src/sections/alerts.js`) rendered the same
+`onclick="goToProject(...)"` button regardless of `a.type` — `goToProject` only knows how to open
+Team > Projects and scroll to the project card. That's the right destination for project-level
+alerts (overdue, at-risk, milestone-stalled, open constraint, no-progress, snag — all manageable
+from that card), but wrong for `dispatch` (belongs on Material, at that lot), `rabill` /
+`financereview` (belongs on Finance, in the same RA-bill/JMR fields the Finance tab's own inline
+banner already opens via `openUpdate()`), and `nodpr` (the actual fix is filling in a DPR, not
+looking at the project card). The request-related cards in `buildRequestActivityHTML()` (new
+request / awaiting review / checklist pending) had no view action at all.
+
+**Fix — `alertViewButtonHTML(a)`** (new, `alerts.js`) routes each alert type to a new type-specific
+`goTo*` function instead of always calling `goToProject`:
+- `dispatch` → `goToMaterialLot(projId, lotId)`: switches to the Material tab, scrolls to the
+  specific lot card (`id="lot-<id>"`, added to `renderLotCard()` in `materialTab.js`; falls back to
+  `id="mat-proj-<id>"` on the project wrapper, also added, if the lot isn't found).
+- `rabill` / `financereview` → `goToFinanceProject(projId)`: switches to Finance, then opens the
+  same `openUpdate(projId)` panel Finance's own "Set RA bill amount"/"Review now" buttons use — no
+  new UI, just reachable from the notification too.
+- `nodpr` → `goToDPRForProject(projId)`: switches to DPR, opens the Add DPR form pre-selected on
+  that project (`openAddDPR()` in `dprTab.js` gained an optional `selectedProjId` param — falls
+  back to the first visible project when omitted, so the existing no-arg call sites are unaffected).
+- everything else (overdue, at-risk, milestone, constraint, no-progress, snag) still goes to
+  `goToProject` — Team > Projects already has full management UI for these (milestones,
+  constraints, snag escalate/cycle-status), confirmed by reading `projectCards.js`'s `renderDetail`.
+
+Request-activity cards gained the same treatment: "New request" and "Awaiting review" cards now
+have a "View in Requests →" button (`goToRequestCard(reqId)` — switches to Requests, clears any
+active status filter so the card can't be hidden, scrolls to `id="req-card-<id>"`, added to
+`renderRequestCard()` in `requestsTab.js`); "Checklist awaiting review" cards gained "View in DPR →"
+(`goToDPRChecklist(projId)` — scrolls to `id="dpr-checklist-<projId>"`, added to the checklist
+section wrapper in `renderDPR()`) alongside the existing Acknowledge button.
+
+Every deep-link briefly outlines its target (`flashHighlight()` → new `.nav-highlight` CSS class,
+`app.css`, a 2s pulse animation) so it's obvious what the click landed on, not just which tab.
+
+**New functions exposed on `window`** (`domGlobals.js`): `goToMaterialLot`, `goToFinanceProject`,
+`goToDPRForProject`, `goToDPRChecklist`, `goToRequestCard`.
+
+**Not changed**: `showTeamDashboard()` (`teamAuth.js:125-126`) unconditionally resets to the
+Projects tab every time any panel closes (`closePanel()` → `showTeamDashboard()` when logged in) —
+pre-existing, app-wide behavior affecting every panel (Add Lot, Add Finance Row, Edit Project, ...),
+not something this fix introduced or was asked to change. It only means that after using
+`goToFinanceProject`/`goToDPRForProject` and then closing the panel, the user lands back on
+Projects rather than staying on Finance/DPR — the deep-link itself still opens the correct
+panel/fields, which was the actual complaint.
+
+**Verified live in the browser** (2026-09-03, local dev server, `VITE_TEST_MODE=true` mock data, no
+production rows touched — `.env.local`'s `VITE_TEST_MODE=false` was left untouched; test mode was
+enabled only via a process env var for this session, not by editing the file): `npm run build`
+clean. Logged in as `admin`/`1234`. From Alerts & Notifications: clicked "View in Finance →" on the
+"JMR qty updated by installation team" alert for "Arun Seth — Supply only" — landed on the Finance
+tab with the Update panel open, scrolled straight to JMR Qty Achieved (120, matching the alert) and
+the RA Bill fields. Clicked "Fill DPR →" on the "No DPR ever submitted" alert for the same project —
+opened the Add DPR form on the DPR tab with that exact project pre-selected in the Project dropdown
+and Supervisor pre-filled. Added a test lot dispatch (dated today) to generate a `dispatch` alert,
+then clicked "View in Material →" — landed on the Material tab scrolled directly to that lot card
+with the pulse-highlight visible. No console errors during any of this. Dev server stopped
+afterward, no production data affected.
 No console errors during any of this. Dev server stopped afterward, no production data affected.
