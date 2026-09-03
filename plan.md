@@ -1513,11 +1513,16 @@ backwards. Built and pushed (`4757165`).
 project access code (confirmed via direct query first). Convert To Project now has a free access
 code to use.
 
-**Not yet resolved, flagged for the user**: the other two duplicate pairs found above —
-`PPO-0001` (unconverted mockup request id 9) and `PRE-0008` (unconverted pre-mockup request id
-13) — will hit this exact same error if anyone tries to convert them, since their numbers still
-collide with an already-converted sibling request. Same renumber-and-unblock fix applies; holding
-off until confirmed with the user which numbers to reassign them.
+**Update (2026-09-03) — this predicted collision actually hit production**: staff got the same
+"access code already exists" alert converting "ATS Grand realtech" (`PPO-0001`, request id 9,
+mockup). Re-querying at that point found the duplicate set was actually **three** requests, not
+two as first flagged — `PPO-0001` had a *second* unconverted duplicate that hadn't surfaced yet
+(request id 6, `main-order`, also colliding with the same already-converted id-8 sibling), plus
+the previously-flagged `PRE-0008` (request id 13). All three renumbered directly against
+production to the next free numbers in their prefix group: id 6 → `PPO-0006`, id 9 → `PPO-0007`,
+id 13 → `PRE-0013`. Verified afterward with a full duplicate-scan query
+(`select request_number, count(*) from requests group by request_number having count(*) > 1`) —
+zero duplicates remain anywhere in the table.
 
 ### v2-22: Fixed "Could not save DPR changes" on Edit DPR (2026-09-02)
 
