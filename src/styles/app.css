@@ -147,7 +147,7 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helv
 .pipeline-cols{display:flex;flex-direction:column;gap:8px}
 .phase-col{background:#fff;border:1px solid #e0e0e0;border-radius:10px;overflow:hidden}
 .phase-hdr{padding:9px 14px;font-weight:600;font-size:13px;display:flex;justify-content:space-between}
-.ph-ns{background:#d0e8f7;color:#0a3d6b}.ph-ip{background:#fff3cd;color:#7a4f00}.ph-dn{background:#d4edda;color:#1a5e2a}
+.ph-ns{background:#d0e8f7;color:#0a3d6b}.ph-ip{background:#fff3cd;color:#7a4f00}.ph-dn{background:#d4edda;color:#1a5e2a}.ph-hold{background:#d0e8f7;color:#0a3d6b}
 .phase-body{padding:8px;display:flex;flex-direction:column;gap:6px}
 .mini-card{background:#f5f5f3;border-radius:6px;padding:8px 10px;font-size:12px}
 .mini-name{font-weight:600;margin-bottom:2px}.mini-sub{color:#666;font-size:11px}

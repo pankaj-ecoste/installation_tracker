@@ -1673,3 +1673,71 @@ a simulated spoofing attempt (authenticated as shubham, insert explicitly claimi
 `created_by_id: 8`, mahesh's id) is silently corrected to `3` rather than merely rejected — the
 trigger closes spoofing more completely than the old with-check comparison did, as a side effect
 of fixing the actual bug.
+
+### v2-23: "On Hold" project status (starting 2026-09-03)
+
+**Request from the team**: add a 4th Status option, "On Hold", to the Edit Project form's Status
+dropdown (pencil icon on a project card, All Projects tab). Today only Not Started / In Progress /
+Completed exist. `projects.status` is a plain `text` column with no CHECK constraint
+(`supabase/migrations/0001_baseline_schema.sql:34`), so this is frontend-only — no migration
+needed.
+
+**Design decisions confirmed with the user before building**:
+1. Label: exactly "On Hold".
+2. Alerts: On Hold gets the exact same blanket suppression Completed already gets in
+   `computeAlerts()` — one shared early-return, no alert types fire for a paused project (overdue,
+   at-risk, milestone-stalled, open constraints, no-progress, RA-bill-needed, finance-review-needed,
+   snags, dispatch-pending, no-DPR-submitted all skipped, same as Completed today).
+3. Badge color: reuse the existing `.bb` (blue) badge class from `src/styles/app.css` — already
+   used elsewhere for neutral/informational badges (e.g. manpower, "awaiting approval" stages), not
+   currently tied to any status meaning. No new CSS class needed.
+4. Dashboard metrics row (`renderMetrics()`): a new standalone 6th tile, "On Hold" with a count,
+   inserted next to the existing tiles. Every existing tile's number/wording stays unchanged.
+5. Pipeline tab's phase board (`renderPipeline()` in `src/sections/gantt/ganttTab.js` — the 3-column
+   Not started / In progress / Completed board, **not** the Gantt tab itself, which has no status
+   columns): add a 4th "On Hold" column, matching the existing `ph-ns`/`ph-ip`/`ph-dn` pattern with
+   a new `ph-hold` class (reusing `.bb`'s blue, `#d0e8f7`/`#0a3d6b`, for visual consistency with the
+   badge).
+
+**Design — files to change**:
+1. `index.html:210` — Status `<select id="f-status-sel">` (Edit/Add Project form): add
+   `<option>On Hold</option>`.
+2. `index.html:84` — "All statuses" filter `<select id="f-status">` (All Projects list): add
+   `<option>On Hold</option>`.
+3. `src/lib/helpers.js` (`statusBadge()`, lines 53-57): add an explicit `On Hold` branch returning
+   `<span class="badge bb">⏸ On Hold</span>`, ahead of the generic fallback so it no longer reads
+   as "Not Started".
+4. `src/sections/metrics.js` (`renderMetrics()`): compute `onHold` count explicitly; adjust the
+   existing "not started" subtext calc (`total-done-ip`) to exclude it (`total-done-ip-onHold`) so
+   an On-Hold project isn't double-counted as "not started"; add the new tile.
+5. `src/sections/alerts.js` (`computeAlerts()`, line 13): change
+   `if(p.status==='Completed') return;` to also match `'On Hold'`.
+6. `src/sections/gantt/ganttTab.js` (`renderPipeline()`, lines 49-59): add a 4th entry to the
+   `phases` array (`label:"On Hold"`, `cls:"ph-hold"`, `f:p=>p.status==='On Hold'`).
+7. `src/styles/app.css`: add `.ph-hold{background:#d0e8f7;color:#0a3d6b}` near the existing
+   `.ph-ns`/`.ph-ip`/`.ph-dn` definitions (line ~150).
+
+**Not changed**: the "Completed" transition guards in `addEditProject.js` (installed-qty match,
+Handover Checklist, milestone-done check) only trigger `if(newStatus==='Completed')` — untouched,
+On Hold doesn't interact with them. No activity-log entry added for entering/leaving On Hold (no
+existing precedent for logging every status change — only "completed" and "install started" are
+currently logged). `dashboardTab.js`'s overdue calc and `clientPortal.js`'s milestone-active check
+are left exactly as-is — out of scope for this request, not touched. `projectCards.js`'s inline
+per-project badges (Overdue/stalled/open-constraint pills shown directly on the card) are a
+separate render path from `computeAlerts()` and were correctly left untouched — they still show
+real point-in-time facts about the project regardless of status, only the Active Alerts *count*
+and notification bell are suppressed for On Hold.
+
+**Verified live in the browser** (2026-09-03, local dev server, `VITE_TEST_MODE=true` mock data,
+no production rows touched): `npm run build` clean. Logged in as `admin`/`1234`. Edit Project on
+"Arun Seth — Supply only" — Status dropdown now offers "On Hold" alongside the other three;
+selected it and saved. Confirmed all in one pass: project card badge now reads "⏸ On Hold" in the
+blue `.bb` style; All Projects "On Hold" filter option present; dashboard metrics row now shows a
+6th tile "On Hold — 1 — paused installs", and the "In progress" tile's "not started" subtext
+correctly dropped from 1 to 0 (no longer double-counting the paused project); Active Alerts count
+dropped from 6 to 0 for this project (Overdue/2 stalled/2 open constraint alerts all suppressed,
+matching Completed's existing blanket-suppression behavior) while the project card's own
+inline Overdue/stalled/open-constraint pills kept showing, confirming the two are correctly
+independent; Pipeline tab now shows a 4th "On Hold" column (blue header, matching the Not
+started/In progress/Completed columns' existing stacked layout) correctly listing the project.
+No console errors during any of this. Dev server stopped afterward, no production data affected.

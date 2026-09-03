@@ -53,6 +53,7 @@ export function updateSnagSeverityHint(unitsFieldId,severityFieldId,installedQty
 export function statusBadge(s){
   if(s==='Completed') return '<span class="badge bg">✓ '+s+'</span>';
   if(s==='In Progress') return '<span class="badge ba">⟳ '+s+'</span>';
+  if(s==='On Hold') return '<span class="badge bb">⏸ '+s+'</span>';
   return '<span class="badge bgr">○ '+s+'</span>';
 }
 

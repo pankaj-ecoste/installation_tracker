@@ -48,7 +48,7 @@ export function renderGantt(){
 /* ══ PIPELINE ══ */
 export function renderPipeline(){
   const vp=visibleProjects();
-  const phases=[{label:"Not started",cls:"ph-ns",f:p=>p.status==='Not Started'},{label:"In progress",cls:"ph-ip",f:p=>p.status==='In Progress'},{label:"Completed",cls:"ph-dn",f:p=>p.status==='Completed'}];
+  const phases=[{label:"Not started",cls:"ph-ns",f:p=>p.status==='Not Started'},{label:"In progress",cls:"ph-ip",f:p=>p.status==='In Progress'},{label:"On Hold",cls:"ph-hold",f:p=>p.status==='On Hold'},{label:"Completed",cls:"ph-dn",f:p=>p.status==='Completed'}];
   document.getElementById('pipeline-view').innerHTML=phases.map(ph=>{
     const cards=vp.filter(ph.f);
     return '<div class="phase-col"><div class="phase-hdr '+ph.cls+'">'+ph.label+' <span style="opacity:.7">'+cards.length+'</span></div><div class="phase-body">'+(cards.length?cards.map(p=>{

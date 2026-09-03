@@ -81,7 +81,7 @@
     <div id="tab-projects-view">
       <div class="metrics" id="metrics-row"></div>
       <div class="filters">
-        <select id="f-status" onchange="renderProjects()"><option value="">All statuses</option><option>Completed</option><option>In Progress</option><option>Not Started</option></select>
+        <select id="f-status" onchange="renderProjects()"><option value="">All statuses</option><option>Completed</option><option>In Progress</option><option>Not Started</option><option>On Hold</option></select>
         <select id="f-state" onchange="renderProjects()"><option value="">All states</option><option>Maharastra</option><option>Delhi</option><option>Gujarat</option></select>
         <input type="text" id="f-search" placeholder="Search project..." oninput="renderProjects()" style="min-width:150px">
         <button class="btn btn-outline btn-sm" onclick="exportProjectsCSV()">⬇ Export Excel/CSV</button>
@@ -207,7 +207,7 @@
       <div class="form-row"><div class="form-group"><label class="form-label">Project name *</label><input class="form-input" id="f-name" placeholder="e.g. Ajmera Wadala"></div><div class="form-group"><label class="form-label">No. of towers/blocks</label><input class="form-input" type="number" id="f-tower-count" min="1" value="1" onchange="renderTowerRows()"></div></div>
       <div id="f-towers-list" style="margin-top:8px"></div>
       <div class="form-row" style="margin-top:10px"><div class="form-group"><label class="form-label">Developer</label><input class="form-input" id="f-dev" placeholder="e.g. Ajmera"></div><div class="form-group"><label class="form-label">City</label><input class="form-input" id="f-city" placeholder="e.g. Mumbai"></div></div>
-      <div class="form-row" style="margin-top:10px"><div class="form-group"><label class="form-label">State</label><input class="form-input" id="f-state-inp" placeholder="e.g. Maharashtra"></div><div class="form-group"><label class="form-label">Status</label><select class="form-input" id="f-status-sel"><option>Not Started</option><option>In Progress</option><option>Completed</option></select></div></div>
+      <div class="form-row" style="margin-top:10px"><div class="form-group"><label class="form-label">State</label><input class="form-input" id="f-state-inp" placeholder="e.g. Maharashtra"></div><div class="form-group"><label class="form-label">Status</label><select class="form-input" id="f-status-sel"><option>Not Started</option><option>In Progress</option><option>Completed</option><option>On Hold</option></select></div></div>
       <div class="form-row" style="margin-top:10px"><div class="form-group"><label class="form-label">Client access code *</label><input class="form-input" id="f-code" placeholder="e.g. AJMERA-BW"></div><div class="form-group"><label class="form-label">Google Drive link</label><input class="form-input" id="f-drive" placeholder="https://drive.google.com/..."></div></div>
       <div class="form-row" style="margin-top:10px"><div class="form-group"><label class="form-label">Start date</label><input class="form-input" type="date" id="f-start-date"></div><div class="form-group"><label class="form-label">Committed completion</label><input class="form-input" type="date" id="f-commit-date" onchange="renderDaysAvailable()"></div></div>
       <div style="font-size:11px;color:#888;margin-top:4px">Site supervisor and their WhatsApp are set up under the Team tab, and assigned to this project via Update Progress or when acknowledging a request.</div>
