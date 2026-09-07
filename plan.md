@@ -1911,3 +1911,82 @@ back in as `sales`/`7890` (the seeded Sales/Viewer account) — the project stil
 "viewing your 1 project only", confirming the edit no longer reassigned `created_by` away from the
 original owner (pre-fix, this exact sequence would have flipped it to `admin` and hidden the
 project from that view). Dev server stopped afterward.
+
+### v2-26: DPR "Today's Installation By Product" — Day No/Days Left auto-calc, editability, labeling (starting 2026-09-07)
+
+**Reported by the team**: two related asks about the DPR "Add DPR" form's "Today's Installation By
+Product" section.
+
+**Issue 1 — Day No. / Days Left is manual, should be automatic and dynamic.** The Add DPR form
+currently has two manual number inputs (`dpr-dayno`, `dpr-daysleft`, `renderDPRForm()` in
+`src/sections/dpr/dprTab.js`) that a supervisor types in by hand and which get saved as static
+values on the DPR row (`d.dayNo`, `d.daysLeft`) — shown as-is forever on the DPR card
+(`renderDPR()` line ~112), disconnected from reality as days pass. A live calculator already
+exists alongside it purely as read-only info text (`dprDayNo()`/`dprDaysLeft()`, used in the
+`dpr-day-info` box) but was never wired into what's actually saved/displayed.
+
+**Finalized fix**: remove the two manual inputs entirely. Day No / Days Left become fully
+auto-calculated, every time they're displayed (DPR card list, DPR form info box) — not frozen at
+save time, so editing a project's dates later retroactively corrects the numbers shown on old DPR
+entries too:
+- **Day No** = (DPR entry's own date − project's Installation Commencement Date) + 1
+- **Days Left** = project's Days Available − Day No (exclusive; Day 1 of 93 → 92 left — confirmed,
+  not the inclusive alternative)
+
+**Issue 2 (generalized) — Days Available / Day No showing `#DIV/0!` for most projects.** Traced to
+a project (KGI kohinoor, id 82) with `#DIV/0!` across Daily Target Qty, Avg/day, Required avg/day —
+root cause: those all derive from `days_available` and `install_commencement_date`, which are only
+set on a small minority of projects. Queried the live DB: of 77 projects, only 17 have `po_date`
+set and only 14 have `install_commencement_date` set — this is systemic, not specific to one
+project (confirmed explicitly: **not** a one-off data patch on KGI kohinoor; the team asked for the
+calculation itself to be generalized). `start_date`/`committed_date` (filled in earlier, at project
+creation) have better coverage — 29 and 27 of 77 respectively.
+
+**Finalized fix**: add a fallback in the calculation logic itself (`computeDaysAvailable()` in
+`src/sections/projects/formHelpers.js`, and `dprDayNo()` in `src/sections/dpr/dprTab.js`), no data
+migration:
+- **Days Available** = Committed Completion − PO Date if PO Date is set, **else** Committed
+  Completion − Start Date
+- **Day No** = days since Installation Commencement Date if set, **else** days since Start Date
+
+A project with none of these four dates set still correctly shows `#DIV/0!` — unavoidable without
+a real date, and matches the source Excel sheet's own behavior (kept deliberately, not a bug).
+
+**Issue 3 — "Cum. till yesterday" editability.** Currently an editable number input for every DPR
+role, pre-filled from computed history — added originally so a wrong historical total could be
+corrected (the correction also flows into the project's overall Installed Qty, see code comment in
+`renderDPRForm()`). Finalized: **restrict editing to admin/manager only** — staff/supervisor roles
+get a read-only, purely auto-computed value; the correction path stays available but only for
+admin/manager (mirrors the `canEditDPR()` gating pattern already used elsewhere in this file).
+
+**Issue 4 — rename "Location" → "Floor/Elevation".** Cosmetic label-only change on the DPR product
+table column header and the DPR card's per-product row (`src/sections/dpr/dprTab.js`) — the
+underlying stored field (`location`) keeps its name, only the UI label changes.
+
+**Implementation note (found during build/verification, not part of the original discussion)**:
+Days Available (`p.daysAvailable`) turned out to be a *stored* column that only recomputes when a
+project is explicitly re-saved via Edit Project — relying on it directly in the DPR calculations
+would have meant every existing project needed a manual resave before its `#DIV/0!` cleared,
+defeating the whole point of generalizing instead of patching data. Fixed by adding
+`dprDaysAvailable(p)` in `src/sections/dpr/dprTab.js`, which computes Days Available live from the
+project's raw dates (via `computeDaysAvailable()`) every time, falling back to the stored column
+only if the raw dates aren't available either. All DPR call sites (`dprDaysLeft()`,
+`renderDPRProducts()`, `updateDPRProductDerived()`, the day-info box) now go through this instead
+of reading `p.daysAvailable` directly.
+
+**Applied and verified**: `npm run build` clean. Verified live in the browser (local dev server,
+`VITE_TEST_MODE=true` mock data, no production rows touched) — logged in as `admin`/`1234`:
+- DPR Log list card for "Ajmera (Wadala Mumbai) — B-Wing" (a seed project with only `startDate`/
+  `committedDate` set, no PO date/install commencement date) now shows "Day No: 177 · Days left: 0"
+  live-computed, and the product table header reads "Floor/Elevation" — both were "—"/"Location"
+  before this change.
+- Opened Add DPR for "Arun Seth — Supply only" (same gap: only Start Date 2026-05-01 + Committed
+  Completion 2026-08-30 set, no PO date/install commencement date): info box showed "Today is Day
+  No: 130 · Days left: 0 · Days available: 121" and Daily Targeted Qty showed "4" — all previously
+  `#DIV/0!`/"—" before this change, resolved purely by the fallback, zero data changes to the
+  project itself. The manual "Day no. / Days left" inputs are gone from the DPR Details card.
+  "Cum. till yesterday" showed as an editable input (value `0`, admin).
+- Logged out, logged back in as `shubham`/`9012` (Supervisor role) and reopened the same Add DPR
+  form: "Cum. till yesterday" now renders as plain read-only text, not an input — confirming the
+  admin/manager-only edit gate works. "Today's installed qty" stayed editable, as intended.
+Dev server stopped afterward.

@@ -7,14 +7,17 @@ import { renderFinance } from '../finance/financeTab.js';
 import { renderMetrics } from '../metrics.js';
 import { renderProjects } from './projectCards.js';
 
-/* ══ DAYS AVAILABLE (auto-calculated from PO Date → Committed Completion) ══ */
-export function computeDaysAvailable(poDate,committedDate){
-  if(!poDate||!committedDate) return '';
-  return Math.max(0,Math.round((new Date(committedDate)-new Date(poDate))/86400000));
+/* ══ DAYS AVAILABLE (auto-calculated from PO Date → Committed Completion, falling back to
+   Start Date when PO Date isn't set — most projects never get a PO Date filled in, see
+   plan.md v2-26) ══ */
+export function computeDaysAvailable(poDate,committedDate,startDate){
+  const from=poDate||startDate;
+  if(!from||!committedDate) return '';
+  return Math.max(0,Math.round((new Date(committedDate)-new Date(from))/86400000));
 }
 export function renderDaysAvailable(){
   const el=document.getElementById('f-days-available'); if(!el) return;
-  el.value=computeDaysAvailable(document.getElementById('f-po-date').value,document.getElementById('f-commit-date').value);
+  el.value=computeDaysAvailable(document.getElementById('f-po-date').value,document.getElementById('f-commit-date').value,document.getElementById('f-start-date')?.value);
 }
 
 /* ══ MILESTONE TEMPLATES ══ */

@@ -240,7 +240,7 @@ export async function saveProject(){
     vendors, products, unit,
     orderType:document.getElementById('f-order-type').value,
     poDate:document.getElementById('f-po-date').value,
-    daysAvailable:computeDaysAvailable(document.getElementById('f-po-date').value,document.getElementById('f-commit-date').value)||0,
+    daysAvailable:computeDaysAvailable(document.getElementById('f-po-date').value,document.getElementById('f-commit-date').value,document.getElementById('f-start-date').value)||0,
     materialFirstLotDate:document.getElementById('f-material-first-lot').value,
     installCommencementDate:document.getElementById('f-install-commencement').value,
     driveLink:document.getElementById('f-drive').value.trim(),

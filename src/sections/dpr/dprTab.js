@@ -10,7 +10,7 @@ import { updateBell } from '../alerts.js';
 import { renderMaterial } from '../material/materialTab.js';
 import { renderMetrics } from '../metrics.js';
 import { closePanel, openPanel } from '../navigation.js';
-import { renderConstraintList } from '../projects/formHelpers.js';
+import { computeDaysAvailable, renderConstraintList } from '../projects/formHelpers.js';
 import { renderAllChecklistDropdowns, renderProjects } from '../projects/projectCards.js';
 import { reverseGeocodeAddress } from '../requests/requestsTab.js';
 
@@ -86,6 +86,12 @@ export function renderDPR(){
     const borderColor=hasConstraint?'#cc3333':'#1D9E75';
     const totalToday=d.products?d.products.reduce((a,r)=>a+(r.todayInstalled||0),0):0;
     const avgPerDay=avgPerDayByProj[d.projId]||0;
+    // Live-computed, not the stored d.dayNo/d.daysLeft (those manual fields are gone as of
+    // v2-26) — recalculated from the project's current dates every render, using this entry's
+    // own date so past DPRs show the day number that was true for them, not today's.
+    const dprProj=state.projects.find(x=>x.id===d.projId);
+    const liveDayNo=dprDayNo(dprProj,d.date);
+    const liveDaysLeft=dprDaysLeft(dprProj,d.date);
     // Flag if today's work is less than 60% of the project's own average — a genuine dip,
     // not just normal day-to-day variation.
     const isBelowAvg=avgPerDay>0&&totalToday<avgPerDay*0.6;
@@ -102,14 +108,14 @@ export function renderDPR(){
     const productHeader=d.products&&d.products.length?`
       <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr 1.5fr;gap:6px;padding:4px 0;border-bottom:2px solid #e0e0e0;font-size:10px;font-weight:600;color:#666;text-transform:uppercase">
         <div>Product</div><div style="text-align:center">WO Qty</div><div style="text-align:center">Cum. till yest.</div>
-        <div style="text-align:center">Today ✅</div><div style="text-align:center">Balance</div><div style="text-align:center">Bal %</div><div>Location</div>
+        <div style="text-align:center">Today ✅</div><div style="text-align:center">Balance</div><div style="text-align:center">Bal %</div><div>Floor/Elevation</div>
       </div>`:'';
     return `<div class="dpr-card" style="border-left:4px solid ${borderColor}">
       <!-- Header -->
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
         <div>
           <div style="font-weight:700;font-size:14px">${d.project}</div>
-          <div style="font-size:12px;color:#666;margin-top:2px">DPR Date: ${d.date} &nbsp;·&nbsp; Day No: <b>${d.dayNo||'—'}</b> &nbsp;·&nbsp; Days left: <b>${d.daysLeft!=null?d.daysLeft:'—'}</b></div>
+          <div style="font-size:12px;color:#666;margin-top:2px">DPR Date: ${d.date} &nbsp;·&nbsp; Day No: <b>${liveDayNo!=null?liveDayNo:'—'}</b> &nbsp;·&nbsp; Days left: <b>${liveDaysLeft!=null?liveDaysLeft:'—'}</b></div>
           <div style="font-size:12px;color:#666">Supervisor: ${d.supervisor}</div>
           ${d.geoLocation?`<div style="font-size:11px;color:#1D9E75;margin-top:2px">📍 ${d.geoLocation}</div>`:''}
           ${canEditDPR(d)?`<button class="btn btn-outline btn-sm" style="margin-top:6px" onclick="openEditDPR(${d.id})">✏️ Edit this DPR</button>`:''}
@@ -236,12 +242,6 @@ export function renderDPRForm(selectedProjId){
       '</div>'+
       '<div class="form-row" style="margin-top:10px">'+
         '<div class="form-group"><label class="form-label">Supervisor</label><input class="form-input" id="dpr-supervisor" value="'+(proj.supervisor||'')+'"></div>'+
-        '<div class="form-group"><label class="form-label">Day no. / Days left</label>'+
-          '<div style="display:flex;gap:6px">'+
-            '<input class="form-input" type="number" id="dpr-dayno" placeholder="Day no" min="0">'+
-            '<input class="form-input" type="number" id="dpr-daysleft" placeholder="Days left" min="0">'+
-          '</div>'+
-        '</div>'+
       '</div>'+
       '<div class="form-row" style="margin-top:10px">'+
         '<div class="form-group"><label class="form-label">Committed manpower</label><input class="form-input" type="number" id="dpr-committed-mp" min="0" value="0"></div>'+
@@ -377,16 +377,46 @@ export function renderDPRForm(selectedProjId){
   };
 }
 
-// "Today is Day No" and "Days Left" — computed from Installation Commencement Date and
-// Days Available, exactly matching the uploaded DPR sheet's own formulas.
-export function dprDayNo(p){
-  if(!p||!p.installCommencementDate) return null;
-  return daysDiff(p.installCommencementDate, new Date().toISOString().slice(0,10))+1;
+// Normalizes any date-ish value (an ISO "YYYY-MM-DD" from the DB, or a locale string like
+// "07 Sept 2026" as stored on dpr_log.date — see plan.md's "DPR date text/timezone gotcha") to a
+// plain local "YYYY-MM-DD". Reading getFullYear/getMonth/getDate back off the parsed Date always
+// reflects the browser's local calendar day, so this is the one safe way to compare two dates of
+// either shape without the UTC-midnight rollover bug that toISOString() has in IST.
+function toLocalISODate(dateLike){
+  const d=new Date(dateLike); if(isNaN(d)) return null;
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
-export function dprDaysLeft(p){
-  const dayNo=dprDayNo(p);
-  if(dayNo===null||!p.daysAvailable) return null;
-  return Math.max(0,p.daysAvailable-dayNo);
+// "Today is Day No" and "Days Left" — computed from Installation Commencement Date (falling back
+// to Start Date when that's not set — most projects never get it filled in, see plan.md v2-26) and
+// Days Available, exactly matching the uploaded DPR sheet's own formulas. Always computed live
+// (never stored) so correcting a project's dates later fixes every past DPR entry's display too.
+// Pass asOfDate (a DPR entry's own date) to get that entry's historical Day No; omit for today's.
+export function dprCommencementDate(p){
+  return (p&&(p.installCommencementDate||p.startDate))||null;
+}
+// Days Available, computed live from the project's raw dates (same fallback as
+// computeDaysAvailable: PO Date, else Start Date) rather than trusted from the stored
+// `daysAvailable` column — that column only gets recomputed when someone re-saves the project
+// via Edit Project, so relying on it here would mean every existing project needs a manual
+// resave before its DPR numbers work. Falls back to the stored value only if the raw dates
+// needed to compute it live aren't available either (e.g. imported data with a daysAvailable
+// figure but no underlying dates).
+export function dprDaysAvailable(p){
+  if(!p) return 0;
+  const live=computeDaysAvailable(p.poDate,p.committedDate,p.startDate);
+  return live!==''?live:(p.daysAvailable||0);
+}
+export function dprDayNo(p,asOfDate){
+  const start=toLocalISODate(dprCommencementDate(p)); if(!start) return null;
+  const asOf=asOfDate?toLocalISODate(asOfDate):toLocalISODate(new Date());
+  if(!asOf) return null;
+  return daysDiff(start, asOf)+1;
+}
+export function dprDaysLeft(p,asOfDate){
+  const dayNo=dprDayNo(p,asOfDate);
+  const daysAvailable=dprDaysAvailable(p);
+  if(dayNo===null||!daysAvailable) return null;
+  return Math.max(0,daysAvailable-dayNo);
 }
 export function divFmt(num,den,suffix){
   // Mirrors Excel's #DIV/0! behavior when the denominator isn't available yet, but shown
@@ -421,27 +451,30 @@ export function renderDPRProducts(){
   const el=document.getElementById('dpr-products-list'); if(!el) return;
   const projId=parseInt(document.getElementById('dpr-proj').value);
   const p=state.projects.find(x=>x.id===projId);
-  const dayNo=dprDayNo(p), daysLeft=dprDaysLeft(p);
+  const dayNo=dprDayNo(p), daysLeft=dprDaysLeft(p), daysAvailable=dprDaysAvailable(p);
+  // Admin/manager can still correct a wrongly-recorded historical cumulative total; every other
+  // role gets a pure auto-computed, read-only value — see plan.md v2-26.
+  const canEditCum=state.currentUser&&(state.currentUser.role==='admin'||state.currentUser.role==='manager');
   document.getElementById('dpr-day-info').innerHTML=p?
-    'Today is Day No: <b>'+(dayNo!==null?dayNo:'—')+'</b> &nbsp;·&nbsp; Days left: <b>'+(daysLeft!==null?daysLeft:'—')+'</b> &nbsp;·&nbsp; Days available: <b>'+(p.daysAvailable||'—')+'</b>'
-    +(dayNo===null?'<div style="color:#cc3333;margin-top:2px">Set "Date of installation commencement" on the project to compute Day No / Days Left.</div>':'')
+    'Today is Day No: <b>'+(dayNo!==null?dayNo:'—')+'</b> &nbsp;·&nbsp; Days left: <b>'+(daysLeft!==null?daysLeft:'—')+'</b> &nbsp;·&nbsp; Days available: <b>'+(daysAvailable||'—')+'</b>'
+    +(dayNo===null?'<div style="color:#cc3333;margin-top:2px">Set "Date of installation commencement" (or "Start date") on the project to compute Day No / Days Left.</div>':'')
     :'';
   if(!state.dprProducts.length){ el.innerHTML='<div style="font-size:12px;color:#888">No products defined for this project. Add products via the project edit form first.</div>'; return; }
   el.innerHTML='<div style="overflow-x:auto"><table class="team-table" style="font-size:11px;white-space:nowrap">'+
     '<thead><tr>'+
-      '<th>Product</th><th>Total qty (PO/WO)</th><th>Daily targeted qty</th><th>Cum. till yesterday</th><th>Today\'s installed qty</th><th>Location</th>'+
+      '<th>Product</th><th>Total qty (PO/WO)</th><th>Daily targeted qty</th><th>Cum. till yesterday</th><th>Today\'s installed qty</th><th>Floor/Elevation</th>'+
       '<th>Daily target achievement %</th><th>Total cumulative installed</th><th>Avg per day</th><th>Balance qty</th><th>Balance %</th><th>Required avg/day to catch up</th>'+
     '</tr></thead><tbody>'+
     state.dprProducts.map((r,i)=>{
-      const dailyTarget=p&&p.daysAvailable?Math.round(r.totalQty/p.daysAvailable):0;
+      const dailyTarget=daysAvailable?Math.round(r.totalQty/daysAvailable):0;
       const totalCumulative=r.cumulativeTillYesterday+(r.todayInstalled||0);
       const balanceQty=Math.max(0,r.totalQty-totalCumulative);
       const balancePct=r.totalQty>0?Math.round((balanceQty/r.totalQty)*100):0;
       return '<tr>'+
         '<td>'+r.product+'</td>'+
         '<td style="text-align:center">'+fmt(r.totalQty)+'</td>'+
-        '<td style="text-align:center">'+(p&&p.daysAvailable?fmt(dailyTarget):'#DIV/0!')+'</td>'+
-        '<td style="text-align:center;min-width:80px"><input class="form-input" type="number" min="0" style="text-align:center;padding:4px" value="'+r.cumulativeTillYesterday+'" oninput="dprProducts['+i+'].cumulativeTillYesterday=parseInt(this.value)||0;updateDPRProductDerived('+i+')"></td>'+
+        '<td style="text-align:center">'+(daysAvailable?fmt(dailyTarget):'#DIV/0!')+'</td>'+
+        '<td style="text-align:center;min-width:80px">'+(canEditCum?'<input class="form-input" type="number" min="0" style="text-align:center;padding:4px" value="'+r.cumulativeTillYesterday+'" oninput="dprProducts['+i+'].cumulativeTillYesterday=parseInt(this.value)||0;updateDPRProductDerived('+i+')">':'<div style="font-weight:600">'+fmt(r.cumulativeTillYesterday)+'</div>')+'</td>'+
         '<td style="text-align:center;min-width:80px"><input class="form-input" type="number" min="0" style="text-align:center;padding:4px" value="'+r.todayInstalled+'" oninput="dprProducts['+i+'].todayInstalled=parseInt(this.value)||0;updateDPRProductDerived('+i+')"></td>'+
         '<td style="min-width:110px"><input class="form-input" style="padding:4px" placeholder="e.g. Floor 12" value="'+r.location+'" oninput="dprProducts['+i+'].location=this.value"></td>'+
         '<td style="text-align:center" id="dpr-prod-achv-'+i+'">'+(dailyTarget?divFmt(r.todayInstalled||0,dailyTarget,'%'):'#DIV/0!')+'</td>'+
@@ -462,9 +495,9 @@ export function renderDPRProducts(){
 export function updateDPRProductDerived(i){
   const projId=parseInt(document.getElementById('dpr-proj').value);
   const p=state.projects.find(x=>x.id===projId);
-  const dayNo=dprDayNo(p), daysLeft=dprDaysLeft(p);
+  const dayNo=dprDayNo(p), daysLeft=dprDaysLeft(p), daysAvailable=dprDaysAvailable(p);
   const r=state.dprProducts[i]; if(!r) return;
-  const dailyTarget=p&&p.daysAvailable?Math.round(r.totalQty/p.daysAvailable):0;
+  const dailyTarget=daysAvailable?Math.round(r.totalQty/daysAvailable):0;
   const totalCumulative=r.cumulativeTillYesterday+(r.todayInstalled||0);
   const balanceQty=Math.max(0,r.totalQty-totalCumulative);
   const balancePct=r.totalQty>0?Math.round((balanceQty/r.totalQty)*100):0;
@@ -528,8 +561,10 @@ export async function saveDPR(){
     project:p?(p.name+' — '+p.tower):'Unknown',
     date:fmtDate(document.getElementById('dpr-date').value),
     supervisor:document.getElementById('dpr-supervisor').value.trim()||'—',
-    dayNo:parseInt(document.getElementById('dpr-dayno').value)||null,
-    daysLeft:document.getElementById('dpr-daysleft').value?parseInt(document.getElementById('dpr-daysleft').value):null,
+    // No longer collected manually — Day No / Days Left are always computed live from the
+    // project's dates (see dprDayNo/dprDaysLeft), never stored per-entry. See plan.md v2-26.
+    dayNo:null,
+    daysLeft:null,
     committedMp:parseInt(document.getElementById('dpr-committed-mp').value)||0,
     actualMp:parseInt(document.getElementById('dpr-manpower').value)||0,
     manpower:parseInt(document.getElementById('dpr-manpower').value)||0,
