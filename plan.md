@@ -1841,3 +1841,73 @@ then clicked "View in Material →" — landed on the Material tab scrolled dire
 with the pulse-highlight visible. No console errors during any of this. Dev server stopped
 afterward, no production data affected.
 No console errors during any of this. Dev server stopped afterward, no production data affected.
+
+### v2-25: Sales/Viewer panel showing 0 projects (starting 2026-09-07)
+
+**Reported by the team**: Mansi (Sales/Viewer role) opened All Projects and saw "viewing your 0
+projects only" — despite having logged real requests. See screenshot (WhatsApp Image 2026-09-04 at
+3.16.25 PM.jpeg).
+
+**Root cause found**: Sales/Viewer's project scoping is by design (`visibleProjects()`,
+`src/lib/helpers.js:60-68` — only `created_by === own username` or `supervisor === own
+username/name`, confirmed intentional in Phase E notes above). The bug is that `created_by` was
+getting silently corrupted after project creation. `saveProject()`
+(`src/sections/projects/addEditProject.js`) — the function behind the full **"Edit project"**
+panel, `editProject:true`, admin/manager only — built a shared `baseData` object that
+unconditionally stamped `createdBy` with whoever is *currently logged in*, then spread that same
+`baseData` into the edit-save payload without ever restoring the existing project's real creator.
+So any admin/manager edit of a project (a PO date, developer name, drive link — anything) silently
+reassigned `created_by` to themselves, permanently erasing the original sales attribution. This
+compounds fast: converting a request opens the Edit panel immediately
+(`confirmConvertRequestToProject()` → `openEditProject()` in `requestsTab.js`), so a project's
+`created_by` was typically overwritten the very first time anyone touched it after conversion.
+
+Confirmed against the live production DB (read-only queries via `DATABASE_URL`, not through the
+app): `requests.created_by` correctly shows mansi=3, shalini gupta=8, archana=7, ritu=5 — sales
+staff were logging requests fine. But `projects.created_by` was dominated by admin=21, shashi=35,
+neelam=12 — with **zero** projects attributed to mansi, jyoti, pankaj, pooja, rajni, rohit, or
+shalini gupta, despite all of them being active Sales/Viewer staff who'd logged requests. Joining
+`projects` back to `requests` via the existing `requests.linked_project_id` FK found all 14
+projects still traceable to their originating request — **all 14 had drifted**, `created_by` on
+every one showed the admin/manager who happened to edit it, not the sales person from the linked
+request's `created_by` (e.g. project #67 "Joy Grand" showed `shashi`, but the request that became
+it, PRE-0002, was logged by `mansi`).
+
+This is the same root-cause shape already seen twice before in this project — a value that should
+be database-owned was instead trusted from a client-sent field — see 0014 (`dpr_log` ownership) and
+0015 (request numbering), both permanently fixed by moving the value server-side. Unlike those two,
+`created_by` isn't purely immutable: there's one legitimate, already-correctly-gated reassignment
+path (the "Update" panel's explicit "Created By" dropdown, `saveUpdate()` line ~566, gated by
+`canDo('updateProgress')`, already defaults to `p.createdBy` and only changes on explicit
+selection). So the fix here is the client bug fix plus a targeted data backfill, not a blanket
+DB trigger that would also block that legitimate path.
+
+**Fix**:
+1. `src/sections/projects/addEditProject.js`, `saveProject()`: removed `createdBy` from the shared
+   `baseData` object (it no longer makes sense as a value shared between add and edit). The
+   new-project branch now stamps `createdBy` from `state.currentUser` explicitly, same as before.
+   The edit branch now explicitly does `createdBy:existing?.createdBy` — same pattern already used
+   for `supervisor` on that same line (`supervisor:existing?.supervisor||'—'`), which is *not*
+   sourced from this form either.
+2. `supabase/migrations/0016_backfill_project_created_by.sql`: one-time backfill — for every
+   project traceable via `requests.linked_project_id`, sets `projects.created_by` back to that
+   request's `created_by`. Scoped to only the 14 traceable rows; the other ~63 projects predate the
+   request-conversion flow (manual Add Project / CSV import) and have no request to recover the
+   true creator from, so they're left untouched rather than guessed at.
+
+**Not changed**: `saveUpdate()`'s Created By dropdown (`u-created-by`) — already correct, already
+gated, already defaults to the existing value. No RLS/permission changes; `visibleProjects()`
+scoping logic itself is unchanged (working as designed).
+
+**Applied and verified**: `npm run build` clean. Migration 0016 applied directly via
+`DATABASE_URL` (session pooler connection) against the live production DB — re-queried afterward:
+all 14 previously-mismatched projects now show `created_by` matching their originating request's
+logger (mansi now owns "Joy Grand", "ATS DEVELOPER (Marigold)", "MAX ESTATE (AAR CEE CONTRACTS
+PVT.LTD.)" — her 3 traceable projects). Client fix verified live in the browser (local dev server,
+`VITE_TEST_MODE=true` mock data, no production rows touched): logged in as `admin`/`1234`, opened
+"Edit project" on the seed project "Arun Seth — Supply only" (`createdBy:"sales"`), changed the
+Google Drive Link (an unrelated field) and saved — no error, no console issue. Logged out, logged
+back in as `sales`/`7890` (the seeded Sales/Viewer account) — the project still appeared under
+"viewing your 1 project only", confirming the edit no longer reassigned `created_by` away from the
+original owner (pre-fix, this exact sequence would have flipped it to `admin` and hidden the
+project from that view). Dev server stopped afterward.

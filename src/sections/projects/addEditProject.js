@@ -253,8 +253,7 @@ export async function saveProject(){
     constraints:cObjs,
     committedDate:document.getElementById('f-commit-date').value,
     startDate:document.getElementById('f-start-date').value,
-    actualDate:'',
-    createdBy:state.currentUser?state.currentUser.username:'admin'
+    actualDate:''
   };
   const towerCount=parseInt(document.getElementById('f-tower-count').value)||1;
 
@@ -264,7 +263,10 @@ export async function saveProject(){
     const dupe=state.projects.find(p=>p.accessCode===code&&p.id!==state.editingId);
     if(dupe){ showFormErr('Code "'+code+'" already used.'); return; }
     const data={
-      ...baseData, accessCode:code, tower, towerCount,
+      // createdBy is NOT part of this form — preserve the original creator's attribution.
+      // Reassigning ownership to a different sales/viewer person is a deliberate action,
+      // done only via the "Update" panel's Created By dropdown (see saveUpdate() below).
+      ...baseData, createdBy:existing?.createdBy, accessCode:code, tower, towerCount,
       supervisor:existing?.supervisor||'—', supervisorWA:existing?.supervisorWA||'',
       installedQty:existing?.installedQty||0, jmrQty:existing?.jmrQty||0,
       raBillAmt:existing?.raBillAmt||0, paymentCollected:existing?.paymentCollected||0,
@@ -295,7 +297,8 @@ export async function saveProject(){
   for(let i=0;i<towerNames.length;i++){
     const thisCode=towerNames.length>1?(code+'-'+towerNames[i].toUpperCase().replace(/[^A-Z0-9]/g,'')):code;
     const data={
-      ...baseData, accessCode:thisCode, tower:towerNames[i], towerCount:1,
+      ...baseData, createdBy:state.currentUser?state.currentUser.username:'admin',
+      accessCode:thisCode, tower:towerNames[i], towerCount:1,
       supervisor:'—', supervisorWA:'',
       installedQty:0, jmrQty:0, raBillAmt:0, paymentCollected:0, raBillReady:false
     };
