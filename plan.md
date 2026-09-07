@@ -1990,3 +1990,46 @@ of reading `p.daysAvailable` directly.
   form: "Cum. till yesterday" now renders as plain read-only text, not an input — confirming the
   admin/manager-only edit gate works. "Today's installed qty" stayed editable, as intended.
 Dev server stopped afterward.
+
+### v2-27: DPR edit date silently shifted back a day in IST (starting 2026-09-07)
+
+**Reported by**: team, via screenshot of the DPR Log and the Recent Activity notification feed.
+Flagged as "when a DPR is edited it should show the current date, but it's showing something odd."
+
+**Root cause**: `openEditDPR()` in `src/sections/dpr/dprTab.js` pre-fills the (disabled) DPR-date
+field from the entry's stored date like this:
+```js
+document.getElementById('dpr-date').value = new Date(d.date).toISOString().slice(0,10);
+```
+`dpr_log.date` is stored as locale text (e.g. `"04 Sept 2026"` — see the existing "DPR date
+text/timezone gotcha" note). `new Date("04 Sept 2026")` parses as **local midnight**; `.toISOString()`
+then converts to UTC, which in IST (UTC+5:30) rolls the calendar day back by one — reproduced
+directly: `new Date("04 Sept 2026").toISOString().slice(0,10)` → `"2026-09-03"`. Whether this
+actually corrupts the saved date on a given edit depends on the editor's browser timezone, which is
+why it doesn't show up on every edit — but it will hit reliably for anyone editing in IST.
+
+This is the same class of bug already fixed elsewhere via `toLocalISODate()` (added earlier in this
+same file specifically to avoid the `toISOString()`-in-IST rollover) — that helper just wasn't used
+at this one call site.
+
+Note: showing the DPR's *original* report date (not today) when editing is intentional — that's
+what lets a supervisor correct a past day's report instead of creating a duplicate for today. Only
+the parsing method is the bug; discussed with the user and confirmed to leave that behavior as-is.
+
+**Fix**: swap the `new Date(d.date).toISOString().slice(0,10)` call for the existing
+`toLocalISODate(d.date)` helper — no new logic, reuses the fix already proven correct elsewhere in
+this file.
+
+`complete.html` has the same buggy line, but it's a stale pre-restructure snapshot (last touched
+Aug 7, not referenced by anything the app serves — confirmed via grep) — left untouched per
+production-scope discipline.
+
+**Applied and verified**: `npm run build` clean. Verified live in the browser (local dev server,
+`VITE_TEST_MODE=true` mock data, no production rows touched), browser confirmed running in
+`Asia/Calcutta` (IST) — the timezone that triggers the bug. Logged in as `admin`/`1234`, opened
+"Edit This DPR" on the Ajmera (Wadala Mumbai) — B-Wing entry dated 16 Jun 2026:
+- Before the fix (simulated the old `toISOString()` line in the same browser session for
+  comparison): would have pre-filled the date field with `2026-06-15` — one day off.
+- After the fix: date field correctly pre-fills `2026-06-16`, matching the panel title "Edit DPR —
+  16 Jun 2026". Cancelled out without saving (test-mode data only).
+Dev server stopped afterward.

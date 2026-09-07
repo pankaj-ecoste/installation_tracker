@@ -172,7 +172,7 @@ export function openEditDPR(id){
   // Prefill with the existing entry's values, on top of the fresh form the project
   // selector just built — this is what makes it an edit instead of a blank new entry.
   setTimeout(()=>{
-    document.getElementById('dpr-date').value=new Date(d.date).toISOString().slice(0,10);
+    document.getElementById('dpr-date').value=toLocalISODate(d.date);
     document.getElementById('dpr-panel-title').textContent='Edit DPR — '+d.date;
     document.getElementById('dpr-supervisor').value=d.supervisor||'';
     document.getElementById('dpr-committed-mp').value=d.committedMp||0;
