@@ -2107,3 +2107,52 @@ write; re-ran after the user explicitly approved the exact SQL). Confirmed via a
 the browser afterward: "tyu- test" back to no constraints badge, dashboard "Open constraints"
 back to 18 — production fully restored to its pre-test state, only the intended fix code
 (`dprTab.js`) and this plan entry remain changed.
+
+### v2-28 continued: backfilled 38 historical DPR constraints never pushed to their projects (2026-09-09)
+
+**Reported by**: team, via screenshot — Omaxe(The Royal meridian Ludhiana)'s DPR for 09 Sept 2026
+clearly shows a logged constraint ("Omaxe work will remain on hold until the 50mm*50mm*2mm
+Aluminium Tube is delivered..."), but the project's Constraints panel in All Projects still said
+"No constraints."
+
+**Investigated live against production, confirmed this is not a new bug**: queried `dpr_log`
+directly — the Omaxe entry (id 147) has a lower id than the verification row this session created
+*before* the v2-28 fix was even committed, and no DPR has been saved by anyone since. So entry 147
+was written by the old (pre-fix) code, exactly as expected — the v2-28 fix only wires up DPR saves
+going forward; it does nothing for constraints already sitting in old `dpr_log` rows whose
+projects were never updated.
+
+**Sized the backlog**: scanned every `dpr_log` row with a real (non-"None") constraint whose text
+wasn't already present on that project's `constraints` array. Found **38 such entries across 17
+projects**, going back to 19 Aug 2026 — Omaxe alone had 7 (some projects' constraint text already
+existed on the project from a manual "Update Progress → Add constraint" add, so those were
+excluded automatically as duplicates).
+
+**Decision, discussed with the user**: backfill all of them as `status: 'open'`, dated to each
+DPR's original date, in the exact shape the app already uses (`{text, status:'open', date,
+nextAction:'', solvedDate:''}` — same as `addUpdateConstraint()` and the new DPR-save code path).
+Known tradeoff accepted by the user: some of these may already be resolved on-site since being
+logged; they'll show as open until a supervisor/admin cycles their status via the project card,
+same manual step used for constraints logged from now on.
+
+**Applied**: one-off script (`DATABASE_URL`, not the app) — for each affected project, read its
+current `constraints` array, skip any DPR constraint text already present verbatim (avoids
+double-counting the 4 that already existed), append the rest in chronological order, recompute
+`constraints_open`, write back. Dry-run previewed first and matched exactly what was applied:
+**34 constraints added across 15 projects** (4 of the original 38 were already-present duplicates,
+correctly skipped). Affected projects: Ajmera (Wadala Mumbai) B-Wing, Ashiana (Gurugram) Tower 1,
+Ashiana (Jaipur) Tower 2, ATS Picturesque Tower 32, Home And Soul Tower C, NCR Monarch (banke
+bihari), Omaxe(The Royal meridian Ludhiana), Pioneer — Shaft, Platinum, Rishita Developer B2 and
+B3, Vibgyor, Bhattcorp, Amartaru, and the "tyu- test" dummy project (one genuine historical entry,
+separate from this session's own deleted test row).
+
+Nothing in `dpr_log` was changed — only `projects.constraints`/`constraints_open` for the 15
+affected projects. No other project/table touched.
+
+**Verified live against production afterward**: queried the Omaxe project directly — its
+`constraints` array now holds all 7 historical entries (19 Aug through 09 Sept 2026) in the
+correct shape, `constraints_open` = 7. Dashboard-wide open-constraints total: 18 (pre-backfill) +
+34 (added) = 52, matching exactly. (Browser-based UI verification was cut short by a Claude
+extension disconnect; the DB state confirmed above is what the app's own project-detail panel
+reads directly, via the same code path already proven correct in the v2-28 fix above, so this is
+taken as sufficient confirmation.)
