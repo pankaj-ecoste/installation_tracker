@@ -666,7 +666,18 @@ export async function saveDPR(){
     });
     if(Object.keys(state.dprChecklistState).length) await syncProject(p);
   }
-  if(cList.length&&cList[0]!=='None') logActivity('Constraint added', (p?p.name+' — '+p.tower:'Project')+' — '+cList.length+' constraint(s) logged via DPR');
+  if(cList.length&&cList[0]!=='None'){
+    logActivity('Constraint added', (p?p.name+' — '+p.tower:'Project')+' — '+cList.length+' constraint(s) logged via DPR');
+    // Constraint(s) logged as part of today's DPR — added straight to the project's constraints
+    // list, same as the snag block below, so they show up on the project card / dashboard
+    // (previously only saved onto the DPR entry itself). See plan.md v2-28.
+    if(p){
+      const today=new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+      p.constraints=[...(p.constraints||[]),...cList.map(text=>({text,status:'open',date:today,nextAction:'',solvedDate:''}))];
+      p.constraintsOpen=p.constraints.filter(c=>c.status==='open').length;
+      await syncProject(p);
+    }
+  }
   // roll product totals up into project's installed qty
   if(p){
       const rawTotalToday=productsOut.reduce((a,r)=>a+(r.todayInstalled||0),0);

@@ -2033,3 +2033,77 @@ production-scope discipline.
 - After the fix: date field correctly pre-fills `2026-06-16`, matching the panel title "Edit DPR —
   16 Jun 2026". Cancelled out without saving (test-mode data only).
 Dev server stopped afterward.
+
+### v2-28: Constraints logged via DPR never reach the project's Constraints list (starting 2026-09-09)
+
+**Reported by**: team, via screenshot of the "All Projects" module project card (Milestones /
+Constraints / Snag List / Project Documents panel — same panel `dashboardTab.js` renders) always
+showing "No constraints." even when a constraint was reported while filling that day's DPR. A
+second screenshot from the team shows the same panel's Snag List correctly displaying a
+DPR-logged snag ("Door handle is loose...") right above the empty Constraints section — the
+contrast is what surfaced the bug.
+
+**Root cause, confirmed by code reading**: this project-card panel reads two separate arrays
+stored directly on the project — `p.snags` and `p.constraints` — populated independently of the
+DPR log itself. In `saveDPR()` (`src/sections/dpr/dprTab.js`):
+- **Snags**: when a snag is typed into the DPR form, the code explicitly appends it to
+  `p.snags` and calls `syncProject(p)` (~line 741-756) — this is the fix that shipped previously
+  and is why the snag list now correctly shows up here.
+- **Constraints**: whatever is typed into the DPR form's own "Add constraint" list is saved only
+  onto the DPR log entry itself (`newDpr.constraints`, visible inside the DPR tab's per-entry
+  display) plus an activity-feed note ("Constraint added", line 669) — it is never pushed into
+  `p.constraints`, the array this project-card panel and the dashboard actually read. So the
+  panel shows "No constraints" regardless of what was logged in DPR. Same class of bug as the
+  snag one, just never got the equivalent fix.
+
+**Decisions finalized with the user before building (2026-09-09)**:
+1. Fix is scoped to `saveDPR()` only — mirror the existing snag-push block, don't touch the
+   snag/milestone/finance logic around it.
+2. Each DPR-typed constraint becomes its own new entry in `p.constraints`, using the exact same
+   shape the existing "Update Progress → Add constraint" flow already writes
+   (`formHelpers.js: addUpdateConstraint`): `{text, status:'open', date:<today, en-IN format>,
+   nextAction:'', solvedDate:''}`.
+3. No carry-forward/dedup across days — matches how snags already behave today (a DPR form always
+   starts blank; retyping the same constraint text on a later DPR creates a new list entry rather
+   than updating an old one). Confirmed with the user as acceptable, consistent with existing
+   snag behavior, not a new inconsistency being introduced.
+
+**Fix**: in `saveDPR()`, where the constraint list (`cList`) is currently only logged to the
+activity feed, also — when `cList[0] !== 'None'` — push each entry into `p.constraints` in the
+shape above, recompute `p.constraintsOpen` (drives the 🔴 open-count badge on the project card,
+same as `cycleConstraintStatus()` already does after a status change), and call
+`await syncProject(p)`. Purely additive: no existing branch, field, or call is modified.
+
+**Built (2026-09-09)**: `npm run build` clean.
+
+**Verified against TEST_MODE mock data first**: local dev server, no production rows touched —
+logged in as `admin`/`1234`, opened "Arun Seth — Supply only" (baseline: 2 existing constraints,
+"🔴 1 open" badge, dashboard "Open constraints" = 1), added a new DPR for it with one typed
+constraint, saved. Project card's Constraints section showed the new entry, badge updated 🔴 1
+open → 🔴 2 open, dashboard stat updated 1 → 2, no console errors, snag/checklist/qty-rollup in
+the same `saveDPR()` call all unaffected.
+
+**Then verified live against the real production database** (per user's request, since this app
+is in active production use — TEST_MODE alone wasn't enough): ran the dev server with the real
+`.env.local` credentials (`VITE_TEST_MODE=false`, real Supabase project `qxxcwctbaefwhjjlmiyi`) on
+a separate port, logged in with a real Team account (`admin`, provided by the user for this one
+verification pass). Used the real "tyu- test — —" project (access code `PRE0019`, project id 84)
+— this is the exact project from the team's original bug-report screenshot (same door-handle snag
+visible). Baseline confirmed: Constraints = "No constraints.", no 🔴 open badge, dashboard "Open
+constraints" = 18. Added a real DPR for it (today's installed qty left at 0 to avoid touching the
+real installed total) with one typed constraint ("TEST v2-28 production verification"), saved:
+- Project card's Constraints section showed the new entry in the same shape the manual
+  "Update Progress → Add constraint" flow produces.
+- Project badge updated → 🔴 1 open; dashboard-wide "Open constraints" stat updated 18 → 19.
+- Confirmed directly in Postgres (`DATABASE_URL`) that `projects.constraints` (id 84) held exactly
+  one object — the test entry, correctly shaped `{text, status:'open', date, nextAction:'',
+  solvedDate:''}` — and `dpr_log` had one new row (id 149) with the constraint text, matching
+  `saveDPR()`'s new logic exactly.
+
+**Cleanup (with explicit user sign-off on the exact statements run)**: deleted `dpr_log` row 149
+and reset `projects.constraints`/`constraints_open` back to `[]`/`0` for project 84, via a
+one-off script using `DATABASE_URL` (the Bash auto-classifier initially blocked a raw prod DB
+write; re-ran after the user explicitly approved the exact SQL). Confirmed via a fresh login in
+the browser afterward: "tyu- test" back to no constraints badge, dashboard "Open constraints"
+back to 18 — production fully restored to its pre-test state, only the intended fix code
+(`dprTab.js`) and this plan entry remain changed.
