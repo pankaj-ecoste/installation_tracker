@@ -361,6 +361,7 @@ export const CNC_FIELDS = [
   {key:'salesName',label:'Sales team name',required:true},
   {key:'salesEmail',label:'Sales team email',required:true},
   {key:'clientName',label:'Client name',required:true},
+  {key:'grillSizeSqFt',label:'Size of Grill (Sq Feet)',type:'number',required:true},
   {key:'developerName',label:'Developer name',required:true},
   {key:'needInstallation',label:'Need Installation?',type:'select',options:['Yes','No'],required:true}
 ];

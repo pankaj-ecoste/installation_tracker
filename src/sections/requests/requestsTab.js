@@ -302,13 +302,15 @@ export function notifyManagementNewRequest(r){
   const label=reqTypeLabel(r.requestType);
   const project=d.developerName||d.projectName||'—';
   const subject='New '+label+' request — '+r.requestNumber+' — '+project;
+  // CNC doesn't collect a client contact person or a visit location, so those two lines always
+  // rendered as "—" for CNC requests — dropped for CNC only, see plan.md v2-29 continued.
+  const lines=['Request number: '+r.requestNumber, 'Type: '+label, 'Raised by: '+(d.salesName||r.createdBy), 'Developer/Project: '+project];
+  if(reqFieldGroup(r.requestType)!=='cnc'){
+    lines.push('Client representative: '+(d.contactPerson||'—')+(d.mobile?' ('+d.mobile+')':''));
+    lines.push('Location: '+(d.locationForVisit||'—')+', '+(d.city||'—')+', '+(d.state||'—'));
+  }
   const body='A new '+label+' request has been raised in the Installation Tracker.\n\n'+
-    'Request number: '+r.requestNumber+'\n'+
-    'Type: '+label+'\n'+
-    'Raised by: '+(d.salesName||r.createdBy)+'\n'+
-    'Developer/Project: '+project+'\n'+
-    'Client representative: '+(d.contactPerson||'—')+(d.mobile?' ('+d.mobile+')':'')+'\n'+
-    'Location: '+(d.locationForVisit||'—')+', '+(d.city||'—')+', '+(d.state||'—')+'\n\n'+
+    lines.join('\n')+'\n\n'+
     'Please review and act on this request in the app:\n'+window.location.origin+'\n\n'+
     'Regards,\nEcoste Installation Tracker';
   notifyByGmail(getAdminEmail(), subject, body, getManagementCcEmails());
@@ -501,6 +503,32 @@ export async function setCNCStageActual(id, stageKey, value){
   const extra=(stageKey==='dispatched'&&value)?{status:'Dispatched'}:{};
   await updateRequestFields(id,{details:newDetails,...extra});
 }
+// CNC-only, post-save uploads (see plan.md v2-29 continued) — Design attaches a Rough Drawing
+// (optional, no effect on the stage timeline) and a Preview PDF once ready. Restricted to the
+// Design role, per the team's own prototype: this is Design's own work product, not something
+// Admin/Ops Manager attach on their behalf.
+export async function uploadCNCRoughDrawing(id, inputEl){
+  if(!state.currentUser||state.currentUser.role!=='design'){ alert('Only the Design role can attach a Rough Drawing.'); return; }
+  const files=pickFilesOrWarn(inputEl,3); if(!files) return;
+  const urls=await uploadFiles(files,'requests');
+  const r=state.requests.find(x=>x.id===id); if(!r) return;
+  const newDetails={...r.details, roughDrawingUrls:[...(r.details.roughDrawingUrls||[]),...urls]};
+  await updateRequestFields(id,{details:newDetails});
+}
+// Uploading a Preview PDF marks the "Preview created by Design team" stage done — sets that
+// stage's Actual date to today ONLY if it isn't already set, so a later re-upload (e.g. a
+// corrected file) never overwrites an already-recorded date.
+export async function uploadCNCPreviewPdf(id, inputEl){
+  if(!state.currentUser||state.currentUser.role!=='design'){ alert('Only the Design role can attach the Preview PDF.'); return; }
+  const files=pickFilesOrWarn(inputEl,20); if(!files) return;
+  const urls=await uploadFiles(files,'requests');
+  const r=state.requests.find(x=>x.id===id); if(!r) return;
+  const now=new Date();
+  const todayLocal=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+  const stages=(r.details.cncStages||[]).map(s=>(s.key==='previewCreated'&&!s.actual)?{...s,actual:todayLocal}:s);
+  const newDetails={...r.details, previewPdfUrls:[...(r.details.previewPdfUrls||[]),...urls], cncStages:stages};
+  await updateRequestFields(id,{details:newDetails});
+}
 
 // v2-20: uploaded docs were being saved into r.details all along but never shown anywhere —
 // this pulls every doc group (whichever ones this request actually has) into clickable links
@@ -512,6 +540,8 @@ function renderRequestDocs(r){
     ...POSTPO_DOC_CATEGORIES.map(c=>({label:c.label, docs:d[c.id]})),
     {label:'Sample PO', docs:d['req-sample-po']},
     {label:'AutoCAD file', docs:d.autocadFileUrls},
+    {label:'Rough Drawing', docs:d.roughDrawingUrls},
+    {label:'Preview PDF', docs:d.previewPdfUrls},
     {label:reqFieldGroup(r.requestType)==='survey'?'Survey photos':'Visit photos', docs:d.visitPhotoUrls}
   ].filter(g=>g.docs&&g.docs.length);
   if(!groups.length) return '';
@@ -566,10 +596,17 @@ export function renderRequestCard(r){
     '</div>':'')+
     (isSalesViewer?'':isDesign?
     // Design can't Acknowledge/edit/convert anything (view-only, see plan.md v2-29), but still
-    // gets to see the CNC stage timeline for whatever CNC requests are visible to them.
+    // gets to see the CNC stage timeline for whatever CNC requests are visible to them, and is
+    // the one who attaches the Rough Drawing / Preview PDF (v2-29 continued) — the only fields
+    // Design can write to on an otherwise view-only request.
     (group==='cnc'?'<div style="margin-top:10px;padding-top:10px;border-top:1px solid #f0f0f0">'+
       '<button class="btn btn-outline btn-sm" onclick="toggleRequestTimeline('+r.id+')">⏱ '+(state.requestTimelineExpanded[r.id]?'Hide':'View')+' stage timeline</button>'+
-      (state.requestTimelineExpanded[r.id]?renderCNCStageTimeline(r):'')+
+      (state.requestTimelineExpanded[r.id]?renderCNCStageTimeline(r)+
+        '<div class="form-group" style="margin-top:10px"><label class="form-label" style="font-size:12px">Rough Drawing (Optional) (Up To 3 Files)</label>'+
+        '<input type="file" multiple accept="image/*,.pdf,.doc,.docx" style="font-size:12px" onchange="uploadCNCRoughDrawing('+r.id+',this)"></div>'+
+        '<div class="form-group" style="margin-top:8px"><label class="form-label" style="font-size:12px">Preview PDF — marks "Preview created" done (Up To 20 Files)</label>'+
+        '<input type="file" multiple accept="image/*,.pdf,.doc,.docx" style="font-size:12px" onchange="uploadCNCPreviewPdf('+r.id+',this)"></div>'
+      :'')+
     '</div>':'')
     :
     '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid #f0f0f0">'+

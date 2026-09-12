@@ -2301,3 +2301,67 @@ setCNCStageActual, renderRequestCard branching, renderRequests visibility filter
 Not yet verified live against the production database — will do that next if you'd like, following
 the same pattern as prior entries (real `.env.local` credentials, a throwaway test request,
 cleanup afterward with explicit sign-off on the exact statements run).
+
+### v2-29 continued: Rough Drawing/Preview PDF uploads, CNC email fix, grill size field (2026-09-12)
+
+**Requested by**: team, via 3 screenshots — (1) their own earlier Claude-Artifact prototype showing
+that once a CNC request is saved, its stage-timeline view should also offer a "Rough Drawing"
+(optional) and a "Preview PDF" upload, the latter marking "Preview created by Design team" done;
+(2) the "New CNC request" notification email showing blank "Client representative"/"Location"
+lines (CNC never collects either) that should be removed; (3) a new "Size of Grill (Sq Feet)"
+field, positioned just before "Developer Name" on the CNC form.
+
+**Decisions finalized with the user before building:**
+1. Only the **Design** role can upload the Rough Drawing / Preview PDF (not Admin/Ops Manager) —
+   this is Design's own work product. This is a narrow, explicit exception to Design's otherwise
+   view-only status (v2-29 above): Design still can't edit any other field, type a stage date
+   manually, or delete/acknowledge/convert a request — only these 2 uploads.
+2. Uploading a Preview PDF sets the "Preview created by Design team" stage's Actual date to today
+   **only if it isn't already set** — a later re-upload (e.g. a corrected file) never overwrites an
+   already-recorded date. Rough Drawing has no effect on the stage timeline at all — it's a plain
+   optional attachment.
+3. The email fix removes the "Client representative"/"Location" lines **for CNC requests only** —
+   every other request type's email is untouched, since those fields are real for them. Nothing
+   added in their place.
+4. "Size of Grill (Sq Feet)" is a required numeric field, positioned in `CNC_FIELDS` between
+   "Client name" and "Developer name" (`grillSizeSqFt` key) — reuses the existing generic
+   field-renderer/validator, no new code path needed for it specifically.
+
+**Fix**:
+- `constants.js`: added `grillSizeSqFt` to `CNC_FIELDS` in the requested position.
+- `requestsTab.js`:
+  - `notifyManagementNewRequest()` — rebuilt the body as a `lines` array; the "Client
+    representative"/"Location" lines are only pushed when `reqFieldGroup(r.requestType)!=='cnc'`.
+  - New `uploadCNCRoughDrawing(id, inputEl)` and `uploadCNCPreviewPdf(id, inputEl)` — both gated to
+    `state.currentUser.role==='design'`, upload into the existing `'requests'` storage folder (no
+    new migration), and save into `r.details.roughDrawingUrls` / `r.details.previewPdfUrls`. The
+    Preview PDF path additionally patches `cncStages` to set the `previewCreated` stage's `actual`
+    to today's LOCAL date (built from `getFullYear`/`getMonth`/`getDate`, not `toISOString()` — same
+    IST-safe pattern as `computeCNCStages`) only when that stage's `actual` is currently empty.
+  - `renderRequestDocs()` — added "Rough Drawing" and "Preview PDF" as doc groups so anyone who can
+    see the card (any role) sees the uploaded files as links, even though only Design can add them.
+  - `renderRequestCard()` — inside the existing Design-only, `group==='cnc'`, timeline-expanded
+    block, added the two file inputs (inline `onchange`, matching the existing stage-date-input
+    pattern rather than the `fileUploadRowHTML`+`.onchange=` pattern, since N request cards render
+    from one HTML-string template rather than one static panel).
+- `domGlobals.js`: exposed `uploadCNCRoughDrawing`/`uploadCNCPreviewPdf` (referenced from inline
+  `onchange` attributes).
+
+**Built**: `npm run build` clean.
+
+**Verified against TEST_MODE mock data in a real browser** (fresh dev server, separate port, no
+production data touched):
+- New CNC request form: "Size Of Grill (Sq Feet) *" renders exactly between "Client Name" and
+  "Developer Name", as a numeric input.
+- Saved a CNC request and inspected the resulting Gmail compose window (closed without sending):
+  body reads "Request number / Type / Raised by / Developer-Project" then straight to "Please
+  review..." — no "Client representative"/"Location" lines, no stray blank lines from the removal.
+- Logged in as the Design-role test user: the "Rough Drawing"/"Preview PDF" upload fields appear
+  inside the expanded stage timeline, labeled exactly as in the team's prototype. Uploading a
+  Preview PDF immediately set "Preview created by Design team"'s Actual to today ("12 Sept 2026")
+  with Gap "3d early", and the file appeared under a new "Preview PDF" doc-links line. Uploading a
+  Rough Drawing added a separate "Rough Drawing" doc-links line with no effect on the timeline.
+  Re-uploading a second Preview PDF added a second link but did **not** change the already-set
+  Actual date — confirming the "set once" behavior.
+
+Not yet verified live against the production database.
