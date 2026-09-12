@@ -96,6 +96,14 @@ export function showTeamDashboard(){
   // (right to view, not edit — the addLot permission still blocks adding/editing lots).
   const matTab=document.getElementById('tab-material');
   if(matTab) matTab.style.display=(canDo('manageDispatch')||state.currentUser&&state.currentUser.role==='supervisor')?'':'none';
+  // Design role is scoped to only the Requests module (see plan.md v2-29) — "All projects" and
+  // "Pipeline" aren't gated by any permission for any other role today, so this is an explicit
+  // check rather than a side effect of the `can` flags above.
+  const isDesign=state.currentUser&&state.currentUser.role==='design';
+  const projTab=document.getElementById('tab-projects');
+  if(projTab) projTab.style.display=isDesign?'none':'';
+  const pipelineTab=document.getElementById('tab-pipeline');
+  if(pipelineTab) pipelineTab.style.display=isDesign?'none':'';
   const addBtn=document.getElementById('btn-add-proj');
   if(addBtn) addBtn.style.display=canDo('addProject')?'':'none';
   const dprBtn=document.getElementById('btn-add-dpr');
@@ -107,9 +115,9 @@ export function showTeamDashboard(){
   const finRowBtn=document.getElementById('btn-add-finance-row');
   if(finRowBtn) finRowBtn.style.display=canDo('addFinanceRow')?'':'none';
 
-  // scope banner
+  // scope banner — doesn't apply to Design, which never sees the Projects tab this is about.
   const banner=document.getElementById('scope-banner');
-  if(banner&&state.currentUser){
+  if(banner&&state.currentUser&&!isDesign){
     const isAll=canDo('viewAll');
     const myCount=visibleProjects().length;
     banner.style.display='block';
@@ -120,10 +128,13 @@ export function showTeamDashboard(){
       banner.style.cssText='display:block;font-size:12px;padding:6px 20px;border-bottom:1px solid #e0e0e0;background:#f0f4ff;color:#1a3a8f';
       banner.innerHTML='👤 '+state.currentUser.name.split(' ')[0]+' — viewing <b>your '+myCount+' project'+(myCount!==1?'s':'')+'</b> &nbsp;<span style="color:#888;font-weight:400">only</span>';
     }
+  } else if(banner){
+    banner.style.display='none';
   }
   updateBell();
-  state.activeTab='projects'; // always reset to a safe, known tab on login — otherwise whatever
-  setTab('projects');   // tab/content the PREVIOUS user was on stays rendered underneath.
+  // Design lands on Requests by default — "All projects" isn't even visible to them.
+  state.activeTab=isDesign?'requests':'projects'; // always reset to a safe, known tab on login —
+  setTab(state.activeTab); // otherwise whatever tab/content the PREVIOUS user was on stays rendered underneath.
   renderMetrics(); renderProjects();
 }
 

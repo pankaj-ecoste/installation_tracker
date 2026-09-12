@@ -1,7 +1,7 @@
 import { state } from '../../lib/state.js';
 import { db } from '../../lib/supabaseClient.js';
 import { logActivity } from '../../lib/activityLog.js';
-import { MS_MAIN, MS_MAINORDER_STEPS, MS_MOCKUP_STEPS, MS_POSTMOCKUP_STEPS, MS_PREMAINSURVEY_STEPS, MS_PREMOCKUP, MS_SAMPLING, NEELAM_WA, POSTPO_DOC_CATEGORIES, POSTPO_FIELDS, PREPO_FIELDS, SURVEY_FIELDS, VISIT_FIELDS, getAdminEmail, getManagementCcEmails, milestoneKeyFor, notifyByGmail, reqFieldGroup, reqTypeLabel } from '../../lib/constants.js';
+import { CNC_FIELDS, CNC_STAGES, MS_MAIN, MS_MAINORDER_STEPS, MS_MOCKUP_STEPS, MS_POSTMOCKUP_STEPS, MS_PREMAINSURVEY_STEPS, MS_PREMOCKUP, MS_SAMPLING, NEELAM_WA, POSTPO_DOC_CATEGORIES, POSTPO_FIELDS, PREPO_FIELDS, SURVEY_FIELDS, VISIT_FIELDS, computeCNCStages, getAdminEmail, getManagementCcEmails, milestoneKeyFor, notifyByGmail, reqFieldGroup, reqNumberPrefix, reqTypeLabel } from '../../lib/constants.js';
 import { canDo, daysDiff, fmtDate, visibleProjects } from '../../lib/helpers.js';
 import { projectToRow, requestToRow, rowToProject, rowToRequest } from '../../lib/mappers.js';
 import { docLink, fileUploadRowHTML, pickFilesOrWarn, uploadFiles } from '../../lib/uploads.js';
@@ -98,7 +98,7 @@ export function renderRequestFields(){
   const type=document.getElementById('req-type').value;
   const group=reqFieldGroup(type);
   const subType=document.getElementById('req-postpo-type').value;
-  const allFields=group==='order'?POSTPO_FIELDS:group==='survey'?SURVEY_FIELDS:PREPO_FIELDS;
+  const allFields=group==='order'?POSTPO_FIELDS:group==='survey'?SURVEY_FIELDS:group==='cnc'?CNC_FIELDS:PREPO_FIELDS;
   // Framing Material / Section size only apply when Installation type = "With frame" —
   // hidden (and not required) entirely for "Without frame".
   const fields=allFields.filter(f=>(!f.conditionalOn||f.conditionalOn===subType)&&(!f.onlyFor||f.onlyFor===type));
@@ -109,8 +109,9 @@ export function renderRequestFields(){
   const today=new Date().toISOString().slice(0,10);
   fields.forEach(f=>{ if(f.type==='date'){ const el=document.getElementById('req-'+f.key); if(el) el.min=today; } });
 
-  // Document upload (up to 2), per the doc
-  document.getElementById('req-doc-upload').innerHTML=fileUploadRowHTML('req-docs','Document upload',5);
+  // Document upload (up to 2), per the doc — mandatory only for CNC (see plan.md v2-29); stays
+  // optional for every other request type exactly as before.
+  document.getElementById('req-doc-upload').innerHTML=fileUploadRowHTML('req-docs','Document upload'+(group==='cnc'?' *':''),5);
   document.getElementById('req-docs').onchange=async function(){
     const files=pickFilesOrWarn(this,5); if(!files) return;
     document.getElementById('req-docs-list').textContent='Uploading '+files.length+' file(s)...';
@@ -118,6 +119,21 @@ export function renderRequestFields(){
     state.reqDetails.documentUrls=[...(state.reqDetails.documentUrls||[]),...urls];
     document.getElementById('req-docs-list').textContent=state.reqDetails.documentUrls.length+' file(s) uploaded.';
   };
+
+  // CNC-only optional AutoCAD file upload (up to 1) — reuses the same 'requests' storage folder,
+  // no new storage policy needed.
+  const cncDocEl=document.getElementById('req-cnc-doc-upload');
+  cncDocEl.classList.toggle('hidden', group!=='cnc');
+  if(group==='cnc'){
+    cncDocEl.innerHTML=fileUploadRowHTML('req-autocad','AutoCAD File (optional)',1);
+    document.getElementById('req-autocad').onchange=async function(){
+      const files=pickFilesOrWarn(this,1); if(!files) return;
+      document.getElementById('req-autocad-list').textContent='Uploading '+files.length+' file(s)...';
+      const urls=await uploadFiles(files,'requests');
+      state.reqDetails.autocadFileUrls=[...(state.reqDetails.autocadFileUrls||[]),...urls];
+      document.getElementById('req-autocad-list').textContent=state.reqDetails.autocadFileUrls.length+' file(s) uploaded.';
+    };
+  }
 
   // Post-PO documents — bifurcated into 3 real upload categories instead of one combined link field
   const postpoDocEl=document.getElementById('req-postpo-doc-upload');
@@ -151,10 +167,11 @@ export function renderRequestFields(){
     };
   }
 
-  // Visit report — never shown to Sales/Viewer at all (not just read-only), per the spec.
-  // Only makes sense once a request already exists and is being edited by staff who can see it.
+  // Visit report — never shown to Sales/Viewer (or Design, same read-only treatment — see
+  // plan.md v2-29) at all, per the spec. Only makes sense once a request already exists and is
+  // being edited by staff who can see it.
   const visitCard=document.getElementById('req-visit-card');
-  const salesCanSeeVisit=!(state.currentUser&&state.currentUser.role==='viewer');
+  const salesCanSeeVisit=!(state.currentUser&&['viewer','design'].includes(state.currentUser.role));
   if(state.editingRequestId&&salesCanSeeVisit){
     document.getElementById('req-visit-card').querySelector('.form-card-title').textContent=group==='survey'?'Survey report (filled by site supervisor after survey)':'Visit report (filled by site supervisor after visit)';
     const isSamplingType=type==='sampling-survey';
@@ -208,18 +225,18 @@ export function openEditRequest(id){
 }
 
 export function genRequestNumber(type){
-  const group=reqFieldGroup(type);
-  const prefix=group==='order'?'PPO':group==='survey'?'SUR':'PRE';
-  // Numbers must be unique per prefix, not per exact request type — 'order' covers
-  // mockup/post-mockup/main-order/post-main-order and 'visit' covers pre-mockup/pre-main-survey,
-  // all sharing one prefix. Counting per-type let e.g. the first mockup and first main-order
-  // both become "PPO-0001", which later collides when either is converted to a project
-  // (the project access code is derived from the request number). Basing this on the max
-  // existing suffix (rather than a plain count) also survives request deletions, which would
-  // otherwise shrink a count-based sequence back into an already-used number.
+  const prefix=reqNumberPrefix(type);
+  // Numbers must be unique per prefix, not per exact request type or field-group — 'order' covers
+  // mockup/post-mockup/main-order/post-main-order, and 'PRE' covers both the 'visit' group
+  // (pre-mockup/pre-main-survey) AND the 'cnc' group, which shares the same prefix. Counting by
+  // field-group instead of by the resolved prefix would let e.g. the first CNC and the first
+  // Pre-Mockup request both become "PRE-0001" — a collision, since two different groups share one
+  // prefix (see plan.md v2-29). Basing this on the max existing suffix (rather than a plain count)
+  // also survives request deletions, which would otherwise shrink a count-based sequence back into
+  // an already-used number.
   let max=0;
   for(const r of state.requests){
-    if(reqFieldGroup(r.requestType)!==group) continue;
+    if(reqNumberPrefix(r.requestType)!==prefix) continue;
     const m=/^([A-Z]+)-(\d+)$/.exec(r.requestNumber||'');
     if(m&&m[1]===prefix) max=Math.max(max,parseInt(m[2],10));
   }
@@ -234,12 +251,16 @@ export async function saveRequest(){
   const err=document.getElementById('req-error');
   const mergedDetails={...state.reqDetails,...state.reqVisitDetails};
   if(group==='order'&&!subType){ err.classList.remove('hidden'); document.getElementById('req-err-msg').textContent='Please select an Installation type.'; return; }
-  const fieldSet=(group==='order'?POSTPO_FIELDS:group==='survey'?SURVEY_FIELDS:PREPO_FIELDS).filter(f=>(!f.conditionalOn||f.conditionalOn===subType)&&(!f.onlyFor||f.onlyFor===type));
+  const fieldSet=(group==='order'?POSTPO_FIELDS:group==='survey'?SURVEY_FIELDS:group==='cnc'?CNC_FIELDS:PREPO_FIELDS).filter(f=>(!f.conditionalOn||f.conditionalOn===subType)&&(!f.onlyFor||f.onlyFor===type));
   const missingField=fieldSet.find(f=>f.required&&!String(mergedDetails[f.key]||'').trim());
   if(missingField){ err.classList.remove('hidden'); document.getElementById('req-err-msg').textContent='"'+missingField.label+'" is required.'; return; }
   if(group==='order'){
     const missingDoc=POSTPO_DOC_CATEGORIES.find(c=>!mergedDetails[c.id]||!mergedDetails[c.id].length);
     if(missingDoc){ err.classList.remove('hidden'); document.getElementById('req-err-msg').textContent='Please upload at least one file under "'+missingDoc.label+'".'; return; }
+  }
+  // CNC's Document Upload is mandatory (AutoCAD stays optional) — see plan.md v2-29.
+  if(group==='cnc'&&(!mergedDetails.documentUrls||!mergedDetails.documentUrls.length)){
+    err.classList.remove('hidden'); document.getElementById('req-err-msg').textContent='Please upload at least one file under "Document upload".'; return;
   }
   // Sample PO upload is optional for Sampling Survey requests — not blocking save.
 
@@ -250,10 +271,15 @@ export async function saveRequest(){
     if(error){ console.error('Supabase update failed',error); err.classList.remove('hidden'); document.getElementById('req-err-msg').textContent='Could not save — check console.'; return; }
     state.requests[idx]=updated;
   } else {
+    // Local calendar date (not toISOString(), which rolls back a day in IST — see plan.md's
+    // "DPR date text/timezone gotcha") — used as day 0 for the CNC stage timeline below.
+    const now=new Date();
+    const todayLocal=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+    const finalDetails=group==='cnc'?{...mergedDetails, cncStages:computeCNCStages(todayLocal)}:mergedDetails;
     const newReq={
       requestNumber:genRequestNumber(type), requestType:type, requestSubType:group==='order'?subType:'', status:'New', createdBy,
       assignedSupervisor:'', plannedVisitDate:'', actualVisitDate:'', plannedDateLocked:false,
-      details:mergedDetails, checklist:[], linkedProjectId:null
+      details:finalDetails, checklist:[], linkedProjectId:null
     };
     // No client-supplied id — requests.id is a real Postgres identity column, so letting the
     // database assign it atomically avoids two concurrent submissions both computing the same
@@ -335,13 +361,20 @@ export function renderRequests(){
     visible=state.requests.filter(r=>r.assignedSupervisor===state.currentUser.username);
   } else if(state.currentUser&&state.currentUser.role==='viewer'){
     visible=state.requests.filter(r=>r.createdBy===state.currentUser.username||r.assignedSupervisor===state.currentUser.username);
+  } else if(state.currentUser&&state.currentUser.role==='design'){
+    // Design sees a CNC request from the moment it's raised (no site-visit step, so their work
+    // starts immediately) — once it reaches "Dispatched" their part is done and it drops off this
+    // list. Every other request type only becomes visible to Design once the site survey is
+    // confirmed (Visit Done / Reviewed) — there's nothing for Design to act on before that,
+    // including a non-CNC request Design might have raised themselves. See plan.md v2-29.
+    visible=state.requests.filter(r=>r.requestType==='cnc'?r.status==='New':['Visit Done','Reviewed'].includes(r.status));
   }
   const filtered=visible.filter(r=>(!sf||r.status===sf));
   if(!filtered.length){ el.innerHTML='<div class="empty">No requests yet'+(state.requests.length===0&&visible.length===0?' — or the requests table hasn\'t been created in Supabase yet.':'.')+'</div>'; return; }
   el.innerHTML=filtered.map(r=>renderRequestCard(r)).join('');
 }
 
-export const REQ_STATUS_COLOR={'New':'bb','Acknowledged':'ba','Visit Done':'bg','Reviewed':'bg','Converted to Project':'bgr'};
+export const REQ_STATUS_COLOR={'New':'bb','Acknowledged':'ba','Visit Done':'bg','Reviewed':'bg','Converted to Project':'bgr','Dispatched':'bgr'};
 
 export function sendVisitReportEmail(id){
   const r=state.requests.find(x=>x.id===id); if(!r) return;
@@ -437,6 +470,37 @@ export function renderRequestStageTimeline(r){
     '<div style="font-size:11px;color:#888;margin-top:6px">"Planned/Target" for the Acknowledge and Review/Convert stages is a standard SLA window (no business-set date exists for those) \u2014 only the Visit/Survey date is a real planned date entered by Admin.</div>'+
   '</div>';
 }
+// CNC production stage timeline (see plan.md v2-29) \u2014 replaces renderRequestStageTimeline above
+// for CNC requests only. Planned dates were computed once at request creation (computeCNCStages)
+// and never recalculate; Actual dates are editable inline by whoever holds the addMilestone
+// permission (Admin + Ops Manager, same gate already used for project milestone dates).
+export function renderCNCStageTimeline(r){
+  const stages=(r.details&&r.details.cncStages)||[];
+  if(!stages.length) return '<div style="font-size:12px;color:#888;margin-top:10px">Stage timeline not available for this request.</div>';
+  const canEdit=canDo('addMilestone');
+  const rows=stages.map(s=>{
+    const gap=s.actual?(()=>{ const g=daysDiff(s.planned,s.actual); return g===0?{text:'On time',color:'#444'}:g<0?{text:Math.abs(g)+'d early',color:'#1a5e2a'}:{text:g+'d late',color:'#cc3333'}; })():{text:'Pending',color:'#888'};
+    const actualCell=canEdit
+      ? '<input type="date" class="form-input" style="padding:4px 6px;font-size:12px;width:140px" value="'+(s.actual||'')+'" onchange="setCNCStageActual('+r.id+',\''+s.key+'\',this.value)">'
+      : (s.actual?('<span style="color:#1D9E75;font-weight:600">'+fmtDate(s.actual)+'</span>'):'<span style="color:#888">Pending</span>');
+    return '<tr><td>'+s.label+'</td><td style="color:#666">'+fmtDate(s.planned)+'</td><td>'+actualCell+'</td><td style="color:'+gap.color+';font-weight:600">'+gap.text+'</td></tr>';
+  }).join('');
+  return '<div style="overflow-x:auto;margin-top:10px">'+
+    '<table class="team-table"><thead><tr><th>Stage</th><th>Planned</th><th>Actual</th><th>Gap</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+    '<div style="font-size:11px;color:#888;margin-top:6px">Planned dates were fixed when this request was created and don\'t change afterward.'+(canEdit?' Fill in Actual dates as each stage completes.':'')+'</div>'+
+  '</div>';
+}
+// Saves one CNC stage's Actual date inline from the request card (see plan.md v2-29). Saving the
+// final "Dispatched" stage's Actual date auto-flips the request's own status \u2014 no separate manual
+// "mark complete" action exists.
+export async function setCNCStageActual(id, stageKey, value){
+  if(!canDo('addMilestone')){ alert('You do not have permission to update the CNC stage timeline.'); return; }
+  const r=state.requests.find(x=>x.id===id); if(!r) return;
+  const stages=(r.details.cncStages||[]).map(s=>s.key===stageKey?{...s,actual:value}:s);
+  const newDetails={...r.details, cncStages:stages};
+  const extra=(stageKey==='dispatched'&&value)?{status:'Dispatched'}:{};
+  await updateRequestFields(id,{details:newDetails,...extra});
+}
 
 // v2-20: uploaded docs were being saved into r.details all along but never shown anywhere —
 // this pulls every doc group (whichever ones this request actually has) into clickable links
@@ -447,6 +511,7 @@ function renderRequestDocs(r){
     {label:'Documents', docs:d.documentUrls},
     ...POSTPO_DOC_CATEGORIES.map(c=>({label:c.label, docs:d[c.id]})),
     {label:'Sample PO', docs:d['req-sample-po']},
+    {label:'AutoCAD file', docs:d.autocadFileUrls},
     {label:reqFieldGroup(r.requestType)==='survey'?'Survey photos':'Visit photos', docs:d.visitPhotoUrls}
   ].filter(g=>g.docs&&g.docs.length);
   if(!groups.length) return '';
@@ -459,11 +524,14 @@ export function renderRequestCard(r){
   const d=r.details||{};
   const group=reqFieldGroup(r.requestType);
   const title=group==='order'?(d.projectName||'Untitled request'):group==='survey'?(d.projectNameKnown||d.developerName||'Untitled survey request'):(d.developerName||'Untitled request');
-  const sub=group==='order'?(d.customerName||''):(d.contactPerson||'');
+  const sub=group==='order'?(d.customerName||''):group==='cnc'?(d.clientName||''):(d.contactPerson||'');
   const canAck=canDo('addProject')||canDo('manageTeam');
   // Per the spec: once a Sales/Viewer submits a request, they can only VIEW its status —
   // no editing, no visit report actions, nothing. Everyone else keeps normal access.
+  // Design (see plan.md v2-29) gets the same read-only treatment for every request they can see.
   const isSalesViewer=state.currentUser&&state.currentUser.role==='viewer';
+  const isDesign=state.currentUser&&state.currentUser.role==='design';
+  const isReadOnlyRole=isSalesViewer||isDesign;
   const linkedProject=r.linkedProjectId?state.projects.find(p=>p.id===r.linkedProjectId):null;
   return '<div class="proj-card" id="req-card-'+r.id+'" style="cursor:default">'+
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">'+
@@ -481,30 +549,37 @@ export function renderRequestCard(r){
         '</div>'+
       '</div>'+
       '<div style="display:flex;gap:6px;flex-shrink:0">'+
-        (!isSalesViewer&&r.plannedDateLocked&&state.currentUser&&state.currentUser.role==='admin'?'<button class="icon-btn btn-sm" title="Change planned date (admin only)" onclick="changePlannedDate('+r.id+')">🔓📅</button>':'')+
-        (isSalesViewer?'<button class="icon-btn btn-sm" title="View only" onclick="viewRequestReadOnly('+r.id+')">👁</button>':'<button class="icon-btn btn-sm" onclick="openEditRequest('+r.id+')">✏️</button>')+
-        (!isSalesViewer&&canDo('deleteRequest')?'<button class="icon-btn btn-sm danger" title="Delete request" onclick="askDeleteRequest('+r.id+')">🗑</button>':'')+
+        (!isReadOnlyRole&&r.plannedDateLocked&&state.currentUser&&state.currentUser.role==='admin'?'<button class="icon-btn btn-sm" title="Change planned date (admin only)" onclick="changePlannedDate('+r.id+')">🔓📅</button>':'')+
+        (isReadOnlyRole?'<button class="icon-btn btn-sm" title="View only" onclick="viewRequestReadOnly('+r.id+')">👁</button>':'<button class="icon-btn btn-sm" onclick="openEditRequest('+r.id+')">✏️</button>')+
+        (!isReadOnlyRole&&canDo('deleteRequest')?'<button class="icon-btn btn-sm danger" title="Delete request" onclick="askDeleteRequest('+r.id+')">🗑</button>':'')+
       '</div>'+
     '</div>'+
     renderRequestDocs(r)+
-    // Sales-visible status summary — Project name, Developer, Location, State, and committed
-    // completion date, per the spec, shown right on the card so sales doesn't need to dig in.
-    (isSalesViewer?'<div style="background:#f5f5f3;border-radius:6px;padding:8px 10px;margin-top:8px;font-size:12px;color:#444">'+
+    // Read-only status summary — Project name, Developer, Location, State, and committed
+    // completion date, per the spec, shown right on the card so Sales/Design doesn't need to dig in.
+    (isReadOnlyRole?'<div style="background:#f5f5f3;border-radius:6px;padding:8px 10px;margin-top:8px;font-size:12px;color:#444">'+
       '<div><b>Project:</b> '+(linkedProject?linkedProject.name+' — '+linkedProject.tower:(d.projectName||d.projectNameKnown||'—'))+'</div>'+
       '<div><b>Developer:</b> '+(d.developerName||'—')+'</div>'+
       '<div><b>Location:</b> '+(d.locationForVisit||'—')+'</div>'+
       '<div><b>State:</b> '+(d.state||'—')+'</div>'+
       '<div><b>Committed completion:</b> '+(linkedProject?fmtDate(linkedProject.committedDate):'Not yet committed')+'</div>'+
     '</div>':'')+
-    (isSalesViewer?'':
+    (isSalesViewer?'':isDesign?
+    // Design can't Acknowledge/edit/convert anything (view-only, see plan.md v2-29), but still
+    // gets to see the CNC stage timeline for whatever CNC requests are visible to them.
+    (group==='cnc'?'<div style="margin-top:10px;padding-top:10px;border-top:1px solid #f0f0f0">'+
+      '<button class="btn btn-outline btn-sm" onclick="toggleRequestTimeline('+r.id+')">⏱ '+(state.requestTimelineExpanded[r.id]?'Hide':'View')+' stage timeline</button>'+
+      (state.requestTimelineExpanded[r.id]?renderCNCStageTimeline(r):'')+
+    '</div>':'')
+    :
     '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid #f0f0f0">'+
-      (r.status==='New'&&canAck?'<button class="btn btn-outline btn-sm" onclick="acknowledgeRequest('+r.id+')">✅ Acknowledge & assign</button>':'')+
+      (r.status==='New'&&canAck&&group!=='cnc'?'<button class="btn btn-outline btn-sm" onclick="acknowledgeRequest('+r.id+')">✅ Acknowledge & assign</button>':'')+
       (r.status==='Acknowledged'?'<button class="btn btn-outline btn-sm" onclick="openEditRequest('+r.id+')">📝 '+(group==='survey'?'Fill survey report':'Fill visit report')+'</button><button class="btn btn-outline btn-sm" onclick="advanceRequestStatus('+r.id+',\'Visit Done\')">Mark '+(group==='survey'?'survey':'visit')+' done</button>':'')+
       (r.status==='Visit Done'&&canAck?'<button class="btn btn-outline btn-sm" onclick="advanceRequestStatus('+r.id+',\'Reviewed\')">🔍 Mark reviewed</button><button class="btn btn-outline btn-sm" onclick="sendVisitReportEmail('+r.id+')">📧 Send visit report to sales team</button>':'')+
       (r.status==='Reviewed'&&canDo('addProject')?'<button class="btn btn-green btn-sm" onclick="convertRequestToProject('+r.id+')">➜ Convert to project(s)</button>':'')+
       '<button class="btn btn-outline btn-sm" onclick="toggleRequestTimeline('+r.id+')">⏱ '+(state.requestTimelineExpanded[r.id]?'Hide':'View')+' stage timeline</button>'+
     '</div>'+
-    (state.requestTimelineExpanded[r.id]?renderRequestStageTimeline(r):''))+
+    (state.requestTimelineExpanded[r.id]?(group==='cnc'?renderCNCStageTimeline(r):renderRequestStageTimeline(r)):''))+
   '</div>';
 }
 // Read-only view for Sales/Viewer — same panel, but every field disabled and no Save button,

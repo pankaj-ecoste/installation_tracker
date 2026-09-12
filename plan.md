@@ -2156,3 +2156,148 @@ correct shape, `constraints_open` = 7. Dashboard-wide open-constraints total: 18
 extension disconnect; the DB state confirmed above is what the app's own project-detail panel
 reads directly, via the same code path already proven correct in the v2-28 fix above, so this is
 taken as sufficient confirmation.)
+
+### v2-29: CNC request type + new "Design" role (planned, not yet built)
+
+**Requested by**: team, via screenshots — (1) a new "CNC" request type covering a design →
+production → dispatch workflow for CNC panel orders, shown to admin as its own stage-by-stage
+timeline, and (2) a new "Design" role scoped to only the Requests module.
+
+Full flow discussed and finalized with the user (2026-09-12) before writing any code, per the
+project's ground rule. Read the screenshots referenced in that discussion for the original visual
+mockups (Request Type dropdown, CNC Details form, and the Stage Timeline table) — not reproduced
+here, only the resulting decisions are.
+
+**Part A — CNC request type**
+
+1. New Request Type option `CNC` added to the dropdown in `index.html`, alongside the existing 5
+   (Pre-Mockup, Mockup, Post-Mockup, Pre-Main Order Survey, Main Order). Those 5 types' fields,
+   uploads, numbering, and behavior are not touched.
+2. New field group `cnc` (`constants.js`: `reqFieldGroup`, new `CNC_FIELDS`): Sales Team Name*
+   (auto-filled from the logged-in user, same convention every other request type already uses),
+   Sales Team Email*, Client Name* (new field — distinct from the existing "Client representative
+   name"/`contactPerson` used by other types), Developer Name* (reuses the existing
+   `developerName` key), Need Installation?* (Yes/No dropdown — stored on the request only, no
+   downstream automation for now, confirmed with the user).
+3. The existing generic "Document upload" widget (already present for every request type, up to 5
+   files, currently optional) becomes **mandatory only for the `cnc` group** — label gets a `*`
+   and `saveRequest()` blocks save if empty. Every other request type keeps it optional exactly as
+   today.
+4. New optional AutoCAD File upload (up to 1 file), rendered only for `cnc`. Both this and the
+   Document upload reuse the existing `'requests'` Supabase Storage folder (already allow-listed in
+   `supabase/migrations/0005_storage_policies.sql`) — no new storage migration needed.
+5. No "Reference File 1"/"Reference File 2" fields are built — they only ever existed in the
+   team's mockup image, never in code, so there is nothing to remove from the app itself.
+6. **Numbering fix (root cause, not just CNC-specific)**: CNC shares the `PRE` prefix with
+   Pre-Mockup/Pre-Main-Survey requests, matching the team's own mockup (`PRE-0002`). The existing
+   `genRequestNumber()` counted the highest existing number by matching `reqFieldGroup` exactly,
+   not by the shared prefix string — harmless today because only one group ever used `PRE`, but
+   the moment a second group (`cnc`) shares that prefix, two different groups' first request would
+   both compute `PRE-0001` and collide. Reworking the counting loop to key off the resolved prefix
+   instead of the group value, so this can't happen — same class of bug as the request-numbering
+   incident already on record in this file.
+7. New CNC-only 7-stage production timeline (`CNC_STAGES` in `constants.js`; new
+   `renderCNCStageTimeline()` in `requestsTab.js`), shown instead of the existing generic 4-row SLA
+   timeline (`renderRequestStageTimeline`) only when `group==='cnc'` — the generic timeline is
+   untouched for every other request type. Stages, in order: Design received from client → Preview
+   created by Design team → Approval received from client → Approved design shared with Production
+   → Production started → Production completed → Dispatched.
+   - Planned dates for all 7 stages are computed **once**, at request creation, from fixed
+     day-offsets confirmed with the user (chained from stage to stage: +0, +3, +5, +0, +1, +3, +4
+     days). They are never recalculated afterward — confirmed explicitly with the user (a late/early
+     Actual date does not shift later stages' Planned dates). Rendered read-only.
+   - Actual dates are editable inline, gated by the same `addMilestone` permission Admin + Ops
+     Manager already hold for editing project milestone dates elsewhere in the app — no new
+     permission invented.
+   - Saving the "Dispatched" stage's Actual date auto-flips the request's own `status` field to
+     `Dispatched` — confirmed with the user there is no separate manual "mark complete" action.
+8. Card display (`renderRequestCard`): CNC's title/sub-line uses Developer Name / Client Name
+   (not the visit-flow's `contactPerson`/`mobile`, which CNC doesn't collect). The existing
+   "Acknowledge & assign" button (site-visit supervisor assignment) is hidden for `group==='cnc'`
+   — confirmed it doesn't apply, since CNC has no site-visit step. `Dispatched` added to the status
+   filter `<select>` in `index.html` and to `REQ_STATUS_COLOR`.
+9. Confirmed with the user: a CNC request **never converts into a Project** — it lives and
+   completes entirely inside the Requests tab, ending at status `Dispatched`.
+   `convertRequestToProject`/Gantt/Pipeline/DPR/Milestones/All Projects are not touched by Part A.
+
+**Part B — new "Design" role**
+
+1. New role `design` added to `ROLES` (`constants.js`). Only `addRequest` is `true`; every other
+   permission (`viewGantt`, `viewDPR`, `manageTeam`, `viewFinance`, `viewAll`, `editFinance`,
+   `manageDispatch`, `addLot`, `addFinanceRow`, `addMilestone`, `addProject`, `editProject`,
+   `deleteProject`, `updateProgress`, `addDPR`, `editPermissions`, `deleteRequest`) is `false`.
+2. `<option value="design">Design</option>` added to the Role `<select>` in the Add/Edit Team
+   Member panel (`index.html`, `#m-role`) so admin can actually assign this role — the permissions
+   preview and the Team Mgmt role-breakdown table (`teamMgmtTab.js`) already render generically off
+   `Object.entries(ROLES)`, so they need no code change to pick up `design`.
+3. Navigation (`teamAuth.js: showTeamDashboard`): the "All projects" and "Pipeline" tabs are
+   explicitly hidden for role `design` — those two tabs are not gated by any permission for any
+   other role today, so this is an explicit new check, not a side effect of the `can` flags above.
+   Every other tab (Gantt/DPR/Team/Finance/Dashboard/Material/New Vendors) already auto-hides via
+   the existing `canDo()`-based gating, since all of those permissions are `false` for `design`.
+   Design lands on the Requests tab by default after login (`state.activeTab`) instead of "All
+   projects", since that tab won't even be visible to them. The scope banner ("👑/👤 viewing N
+   projects") is hidden for this role — it doesn't apply to a role that never sees Projects.
+4. Visibility rule inside the Requests tab (`requestsTab.js: renderRequests`) for role `design`:
+   - Any `cnc` request currently in status `New` — CNC has no site-visit step, so Design's work
+     starts immediately on submission; once a CNC job reaches `Dispatched`, it drops out of
+     Design's queue (their part of the work is done).
+   - Any other request type (Pre-Mockup, Mockup, Post-Mockup, Pre-Main-Survey, Main Order) only
+     once its status is `Visit Done` or `Reviewed` — i.e. only after the site survey is confirmed,
+     since Design has nothing to act on before that.
+   - Explicitly confirmed with the user: this means a Design-role user will not see a non-CNC
+     request they personally raised until it reaches `Visit Done` — accepted, since Design's own
+     submissions are expected to be CNC requests in practice.
+5. Once submitted, a Design-role user's view of **any** request (their own or someone else's) is
+   view-only — same treatment the existing Sales/Viewer role already gets (disabled fields, no
+   edit/delete/status-change buttons, 👁 view icon instead of ✏️ edit). Extends the existing
+   `role==='viewer'` checks in `requestsTab.js` (the visit-card visibility check, the
+   `renderRequests` filter, and the `isSalesViewer` flag in `renderRequestCard`) to also match
+   `role==='design'`, rather than introducing a separate parallel set of checks.
+6. Not touched by Part B: every other role's permissions, the Projects/Gantt/DPR/Finance/Material
+   modules themselves, and the vendor/client portals.
+
+**Status: built and verified in TEST_MODE (2026-09-12).** `npm run build` clean.
+
+**Files changed**: `index.html` (CNC dropdown option, cnc-doc-upload container, Design role
+option, Dispatched status filter option), `src/lib/constants.js` (design role, CNC_FIELDS,
+CNC_STAGES/computeCNCStages, reqNumberPrefix, reqFieldGroup), `src/sections/requests/requestsTab.js`
+(field rendering, mandatory-doc validation, genRequestNumber fix, renderCNCStageTimeline,
+setCNCStageActual, renderRequestCard branching, renderRequests visibility filter),
+`src/auth/teamAuth.js` (nav tab visibility, default landing tab, scope banner), `src/utils/domGlobals.js`
+(exposed the 2 new onclick-referenced functions). No other file touched.
+
+**Verified against TEST_MODE mock data in a real browser** (dev server on a separate port,
+`VITE_TEST_MODE=true`, no production data touched):
+- Selecting "CNC" in the Request Type dropdown renders exactly the fields discussed (Sales Team
+  Name auto-filled, Sales Team Email, Client Name, Developer Name, Need Installation?, mandatory
+  Document Upload, optional AutoCAD File) — matches the team's mockup exactly, no Reference File
+  1/2.
+- Saving with no document attached correctly blocked with "Please upload at least one file under
+  'Document upload'."; uploading a file and saving succeeded, request appeared as `PRE-0001` with
+  `CNC`/`New` badges.
+- Stage timeline showed all 7 stages with Planned dates computed correctly from the confirmed
+  offsets (12/15/20/20/21/24/28 Sept 2026 relative to the request's creation date). Admin could
+  edit Actual dates inline; Gap computed correctly ("On time"). Saving the Dispatched stage's
+  Actual date auto-flipped the request's status badge to "Dispatched", with no separate button.
+- **Numbering fix confirmed live**: created a second CNC request (`PRE-0002`), then a Pre-Mockup
+  request (`PRE-0003`) — the shared "PRE" sequence advanced correctly across both field-groups
+  with no collision, proving the prefix-based `genRequestNumber()` fix works as intended.
+- Created a `design` role team member via Team Mgmt (role dropdown, permissions preview, and role
+  breakdown table all picked up the new role with zero extra code, as expected from their existing
+  generic `ROLES`-driven rendering). Logged in as that user and confirmed: only the "Requests" tab
+  is visible in the nav (All Projects/Pipeline/Gantt/DPR/Team/Finance/Material/New Vendors all
+  hidden), lands on Requests by default, sees only the CNC request still in "New" status (not the
+  Dispatched one), 👁 view-only icon (no edit/delete), read-only stage timeline (no date inputs,
+  "Pending" text only), and can still successfully open "+ New Request" with Sales Team Name
+  auto-filled to their own name.
+- **Regression check**: logged in as the existing `sales` (Sales/Viewer) user — All
+  Projects/Requests/Gantt/Pipeline tabs, scope banner, and "no requests visible" (since none were
+  created by this user) all behaved identically to before this change. The new Pre-Mockup request
+  created above still showed its normal "Acknowledge & Assign" button and optional
+  (non-asterisked) Document Upload, confirming the CNC-only changes didn't leak into other request
+  types.
+
+Not yet verified live against the production database — will do that next if you'd like, following
+the same pattern as prior entries (real `.env.local` credentials, a throwaway test request,
+cleanup afterward with explicit sign-off on the exact statements run).

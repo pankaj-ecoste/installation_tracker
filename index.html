@@ -98,7 +98,7 @@
         </div>
       </div>
       <div class="filters">
-        <select id="req-f-status" onchange="renderRequests()"><option value="">All statuses</option><option>New</option><option>Acknowledged</option><option>Visit Done</option><option>Reviewed</option><option>Converted to Project</option></select>
+        <select id="req-f-status" onchange="renderRequests()"><option value="">All statuses</option><option>New</option><option>Acknowledged</option><option>Visit Done</option><option>Reviewed</option><option>Converted to Project</option><option>Dispatched</option></select>
       </div>
       <div id="request-list"></div>
     </div>
@@ -291,6 +291,7 @@
             <option value="post-mockup">Post-Mockup</option>
             <option value="pre-main-survey">Pre-Main Order Survey</option>
             <option value="main-order">Main Order</option>
+            <option value="cnc">CNC</option>
           </select>
         </div>
       </div>
@@ -309,6 +310,7 @@
       <div id="req-doc-upload"></div>
       <div id="req-postpo-doc-upload" class="hidden"></div>
       <div id="req-survey-doc-upload" class="hidden"></div>
+      <div id="req-cnc-doc-upload" class="hidden"></div>
     </div>
     <div class="form-card hidden" id="req-visit-card"><div class="form-card-title">Visit report (filled by site supervisor after visit)</div>
       <div style="background:#fff3cd;border:1px solid #f0d080;border-radius:6px;padding:8px 10px;font-size:12px;color:#7a4f00;margin-bottom:10px" id="req-visit-required-banner">
@@ -416,6 +418,7 @@
           <option value="finance">Finance</option>
           <option value="dispatch_head">Dispatch Head</option>
           <option value="viewer">Sales / Viewer</option>
+          <option value="design">Design</option>
         </select>
       </div></div>
       <div class="form-row" style="margin-top:10px"><div class="form-group"><label class="form-label">Department</label><input class="form-input" id="m-dept" placeholder="e.g. Installation Ops"></div><div class="form-group"><label class="form-label">WhatsApp no.</label><input class="form-input" type="tel" inputmode="numeric" maxlength="10" id="m-wa" placeholder="10-digit number" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)"></div></div>

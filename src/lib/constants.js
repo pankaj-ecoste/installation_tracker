@@ -10,7 +10,10 @@ export const ROLES = {
   supervisor: {label:'Supervisor',   color:'role-supervisor', emoji:'🏗', can:{addProject:false,editProject:false,deleteProject:false,updateProgress:false, addDPR:true, manageTeam:false,viewFinance:false,viewAll:false, editPermissions:false,editFinance:false,viewDPR:true, viewGantt:true, manageDispatch:false, addLot:false, addFinanceRow:false, addRequest:false, addMilestone:false, deleteRequest:false}},
   finance:    {label:'Finance',      color:'role-viewer',     emoji:'💰', can:{addProject:false,editProject:false,deleteProject:false,updateProgress:false,addDPR:false,manageTeam:false,viewFinance:true, viewAll:true, editPermissions:false,editFinance:true, viewDPR:true, viewGantt:true, manageDispatch:false, addLot:false, addFinanceRow:true, addRequest:false, addMilestone:false, deleteRequest:false}},
   viewer:     {label:'Sales/Viewer', color:'role-viewer',     emoji:'👁', can:{addProject:true, editProject:false,deleteProject:false,updateProgress:false,addDPR:false,manageTeam:false,viewFinance:false,viewAll:false, editPermissions:false,editFinance:false,viewDPR:false,viewGantt:true, manageDispatch:false, addLot:false, addFinanceRow:false, addRequest:true, addMilestone:false, deleteRequest:false}},
-  dispatch_head: {label:'Dispatch Head', color:'role-manager', emoji:'📦', can:{addProject:false,editProject:false,deleteProject:false,updateProgress:false,addDPR:false,manageTeam:false,viewFinance:false,viewAll:true, editPermissions:false,editFinance:false,viewDPR:false,viewGantt:true, manageDispatch:true, addLot:true, addFinanceRow:false, addRequest:false, addMilestone:false, deleteRequest:false}}
+  dispatch_head: {label:'Dispatch Head', color:'role-manager', emoji:'📦', can:{addProject:false,editProject:false,deleteProject:false,updateProgress:false,addDPR:false,manageTeam:false,viewFinance:false,viewAll:true, editPermissions:false,editFinance:false,viewDPR:false,viewGantt:true, manageDispatch:true, addLot:true, addFinanceRow:false, addRequest:false, addMilestone:false, deleteRequest:false}},
+  // Design — scoped to only the Requests module (see plan.md v2-29). Can raise a request and see
+  // it once submitted, but nothing else: no Projects/Gantt/DPR/Finance/Material access.
+  design: {label:'Design', color:'role-viewer', emoji:'🎨', can:{addProject:false,editProject:false,deleteProject:false,updateProgress:false,addDPR:false,manageTeam:false,viewFinance:false,viewAll:false, editPermissions:false,editFinance:false,viewDPR:false,viewGantt:false, manageDispatch:false, addLot:false, addFinanceRow:false, addRequest:true, addMilestone:false, deleteRequest:false}}
 };
 
 // Reusable checklist templates for site supervisors — pick one to pre-fill a project's checklist fast.
@@ -305,12 +308,21 @@ export const POSTPO_FIELDS = [
 export const REQUEST_TYPE_LABELS={
   'pre-mockup':'Pre-Mockup', 'mockup':'Mockup', 'post-mockup':'Post-Mockup',
   'pre-main-survey':'Pre-Main Order Survey', 'sampling-survey':'Sampling Survey',
-  'main-order':'Main Order', 'post-main-order':'Post-Main Order'
+  'main-order':'Main Order', 'post-main-order':'Post-Main Order', 'cnc':'CNC'
 };
 export function reqFieldGroup(type){
+  if(type==='cnc') return 'cnc';
   if(type==='sampling-survey') return 'survey';
   if(['mockup','post-mockup','main-order','post-main-order'].includes(type)) return 'order';
   return 'visit'; // pre-mockup, pre-main-survey
+}
+// Prefix used for request numbering (genRequestNumber, requestsTab.js) — kept separate from
+// reqFieldGroup on purpose: 'cnc' is its own field-group (different form/uploads) but shares the
+// 'PRE' numbering sequence with the 'visit' group, per the team's own CNC mockup (PRE-0002). See
+// plan.md v2-29 for the numbering-collision bug this separation avoids.
+export function reqNumberPrefix(type){
+  const group=reqFieldGroup(type);
+  return group==='order'?'PPO':group==='survey'?'SUR':'PRE'; // visit + cnc both → PRE
 }
 export function reqTypeLabel(type){ return REQUEST_TYPE_LABELS[type]||type||'—'; }
 export const SURVEY_FIELDS = [
@@ -342,6 +354,44 @@ export const POSTPO_DOC_CATEGORIES=[
   {id:'req-docs-boqcad', label:'BOQ / CAD / Shop drawing documents', folder:'requests-boqcad'},
   {id:'req-docs-approvals', label:'Approvals / Approved drawing documents', folder:'requests-approvals'}
 ];
+// CNC request field set (see plan.md v2-29) — deliberately its own small set, not reusing
+// PREPO_FIELDS, since CNC collects a company-level "Client name" rather than a client contact
+// person, and has no visit/location fields at all.
+export const CNC_FIELDS = [
+  {key:'salesName',label:'Sales team name',required:true},
+  {key:'salesEmail',label:'Sales team email',required:true},
+  {key:'clientName',label:'Client name',required:true},
+  {key:'developerName',label:'Developer name',required:true},
+  {key:'needInstallation',label:'Need Installation?',type:'select',options:['Yes','No'],required:true}
+];
+// CNC production stage timeline — Planned dates are computed ONCE at request creation using these
+// fixed day-offsets (each chained from the previous stage's planned date), then never
+// recalculated afterward, even if an Actual date comes in late/early — confirmed with the user
+// (plan.md v2-29). Only the Actual dates change as work progresses.
+export const CNC_STAGES = [
+  {key:'designReceived', label:'Design received from client', offsetDays:0},
+  {key:'previewCreated', label:'Preview created by Design team', offsetDays:3},
+  {key:'approvalReceived', label:'Approval received from client', offsetDays:5},
+  {key:'approvedShared', label:'Approved design shared with Production', offsetDays:0},
+  {key:'productionStarted', label:'Production started', offsetDays:1},
+  {key:'productionCompleted', label:'Production completed', offsetDays:3},
+  {key:'dispatched', label:'Dispatched', offsetDays:4}
+];
+// Reads a Date's LOCAL calendar day back out as "YYYY-MM-DD" — deliberately not toISOString(),
+// which converts to UTC first and silently rolls the date back a day in IST (the same class of
+// bug fixed for DPR dates in v2-27 — see plan.md's "DPR date text/timezone gotcha").
+function toLocalISODate(d){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+// Builds the 7 CNC stage rows (Planned pre-filled, Actual blank) from a "YYYY-MM-DD" start date —
+// called once, when a new CNC request is created.
+export function computeCNCStages(fromDateStr){
+  const cursor=new Date(fromDateStr+'T00:00:00');
+  return CNC_STAGES.map((s,i)=>{
+    if(i>0) cursor.setDate(cursor.getDate()+s.offsetDays);
+    return {key:s.key, label:s.label, planned:toLocalISODate(cursor), actual:''};
+  });
+}
 
 /* ══ FINANCE LEDGER MODULE ══ */
 // Editable fields only — contractValue, retention, paymentPending (due payment), unbilledAmt,
