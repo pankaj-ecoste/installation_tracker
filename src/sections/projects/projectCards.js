@@ -15,7 +15,7 @@ export function renderProjects(){
   const filtered=visibleProjects().filter(p=>{
     if(sf&&p.status!==sf) return false;
     if(stf&&p.state!==stf) return false;
-    if(sch&&!(p.name||'').toLowerCase().includes(sch)&&!(p.tower||'').toLowerCase().includes(sch)) return false;
+    if(sch&&!(p.name||'').toLowerCase().includes(sch)&&!(p.tower||'').toLowerCase().includes(sch)&&!(p.supervisor||'').toLowerCase().includes(sch)) return false;
     return true;
   });
   if(!filtered.length){ grid.innerHTML='<div class="empty">No projects to show.</div>'; return; }

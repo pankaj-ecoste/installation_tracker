@@ -2364,4 +2364,30 @@ production data touched):
   Re-uploading a second Preview PDF added a second link but did **not** change the already-set
   Actual date — confirming the "set once" behavior.
 
+### v2-30: All Projects search doesn't match supervisor name (2026-09-14)
+
+**Ask**: On the All Projects tab, the "Search project..." box only matches project name/tower.
+Team wants staff to also be able to search by the supervisor name shown on each card (e.g. "karan",
+"mahesh").
+
+**Root cause**: `renderProjects()` (`src/sections/projects/projectCards.js:18`) builds its filter
+from the `#f-search` input but only checks it against `p.name` and `p.tower` — `p.supervisor` (the
+`👤 karan`/`👤 mahesh` field shown on every card) was never included.
+
+**Scope**: Material tab and Finance tab have their own separate search boxes (`#mat-search`,
+`#fin-search`) with the same name-only pattern, but only All Projects was flagged by the team —
+left untouched.
+
+**Fix**: Added `p.supervisor` as a third OR condition alongside `p.name`/`p.tower` in the same
+filter — same input box, same behavior, just widens the match. Client-side only, no schema/DB
+change.
+
+**Built**: `npm run build` clean.
+
+**Verified against TEST_MODE mock data in a real browser** (separate dev server on port 5183, no
+production data touched): searched "shubham" (the seed data's supervisor name) on All Projects —
+all 3 matching projects stayed visible. Searched a nonsense string — correctly showed "No projects
+to show." Re-searched "ajmera" (a project name) — still narrows to just that project's 2
+sub-projects, confirming the existing name/tower matching is untouched.
+
 Not yet verified live against the production database.
