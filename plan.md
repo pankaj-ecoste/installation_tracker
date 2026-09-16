@@ -2543,4 +2543,42 @@ function) shows the banner and narrows the grid to only "Arun Seth — Supply on
 constraint), correctly hiding both fully-completed Ajmera towers (0 open constraints each);
 "Clear filter" correctly restores Ajmera and removes the banner.
 
+### v2-35: search box on the Requests module, by sales person or project name (starting 2026-09-16)
+
+**Ask**: Installation Type Request tab (Requests) needs a search that filters by sales person and
+project name — All Projects already has an equivalent search (v2-30).
+
+**Root cause / design decisions confirmed with the user before building**: the Requests tab only
+had the "All statuses" dropdown (`req-f-status`), no search box at all. Each request card's visible
+identity is its title (project/developer name, whichever field applies for that request's type) and
+"Logged by {r.createdBy}" (the login username of whoever raised it) — but a request also carries a
+free-text `d.salesName` (the sales person's actual name, auto-filled from the submitter's profile
+but distinct from their login username) and, depending on request type, `d.projectName` /
+`d.projectNameKnown` / `d.developerName`. Locked on the broader match: search matches all of
+`r.createdBy`, `d.salesName`, `d.projectName`, `d.projectNameKnown`, `d.developerName` — not just
+the two literal strings printed on the card — so typing a person's actual name still finds requests
+where the card only shows their username (confirmed as a real gap in testing: two test requests
+both showed "Logged by admin" since a single admin account submitted both, but searching "neelam"
+or "ritu" — the free-text sales names entered on each — still correctly found the right one).
+
+**Design — files changed**:
+1. `index.html` — new `<input id="req-f-search">` next to `req-f-status` in the Requests tab's
+   `.filters` row, `oninput="renderRequests()"`, placeholder "Search by sales person or project...".
+2. `src/sections/requests/requestsTab.js` (`renderRequests()`): reads `req-f-search`, builds a
+   lowercase haystack per request from the 5 fields above, filters if the search term isn't found in
+   any of them. Combines (ANDs) with the existing status filter, matching the All Projects search's
+   existing behavior (v2-30) rather than resetting it.
+
+**Built**: `npm run build` clean.
+
+**Verified against TEST_MODE mock data in a real browser** (separate dev server on port 5186, no
+production data touched): logged in as `admin`/`1234`, created two throwaway pre-mockup requests via
+the real "+ New request" form/`saveRequest()` (not synthetic data) — one with sales name "Neelam
+Verma"/developer "Test Developer Alpha"/known-project "Alpha Towers", the other "Ritu Sharma"/"Beta
+Constructions"/"Beta Heights". Searching "neelam" correctly showed only the first; "beta" only the
+second; "alpha towers" (the `projectNameKnown` field, not shown as the card title) still correctly
+matched the first; clearing the box restored both. No real data touched — TEST_MODE's in-memory
+mock `db` means these two test requests were never persisted anywhere and vanished when the dev
+server was stopped.
+
 Not yet verified live against the production database.

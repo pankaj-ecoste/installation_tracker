@@ -353,6 +353,7 @@ export function notifyNewRequest(r){
 
 export function renderRequests(){
   const sf=document.getElementById('req-f-status')?.value||'';
+  const sch=document.getElementById('req-f-search')?.value.trim().toLowerCase()||'';
   const el=document.getElementById('request-list'); if(!el) return;
   // Admin/Manager/Finance/Dispatch Head see the full queue (they need to see brand-new
   // unassigned requests to acknowledge/report on them). Supervisor only sees a request
@@ -371,7 +372,15 @@ export function renderRequests(){
     // including a non-CNC request Design might have raised themselves. See plan.md v2-29.
     visible=state.requests.filter(r=>r.requestType==='cnc'?r.status==='New':['Visit Done','Reviewed'].includes(r.status));
   }
-  const filtered=visible.filter(r=>(!sf||r.status===sf));
+  const filtered=visible.filter(r=>{
+    if(sf&&r.status!==sf) return false;
+    if(sch){
+      const d=r.details||{};
+      const haystack=[r.createdBy,d.salesName,d.projectName,d.projectNameKnown,d.developerName].filter(Boolean).join(' ').toLowerCase();
+      if(!haystack.includes(sch)) return false;
+    }
+    return true;
+  });
   if(!filtered.length){ el.innerHTML='<div class="empty">No requests yet'+(state.requests.length===0&&visible.length===0?' — or the requests table hasn\'t been created in Supabase yet.':'.')+'</div>'; return; }
   el.innerHTML=filtered.map(r=>renderRequestCard(r)).join('');
 }

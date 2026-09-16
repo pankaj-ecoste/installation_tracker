@@ -99,6 +99,7 @@
       </div>
       <div class="filters">
         <select id="req-f-status" onchange="renderRequests()"><option value="">All statuses</option><option>New</option><option>Acknowledged</option><option>Visit Done</option><option>Reviewed</option><option>Converted to Project</option><option>Dispatched</option></select>
+        <input type="text" id="req-f-search" placeholder="Search by sales person or project..." oninput="renderRequests()" style="min-width:220px">
       </div>
       <div id="request-list"></div>
     </div>
