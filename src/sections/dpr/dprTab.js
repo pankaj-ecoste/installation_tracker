@@ -134,6 +134,7 @@ export function renderDPR(){
       ${d.actionTaken?`<div style="font-size:12px;margin-bottom:4px"><span style="color:#666;font-weight:500">Action taken: </span>${d.actionTaken}</div>`:''}
       ${d.remarks?`<div style="font-size:12px;margin-bottom:4px"><span style="color:#666;font-weight:500">Remarks: </span>${d.remarks}</div>`:''}
       ${d.next&&d.next!=='—'?`<div style="font-size:12px;margin-bottom:4px"><span style="color:#666;font-weight:500">Next day plan: </span>${d.next}</div>`:''}
+      ${d.todayProjectionQty!=null?`<div style="font-size:12px;margin-bottom:4px"><span style="color:#666;font-weight:500">Today's projection: </span>${fmt(d.todayProjectionQty)} sq ft</div>`:''}
       ${d.photoUrls&&d.photoUrls.length?`<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">${d.photoUrls.map(u=>`<img src="${u}" style="width:48px;height:48px;object-fit:cover;border-radius:4px;border:1px solid #e0e0e0">`).join('')}</div>`:''}
       ${d.reportPdfUrl?`<div style="margin-top:6px"><a href="${d.reportPdfUrl}" target="_blank" style="font-size:12px;color:#1D9E75">📄 Daily report PDF</a></div>`:''}
       <!-- Internal (only visible to team) -->
@@ -177,6 +178,7 @@ export function openEditDPR(id){
     document.getElementById('dpr-supervisor').value=d.supervisor||'';
     document.getElementById('dpr-committed-mp').value=d.committedMp||0;
     document.getElementById('dpr-manpower').value=d.actualMp||d.manpower||0;
+    document.getElementById('dpr-today-projection').value=d.todayProjectionQty!=null?d.todayProjectionQty:'';
     document.getElementById('dpr-action').value=d.actionTaken||'';
     document.getElementById('dpr-remarks').value=d.remarks||'';
     document.getElementById('dpr-internal-hindrance').value=d.internalHindrance||'';
@@ -246,6 +248,9 @@ export function renderDPRForm(selectedProjId){
       '<div class="form-row" style="margin-top:10px">'+
         '<div class="form-group"><label class="form-label">Committed manpower</label><input class="form-input" type="number" id="dpr-committed-mp" min="0" value="0"></div>'+
         '<div class="form-group"><label class="form-label">Manpower available today at site</label><input class="form-input" type="number" id="dpr-manpower" min="0" value="0"></div>'+
+      '</div>'+
+      '<div class="form-row" style="margin-top:10px">'+
+        '<div class="form-group"><label class="form-label">Today projection qty (sq ft) *</label><input class="form-input" type="number" id="dpr-today-projection" min="0" placeholder="e.g. 500"></div>'+
       '</div>'+
       '<div class="form-row" style="margin-top:10px">'+
         '<div class="form-group"><label class="form-label">Photos (up to 10 files)</label><input type="file" id="dpr-photos" multiple accept="image/*" style="font-size:12px"><div id="dpr-photos-list" style="font-size:11px;color:#1D9E75;margin-top:4px"></div></div>'+
@@ -527,6 +532,11 @@ export async function saveDPR(){
     if(err){ err.classList.remove('hidden'); document.getElementById('dpr-err-msg').textContent='Please enter "Units affected" for the snag before saving — Severity is set from that.'; err.scrollIntoView({behavior:'smooth',block:'center'}); }
     return;
   }
+  const dprTodayProjectionRaw=document.getElementById('dpr-today-projection').value;
+  if(dprTodayProjectionRaw===''){
+    if(err){ err.classList.remove('hidden'); document.getElementById('dpr-err-msg').textContent='Please enter Today Projection Qty (sq ft) before saving this DPR.'; err.scrollIntoView({behavior:'smooth',block:'center'}); }
+    return;
+  }
   // Location capture is mandatory for every DPR save — proves the report was actually filed
   // from site, not just filled in later from anywhere. Runs after the cheap synchronous
   // validations above (so a supervisor fixing a typo doesn't get re-prompted for location on
@@ -568,6 +578,7 @@ export async function saveDPR(){
     committedMp:parseInt(document.getElementById('dpr-committed-mp').value)||0,
     actualMp:parseInt(document.getElementById('dpr-manpower').value)||0,
     manpower:parseInt(document.getElementById('dpr-manpower').value)||0,
+    todayProjectionQty:parseInt(dprTodayProjectionRaw)||0,
     photos:state.dprPhotoUrls.length,
     photoUrls:state.dprPhotoUrls,
     reportPdfUrl:state.dprReportPdfUrl,

@@ -122,6 +122,7 @@ export function renderCard(p){
           (raNeeded?'<span class="badge ba">💰 RA bill needed</span>':'')+
           (openSnagCount>0?'<span class="badge br">🔧 '+openSnagCount+' snag(s)</span>':'')+
           '<span style="font-size:11px;color:#666">👤 '+p.supervisor+'</span>'+
+          '<span style="font-size:11px;color:#666">🏢 Vendor ('+(p.vendor&&p.vendor!=='—'?p.vendor:'Not assigned yet')+')</span>'+
           '<span style="font-size:10px;background:#f0f0f0;border:1px solid #ccc;border-radius:20px;padding:2px 7px;color:#555">🔑 '+p.accessCode+'</span>'+
         '</div>'+
       '</div>'+

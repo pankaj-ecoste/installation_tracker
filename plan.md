@@ -2390,4 +2390,121 @@ all 3 matching projects stayed visible. Searched a nonsense string — correctly
 to show." Re-searched "ajmera" (a project name) — still narrows to just that project's 2
 sub-projects, confirming the existing name/tower matching is untouched.
 
+### v2-31: Two more Status options — "CNC" and "Only Supply" (starting 2026-09-16)
+
+**Ask**: Edit Project form's Status dropdown (pencil icon, All Projects tab) needs 2 more options
+alongside Not Started / In Progress / Completed / On Hold.
+
+**Design decisions confirmed with the user before building**:
+1. These are plain Status labels, not a separate project-type field — same dropdown, same `status`
+   text column, no schema change (mirrors v2-23's "On Hold" precedent).
+2. Added to Edit Project's Status dropdown (`f-status-sel`) and the All Projects "All statuses"
+   filter dropdown (`f-status`) only — **not** added to the Update Progress dropdown (`u-status`),
+   which stays as-is (still also missing On Hold — a separate pre-existing gap, not fixed here).
+3. Alerts: CNC and Only Supply get the same blanket suppression as Completed/On Hold in
+   `computeAlerts()` — no alert types fire for these projects.
+4. Pipeline tab's phase board (`renderPipeline()`): no new columns — projects with these statuses
+   simply won't match any existing column filter and fall out of that board, matching "don't show
+   on Pipeline board."
+5. Dashboard metrics row: no new tiles for these two statuses.
+6. Badge: new colors, not reusing the grey fallback — `⚙️ CNC` in a new `.bp` class (purple,
+   `#e8dcf7`/`#4a1a8b`) and `📦 Only Supply` in a new `.bt` class (teal, `#d3f2ee`/`#0a5c50`).
+
+**Design — files to change**:
+1. `index.html:210` (`f-status-sel`) and the All Projects `f-status` filter — add
+   `<option>CNC</option><option>Only Supply</option>`.
+2. `src/lib/helpers.js` (`statusBadge()`): add explicit `CNC`/`Only Supply` branches ahead of the
+   generic fallback.
+3. `src/styles/app.css`: add `.bp{...}` / `.bt{...}` near the existing badge classes.
+4. `src/sections/alerts.js` (`computeAlerts()`): extend the early-return guard to also match
+   `'CNC'` and `'Only Supply'`.
+
+**Built**: `npm run build` clean.
+
+**Verified against TEST_MODE mock data in a real browser** (separate dev server on port 5184, no
+production data touched): logged in as `admin`/`1234`. Edit Project's Status dropdown and the All
+Projects "All statuses" filter both confirmed via DOM inspection to list all 6 options (Not
+Started/In Progress/Completed/On Hold/CNC/Only Supply) in order.
+
+### v2-32: Show vendor name on the collapsed project card (starting 2026-09-16)
+
+**Ask**: Staff currently have to open the Update Progress panel or expand a project card to see
+its vendor — team wants it visible on the outside, without clicking in.
+
+**Root cause**: vendor (`p.vendor`, already a comma-joined display string built from `p.vendors`)
+is only rendered in the expanded card's "Vendors" detail row (`projectCards.js:191`) and inside the
+Update panel — never in the collapsed card header shown by default.
+
+**Design decisions confirmed with the user before building**:
+1. Placement: collapsed card meta row, right next to the existing `👤 {supervisor}` span
+   (`projectCards.js:124`) — visible without expanding or clicking Update.
+2. Format: `🏢 Vendor (Mk Decorator)`; when unassigned (`p.vendor` is `—`/empty), show
+   `🏢 Vendor (Not assigned yet)`.
+3. Multi-vendor: reuse `p.vendor` as-is (already comma-joined, e.g. "Mk Decorator, ABC Corp") —
+   no truncation/"+N more".
+
+**Design — files to change**:
+1. `src/sections/projects/projectCards.js:124` — add the vendor span after the supervisor span in
+   `renderCard()`'s meta row.
+
+**Not changed**: expanded-detail "Vendors" row (`projectCards.js:191`) and the Update Progress
+panel's vendor field — untouched, this only adds a second, always-visible copy on the collapsed card.
+
+**Built**: `npm run build` clean.
+
+**Verified against TEST_MODE mock data in a real browser** (same session as v2-31 above): All
+Projects list shows `🏢 Vendor (Not assigned yet)` on "Arun Seth — Supply only" (no vendor set) and
+`🏢 Vendor (Bombay Aluminium Works)` on both Ajmera A-Wing/B-Wing cards, right next to the
+supervisor — all without expanding any card.
+
+### v2-33: "Today Projection Qty (sq ft)" mandatory field on DPR (starting 2026-09-16)
+
+**Ask**: Add a mandatory field to the Add DPR form, "Today Projection Quantity", unit sq ft.
+
+**Design decisions confirmed with the user before building**:
+1. Placement: single field in the DPR Details section (alongside Committed Manpower/Manpower
+   Available Today/Next Day Plan), **not** a per-product column in the "Today's Installation By
+   Product" table — table products can have non-sqft units (e.g. "ms"), so a single sqft value
+   belongs at the report level.
+2. Meaning: the site supervisor's own estimate for today's installation (sq ft) — distinct from
+   the existing auto-computed "Daily targeted qty" column (`totalQty ÷ daysAvailable`, a system
+   calculation, not a human judgment call).
+3. Mandatory rule: field starts blank (not pre-filled with 0). `saveDPR()` blocks the save with an
+   inline error if left blank — same pattern as the existing mandatory snag-PDF/units-affected
+   checks. Once typed, 0 is a valid value.
+4. Historical DPR entries (before this field existed): DPR history cards simply omit the line for
+   old entries — no backfill attempted, nothing to infer it from.
+
+**Design — files to change**:
+1. `supabase/migrations/0017_dpr_today_projection_qty.sql` — new nullable numeric column
+   `dpr_log.today_projection_qty`, no default (old rows stay null).
+2. `index.html` — new input `dpr-today-projection` in the Add/Edit DPR panel's DPR Details section.
+3. `src/lib/mappers.js` (`dprToRow`/`rowToDpr`): map `today_projection_qty` ↔ `todayProjectionQty`.
+4. `src/sections/dpr/dprTab.js` (`saveDPR()`): read the field into `newDpr.todayProjectionQty`;
+   block save with an inline error if blank, before the geolocation capture step (same place as the
+   other synchronous validations).
+5. `src/sections/dpr/dprTab.js` (DPR history card render, ~line 136): show
+   "Today's projection: {value} sq ft" when present, omitted for older entries without it.
+
+**Built**: `npm run build` clean. Migration applied directly to the production database (confirmed
+with the user first, since it's a live prod schema change): `alter table dpr_log add column
+today_projection_qty numeric;` — ran clean, verified via `information_schema.columns` that the
+column exists as nullable `numeric`.
+
+**Verified against TEST_MODE mock data in a real browser** (same session as v2-31/32 above): Add
+DPR panel for "Arun Seth — Supply only" — new "Today projection qty (sq ft) *" field renders
+exactly between the manpower row and the Photos/Next day plan row. Clicking Save DPR with it blank
+correctly blocked the save with "Please enter Today Projection Qty (sq ft) before saving this DPR."
+Typed 275 and confirmed (via direct DOM read) the value passed through past that validation into
+the save flow. Existing DPR history entries (pre-dating this field) correctly show no "Today's
+projection" line, confirming no-backfill display behavior.
+
+**Not fully exercised end-to-end**: this app's DPR save flow separately requires real browser
+geolocation permission before it writes anything (a pre-existing, unrelated mandatory step — see
+`captureDPRSaveLocation()`), which the automated browser sandbox used for this verification
+couldn't grant cleanly; the actual `dpr_log` insert/read of `today_projection_qty` was therefore
+confirmed at the database level instead (schema check above) rather than by completing a live save
+through the UI. Everything upstream of that geolocation gate — field rendering, mandatory
+validation, and the value reaching the save payload — was verified directly.
+
 Not yet verified live against the production database.

@@ -58,7 +58,7 @@ export function dprToRow(d){
   return {
     proj_id:d.projId, project:d.project, date:d.date, supervisor:d.supervisor,
     day_no:d.dayNo, days_left:d.daysLeft, committed_mp:d.committedMp, actual_mp:d.actualMp,
-    manpower:d.manpower, photos:d.photos, products:d.products, constraints:d.constraints,
+    today_projection_qty:d.todayProjectionQty, manpower:d.manpower, photos:d.photos, products:d.products, constraints:d.constraints,
     action_taken:d.actionTaken, remarks:d.remarks, internal_hindrance:d.internalHindrance,
     next_dispatch:d.nextDispatch, escalations:d.escalations, next:d.next,
     framing_material:d.framingMaterial||'', section_size:d.sectionSize||'', photo_urls:d.photoUrls||[], report_pdf_url:d.reportPdfUrl||'',
@@ -69,7 +69,7 @@ export function rowToDpr(r){
   return {
     id:r.id, projId:r.proj_id, project:r.project, date:r.date, supervisor:r.supervisor,
     dayNo:r.day_no, daysLeft:r.days_left, committedMp:r.committed_mp, actualMp:r.actual_mp,
-    manpower:r.manpower, photos:r.photos, products:r.products||[], constraints:r.constraints||[],
+    todayProjectionQty:r.today_projection_qty, manpower:r.manpower, photos:r.photos, products:r.products||[], constraints:r.constraints||[],
     actionTaken:r.action_taken||'', remarks:r.remarks||'', internalHindrance:r.internal_hindrance||'',
     nextDispatch:r.next_dispatch||'', escalations:r.escalations||'', next:r.next||'—',
     framingMaterial:r.framing_material||'', sectionSize:r.section_size||'', photoUrls:r.photo_urls||[], reportPdfUrl:r.report_pdf_url||'',

@@ -13,7 +13,7 @@ import { renderRequests } from './requests/requestsTab.js';
 export function computeAlerts(){
   const alerts=[];
   visibleProjects().forEach(p=>{
-    if(p.status==='Completed'||p.status==='On Hold') return;
+    if(p.status==='Completed'||p.status==='On Hold'||p.status==='CNC'||p.status==='Only Supply') return;
     if(p.committedDate&&new Date(p.committedDate)<TODAY){
       const d=daysDiff(p.committedDate,TODAY.toISOString().slice(0,10));
       alerts.push({type:'overdue',sev:'red',proj:p,msg:'Committed date passed '+d+' day'+(d>1?'s':'')+' ago',detail:pct(p.installedQty,p.plannedQty)+'% installed · Committed: '+fmtDate(p.committedDate)});
