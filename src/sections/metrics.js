@@ -23,7 +23,7 @@ export function renderMetrics(){
     '<div class="metric"><div class="metric-label">On Hold</div><div class="metric-val">'+onHold+'</div><div class="metric-sub">paused installs</div></div>'+
     '<div class="metric"><div class="metric-label">Units installed</div><div class="metric-val">'+fmt(tInst)+'</div><div class="metric-sub">grille units</div></div>'+
     (showFin?'<div class="metric"><div class="metric-label">RA billed (₹)</div><div class="metric-val">'+fmt(Math.round(tBill/100000))+'L</div><div class="metric-sub">₹'+fmt(Math.round(tPaid/100000))+'L collected</div></div>':'')+
-    '<div class="metric"><div class="metric-label">Open constraints</div><div class="metric-val" style="color:'+(openC>0?'#cc3333':'#1D9E75')+'">'+openC+'</div><div class="metric-sub">across sites</div></div>'+
+    '<div class="metric clickable" onclick="filterByOpenConstraints()"><div class="metric-label">Open constraints</div><div class="metric-val" style="color:'+(openC>0?'#cc3333':'#1D9E75')+'">'+openC+'</div><div class="metric-sub">'+(openC>0?'Tap to view':'across sites')+'</div></div>'+
     '<div class="metric clickable" onclick="showSection(\'notif\')"><div class="metric-label">Active alerts</div><div class="metric-val" style="color:'+(alerts.length>0?'#cc3333':'#1D9E75')+'">'+alerts.length+'</div><div class="metric-sub">'+(alerts.length>0?'Tap to view':'All clear ✅')+'</div></div>';
 }
 

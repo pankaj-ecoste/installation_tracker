@@ -13,12 +13,18 @@ export function renderProjects(){
   const sch=document.getElementById('f-search')?.value.toLowerCase()||'';
   const grid=document.getElementById('project-grid'); if(!grid) return;
   const filtered=visibleProjects().filter(p=>{
+    if(state.filterOpenConstraintsOnly&&!(p.constraintsOpen>0)) return false;
     if(sf&&p.status!==sf) return false;
     if(stf&&p.state!==stf) return false;
     if(sch&&!(p.name||'').toLowerCase().includes(sch)&&!(p.tower||'').toLowerCase().includes(sch)&&!(p.supervisor||'').toLowerCase().includes(sch)) return false;
     return true;
   });
-  if(!filtered.length){ grid.innerHTML='<div class="empty">No projects to show.</div>'; return; }
+  const banner=state.filterOpenConstraintsOnly?
+    '<div class="banner-info" style="background:#fde8e8;color:#8b1a1a;border-radius:8px;padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'+
+      '<span>🔴 Showing only projects with open constraints ('+filtered.length+')</span>'+
+      '<button class="btn btn-outline btn-sm" onclick="clearOpenConstraintsFilter()">✕ Clear filter</button>'+
+    '</div>':'';
+  if(!filtered.length){ grid.innerHTML=banner+'<div class="empty">No projects to show.</div>'; return; }
   // Group by project name so towers/blocks show nested under their parent project —
   // matches the real hierarchy: Developer → Project → Sub-project (Tower/Block).
   const byProject={};
@@ -27,7 +33,7 @@ export function renderProjects(){
     if(!byProject[p.name]){ byProject[p.name]=[]; order.push(p.name); }
     byProject[p.name].push(p);
   });
-  grid.innerHTML=order.map(projName=>{
+  grid.innerHTML=banner+order.map(projName=>{
     const towers=byProject[projName];
     const dev=towers[0].developer;
     const totalPlanned=towers.reduce((a,p)=>a+(p.plannedQty||0),0);
@@ -140,6 +146,18 @@ export function renderCard(p){
 }
 
 export function toggleCard(id){ state.expanded[id]=!state.expanded[id]; renderProjects(); }
+
+// "Open constraints" dashboard tile — jumps straight to the projects that have at least one,
+// clearing any other filter already set so the count staff just tapped isn't silently narrowed
+// further by a status/state/search filter left over from before.
+export function filterByOpenConstraints(){
+  const sf=document.getElementById('f-status'), stf=document.getElementById('f-state'), sch=document.getElementById('f-search');
+  if(sf) sf.value=''; if(stf) stf.value=''; if(sch) sch.value='';
+  state.filterOpenConstraintsOnly=true;
+  renderProjects();
+  document.getElementById('project-grid')?.scrollIntoView({behavior:'smooth',block:'start'});
+}
+export function clearOpenConstraintsFilter(){ state.filterOpenConstraintsOnly=false; renderProjects(); }
 
 export function renderDetail(p){
   const pInst=pct(p.installedQty,p.plannedQty), pPay=pct(p.paymentCollected,p.raBillAmt), pJMR=pct(p.jmrQty,p.plannedQty);

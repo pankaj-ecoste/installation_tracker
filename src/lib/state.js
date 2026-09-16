@@ -22,6 +22,7 @@ export const state = {
   materialLots: [],
   requests: [],
   expanded: {},
+  filterOpenConstraintsOnly: false,
   activeTab: 'projects',
   currentUser: null,
   loggedInClient: null,

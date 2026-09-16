@@ -2507,4 +2507,40 @@ confirmed at the database level instead (schema check above) rather than by comp
 through the UI. Everything upstream of that geolocation gate — field rendering, mandatory
 validation, and the value reaching the save payload — was verified directly.
 
+### v2-34: "Open constraints" dashboard tile is now clickable (starting 2026-09-16)
+
+**Ask**: All Projects tab's "Open constraints" metric tile (metrics row, count "across sites")
+should behave like the existing "Active alerts" tile — clicking it should show only the projects
+that actually have an open constraint.
+
+**Design decisions confirmed with the user before building**:
+1. Clicking the tile filters the All Projects grid in place to only `p.constraintsOpen>0` cards —
+   it does **not** navigate away to the Active Alerts/notifications view (that's a separate,
+   already-existing "Tap to view" flow on the Active Alerts tile).
+2. Applying the filter resets the existing status/state/search filters first, rather than ANDing
+   with whatever was already set — avoids a silent zero-results trap from a leftover filter.
+3. A dismissible banner ("🔴 Showing only projects with open constraints (N) · ✕ Clear filter")
+   appears above the grid while the filter is active, giving an obvious way back to the full list.
+
+**Design — files to change**:
+1. `src/lib/state.js`: new transient `state.filterOpenConstraintsOnly` flag (client-side only, not
+   persisted).
+2. `src/sections/metrics.js`: "Open constraints" tile gets `class="metric clickable"` and
+   `onclick="filterByOpenConstraints()"`, and its subtext switches to "Tap to view" when count > 0
+   (matching the Active Alerts tile's existing pattern) — same as "across sites" when 0.
+3. `src/sections/projects/projectCards.js`: new `filterByOpenConstraints()` (clears the 3 filter
+   inputs, sets the flag, re-renders, scrolls the grid into view) and `clearOpenConstraintsFilter()`
+   (clears the flag, re-renders); `renderProjects()`'s filter chain gets a `constraintsOpen>0` check
+   gated on the flag, and prepends the banner HTML to `#project-grid` when active.
+4. `src/utils/domGlobals.js`: expose both new functions for the inline `onclick` handlers.
+
+**Built**: `npm run build` clean.
+
+**Verified against TEST_MODE mock data in a real browser** (separate dev server on port 5185, no
+production data touched): logged in as `admin`/`1234`. Confirmed via direct DOM inspection that
+clicking the tile (a real `.click()` on the `.metric.clickable` element, not just calling the
+function) shows the banner and narrows the grid to only "Arun Seth — Supply only" (its one open
+constraint), correctly hiding both fully-completed Ajmera towers (0 open constraints each);
+"Clear filter" correctly restores Ajmera and removes the banner.
+
 Not yet verified live against the production database.
