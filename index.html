@@ -296,6 +296,15 @@
           </select>
         </div>
       </div>
+      <div class="form-row" style="margin-top:10px">
+        <div class="form-group"><label class="form-label">Scope *</label>
+          <select class="form-input" id="req-scope" onchange="reqScopeChanged(this)">
+            <option value="">— Select —</option>
+            <option>Installation</option>
+            <option>Only Supply</option>
+          </select>
+        </div>
+      </div>
       <div class="form-row hidden" id="req-postpo-type-row" style="margin-top:10px">
         <div class="form-group"><label class="form-label">Installation type *</label>
           <select class="form-input" id="req-postpo-type" onchange="renderRequestFields()">

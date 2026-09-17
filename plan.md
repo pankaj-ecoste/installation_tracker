@@ -2582,3 +2582,91 @@ mock `db` means these two test requests were never persisted anywhere and vanish
 server was stopped.
 
 Not yet verified live against the production database.
+
+### v2-36: "Scope" dropdown on new requests — Installation vs Only Supply (planned, not yet built)
+
+**Ask**: Below the Request type dropdown (all 6 types — Pre-Mockup, Mockup, Post-Mockup,
+Pre-Main Order Survey, Main Order, CNC), add a second dropdown, styled like the existing
+"Installation type" (With frame / Without frame) dropdown: **Scope**, options **Installation** /
+**Only Supply**. If Only Supply is picked, that request must never be convertible into a project —
+it stays in the Requests module only, and therefore never appears in All Projects, Pipeline, or
+Gantt. If Installation is picked, everything works exactly as it does today (through to the
+existing manual "Convert to project(s)" step).
+
+**Root cause / groundwork already in place**: `requests.details` is a jsonb column
+(`mappers.js` `requestToRow`/`rowToRequest` pass it through untouched), so this is a **pure
+frontend change — no DB migration**. A request only ever becomes a project through one single
+manual action: the "➜ Convert to project(s)" button (`requestsTab.js:625`) calling
+`convertRequestToProject()` (`requestsTab.js:767`) — no other code path creates a project from a
+request. All Projects/Pipeline/Gantt only ever read `state.projects`, so blocking that one function
+is sufficient to satisfy "never reaches Pipeline/All Projects/Gantt." Also found: `d.scope` is
+already read (but never written) in the vendor assignment email at `requestsTab.js:711`
+(`'Scope: '+(d.scope||'—')`) — this change finally populates that field.
+
+**Design decisions confirmed with the user before building**:
+1. **Mandatory** on every request type, all 6 — blocks Save until chosen (same treatment as
+   Installation type's "With frame"/"Without frame" is mandatory for the `order` group today).
+2. **Legacy requests** (saved before this ships, no `details.scope` yet): treated as
+   **Installation** by default — `d.scope||'Installation'` wherever scope is read — so already
+   in-flight/Reviewed requests keep converting exactly as before. Nothing retroactively blocked.
+3. **Only Supply lifecycle**: unchanged through Acknowledge → visit/survey → Reviewed — Only Supply
+   requests still go through the full existing flow and get all the same actions (acknowledge,
+   visit report, mark reviewed, stage timeline). The **only** thing removed is the final "Convert to
+   project(s)" step.
+4. Not a project Status value — unrelated to v2-31's "Only Supply" *project* status (that's a label
+   on an existing project; this is a request-intake field that decides whether a project gets
+   created at all). Different layer, kept separate on purpose to avoid confusion between the two.
+5. **Badge placement on the request card** (per screenshot `Screenshot 2026-09-17 132511.png`):
+   the Scope badge sits inline in the exact same pill-badge row that already shows `Mockup` (type,
+   `.bb`) → `With frame` (sub-type, `.bgr`) → `Acknowledged` (status) — inserted right after the
+   sub-type badge (or right after the type badge for the 4 types with no sub-type), before the
+   status badge. Always shown, both values, not just Only Supply. Colors: `Installation` reuses the
+   neutral `.bgr` grey (same treatment as the sub-type badge); `Only Supply` reuses the existing
+   teal `.bt` class already introduced in v2-31 for the project-level "Only Supply" status — same
+   word, same color, consistent visual language across both layers of the app.
+
+**Design — files to change**:
+1. `index.html` — new `<select id="req-scope">` (`— Select —` / `Installation` / `Only Supply`)
+   directly under the Request type dropdown in `#panel-add-request`, shown for all 6 types (unlike
+   `req-postpo-type-row`, this one is never hidden).
+2. `src/sections/requests/requestsTab.js`:
+   - `openAddRequest()` — reset `req-scope` to `''` on a new request (forces an explicit pick).
+   - `openEditRequest()` — populate `req-scope` from `r.details.scope||'Installation'`.
+   - `saveRequest()` — validate `req-scope` is non-empty (same pattern as the existing
+     Installation-type check), write it into `mergedDetails.scope` before insert/update.
+   - `renderRequestCard()` — show a scope badge next to the existing type/status badges; hide the
+     "Convert to project(s)" button when `(r.details.scope||'Installation')==='Only Supply'`.
+   - `convertRequestToProject()` — defensive guard: `alert(...)` and return early if scope is Only
+     Supply, in case it's ever reached another way.
+3. `src/sections/requests/requestsTab.js` (`reqFieldChanged`/inline handler) — small onchange on
+   `req-scope` to keep `state.reqDetails.scope` in sync as the user picks it, mirroring how
+   `req-postpo-type` is read directly by id rather than routed through the FIELDS-array machinery.
+
+**Not changed**: no DB migration, no changes to All Projects/Pipeline/Gantt rendering (they don't
+need to know about scope at all — they simply never see a project that was never created), no
+changes to the request lifecycle/status machine, no changes to v2-31's project-level "Only Supply"
+status.
+
+**Built**: `npm run build` clean.
+
+**Verified against TEST_MODE mock data in a real browser** (separate dev server on port 5190, no
+production data touched): logged in as `admin`/`1234`.
+- New request panel: Scope dropdown (`— Select —`/`Installation`/`Only Supply`) confirmed rendering
+  directly under Request type, for the default Pre-Mockup type, matching the screenshot reference.
+- Created a real Pre-Mockup request via the actual form/`saveRequest()` with Scope = Only Supply
+  (PRE-0001). Card correctly showed both `Pre-Mockup` and `Only Supply` badges inline in the same
+  pill row as the status badge — `Only Supply` in the teal `.bt` class as specified.
+- Pushed PRE-0001 through the real lifecycle via the actual UI/functions — Acknowledge → filled
+  visit report (remarks, measurement, 1 photo) → Mark visit done → Mark reviewed. At "Reviewed", the
+  "➜ Convert to project(s)" button was correctly **absent**; in its place, "📦 Only Supply — stays in
+  Requests, not converted to a project" rendered instead.
+- Confirmed the defensive guard directly: calling `convertRequestToProject()` on the Only Supply
+  request's id (bypassing the hidden button) correctly refused with the alert message and did not
+  create a project.
+- Regression check on the untouched path: created a second Pre-Mockup request with Scope =
+  Installation, advanced it straight to Reviewed, confirmed "➜ Convert to project(s)" **did** render,
+  clicked through the real `convertRequestToProject()`/`confirmConvertRequestToProject()` flow, and
+  confirmed the request flipped to "Converted to Project" exactly as before — the Installation path
+  is unaffected by this change.
+
+Not yet verified live against the production database.

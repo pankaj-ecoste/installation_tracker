@@ -93,6 +93,10 @@ export function reqFieldChanged(el,idPrefix){
   if(target) target[key]=el.value;
   if(idPrefix==='fin') recalcFinanceComputed();
 }
+// Scope (Installation / Only Supply) — read directly by id like req-postpo-type, not routed
+// through the FIELDS-array machinery, since it applies to all 6 request types rather than one
+// field group. See plan.md v2-36.
+export function reqScopeChanged(el){ state.reqDetails.scope=el.value; }
 
 export function renderRequestFields(){
   const type=document.getElementById('req-type').value;
@@ -206,6 +210,7 @@ export function openAddRequest(){
   }
   document.getElementById('request-panel-title').textContent='New request';
   document.getElementById('req-type').value='pre-mockup';
+  document.getElementById('req-scope').value='';
   document.getElementById('req-postpo-type').value='';
   document.getElementById('req-error').classList.add('hidden');
   renderRequestFields();
@@ -216,8 +221,12 @@ export function openEditRequest(id){
   const r=state.requests.find(x=>x.id===id); if(!r) return;
   state.editingRequestId=id;
   state.reqDetails={...r.details}; state.reqVisitDetails={...r.details}; // visit fields stored in same details blob
+  // Legacy requests saved before v2-36 have no details.scope yet — default to Installation so a
+  // simple resave doesn't newly block on a field that didn't exist when they were created.
+  if(!state.reqDetails.scope) state.reqDetails.scope='Installation';
   document.getElementById('request-panel-title').textContent='Edit request — '+r.requestNumber;
   document.getElementById('req-type').value=r.requestType;
+  document.getElementById('req-scope').value=state.reqDetails.scope;
   document.getElementById('req-postpo-type').value=r.requestSubType||'';
   document.getElementById('req-error').classList.add('hidden');
   renderRequestFields();
@@ -245,11 +254,13 @@ export function genRequestNumber(type){
 
 export async function saveRequest(){
   const type=document.getElementById('req-type').value;
+  const scope=document.getElementById('req-scope').value;
   const subType=document.getElementById('req-postpo-type').value;
   const group=reqFieldGroup(type);
   const createdBy=state.currentUser?state.currentUser.username:(state.reqDetails.salesName||'sales');
   const err=document.getElementById('req-error');
-  const mergedDetails={...state.reqDetails,...state.reqVisitDetails};
+  const mergedDetails={...state.reqDetails,...state.reqVisitDetails,scope};
+  if(!scope){ err.classList.remove('hidden'); document.getElementById('req-err-msg').textContent='Please select a Scope (Installation or Only Supply).'; return; }
   if(group==='order'&&!subType){ err.classList.remove('hidden'); document.getElementById('req-err-msg').textContent='Please select an Installation type.'; return; }
   const fieldSet=(group==='order'?POSTPO_FIELDS:group==='survey'?SURVEY_FIELDS:group==='cnc'?CNC_FIELDS:PREPO_FIELDS).filter(f=>(!f.conditionalOn||f.conditionalOn===subType)&&(!f.onlyFor||f.onlyFor===type));
   const missingField=fieldSet.find(f=>f.required&&!String(mergedDetails[f.key]||'').trim());
@@ -572,6 +583,9 @@ export function renderRequestCard(r){
   const isDesign=state.currentUser&&state.currentUser.role==='design';
   const isReadOnlyRole=isSalesViewer||isDesign;
   const linkedProject=r.linkedProjectId?state.projects.find(p=>p.id===r.linkedProjectId):null;
+  // Legacy requests (no details.scope yet, saved before v2-36) default to Installation — see plan.md v2-36.
+  const scope=d.scope||'Installation';
+  const isOnlySupply=scope==='Only Supply';
   return '<div class="proj-card" id="req-card-'+r.id+'" style="cursor:default">'+
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">'+
       '<div>'+
@@ -580,6 +594,7 @@ export function renderRequestCard(r){
         '<div class="proj-meta">'+
           '<span class="badge '+(group==='order'?'bb':group==='survey'?'bg':'ba')+'">'+reqTypeLabel(r.requestType)+'</span>'+
           (r.requestSubType?'<span class="badge bgr">'+r.requestSubType+'</span>':'')+
+          '<span class="badge '+(isOnlySupply?'bt':'bgr')+'">'+scope+'</span>'+
           '<span class="badge '+(REQ_STATUS_COLOR[r.status]||'bgr')+'">'+r.status+'</span>'+
           tatBadge(r)+
           reviewWaitBadge(r)+
@@ -622,7 +637,8 @@ export function renderRequestCard(r){
       (r.status==='New'&&canAck&&group!=='cnc'?'<button class="btn btn-outline btn-sm" onclick="acknowledgeRequest('+r.id+')">✅ Acknowledge & assign</button>':'')+
       (r.status==='Acknowledged'?'<button class="btn btn-outline btn-sm" onclick="openEditRequest('+r.id+')">📝 '+(group==='survey'?'Fill survey report':'Fill visit report')+'</button><button class="btn btn-outline btn-sm" onclick="advanceRequestStatus('+r.id+',\'Visit Done\')">Mark '+(group==='survey'?'survey':'visit')+' done</button>':'')+
       (r.status==='Visit Done'&&canAck?'<button class="btn btn-outline btn-sm" onclick="advanceRequestStatus('+r.id+',\'Reviewed\')">🔍 Mark reviewed</button><button class="btn btn-outline btn-sm" onclick="sendVisitReportEmail('+r.id+')">📧 Send visit report to sales team</button>':'')+
-      (r.status==='Reviewed'&&canDo('addProject')?'<button class="btn btn-green btn-sm" onclick="convertRequestToProject('+r.id+')">➜ Convert to project(s)</button>':'')+
+      (r.status==='Reviewed'&&canDo('addProject')&&!isOnlySupply?'<button class="btn btn-green btn-sm" onclick="convertRequestToProject('+r.id+')">➜ Convert to project(s)</button>':'')+
+      (r.status==='Reviewed'&&isOnlySupply?'<span style="font-size:12px;color:#888;align-self:center">📦 Only Supply — stays in Requests, not converted to a project</span>':'')+
       '<button class="btn btn-outline btn-sm" onclick="toggleRequestTimeline('+r.id+')">⏱ '+(state.requestTimelineExpanded[r.id]?'Hide':'View')+' stage timeline</button>'+
     '</div>'+
     (state.requestTimelineExpanded[r.id]?(group==='cnc'?renderCNCStageTimeline(r):renderRequestStageTimeline(r)):''))+
@@ -766,6 +782,9 @@ export function advanceRequestStatus(id,newStatus){
 
 export function convertRequestToProject(id){
   const r=state.requests.find(x=>x.id===id); if(!r) return;
+  // Only Supply requests must never become a project — see plan.md v2-36. The button is already
+  // hidden for these; this guard covers any other path that might reach this function.
+  if(((r.details||{}).scope||'Installation')==='Only Supply'){ alert('This is an Only Supply request — it stays in the Requests module and cannot be converted into a project.'); return; }
   const accessCode=r.requestNumber.replace(/[^A-Za-z0-9]/g,'').toUpperCase();
   if(state.projects.find(p=>p.accessCode===accessCode)){ alert('A project with access code "'+accessCode+'" already exists — this request may already be converted.'); return; }
   convertRequestToProject._targetId=id;
