@@ -31,6 +31,18 @@ export function getTotalDispatched(projId){
   return total;
 }
 
+// New information floats to the top so it isn't buried below quiet projects: lots still in
+// transit (what the Material tab badge counts) first, then lots whose arrival was just
+// acknowledged via DPR, then everything else. 0 = most urgent. Array.sort is stable, so
+// within a tier the existing order is kept.
+function isRecentlyUpdatedLot(lot){
+  return !!lot.arrivalAckedAt&&(Date.now()-new Date(lot.arrivalAckedAt).getTime())<2*86400000;
+}
+function lotPriority(lot){
+  if(!lot.actualArrival) return 0;
+  return isRecentlyUpdatedLot(lot)?1:2;
+}
+
 export function renderMaterial(){
   const el=document.getElementById('material-list'); if(!el) return;
   const sch=document.getElementById('mat-search')?.value.toLowerCase()||'';
@@ -39,9 +51,13 @@ export function renderMaterial(){
   const vp=allVp.filter(p=>!sch||(p.name||'').toLowerCase().includes(sch)||(p.tower||'').toLowerCase().includes(sch));
   if(!vp.length){el.innerHTML='<div class="empty">No projects match your search.</div>';return;}
 
+  const projPriority={};
+  vp.forEach(p=>{ projPriority[p.id]=state.materialLots.filter(l=>l.projId===p.id).reduce((best,l)=>Math.min(best,lotPriority(l)),3); });
+  const sortedVp=[...vp].sort((a,b)=>projPriority[a.id]-projPriority[b.id]);
+
   let html='';
-  vp.forEach(p=>{
-    const lots=state.materialLots.filter(l=>l.projId===p.id);
+  sortedVp.forEach(p=>{
+    const lots=state.materialLots.filter(l=>l.projId===p.id).sort((a,b)=>lotPriority(a)-lotPriority(b));
     const totalDispatched=getTotalDispatched(p.id);
     const soQty=p.soQty||p.plannedQty||0;
     const remaining=Math.max(0,soQty-totalDispatched);
@@ -86,7 +102,7 @@ export function renderLotCard(lot,p){
   const totalQty=lot.items.reduce((a,it)=>a+(it.qtyDispatched||0),0);
   const unitLabel='sqft';
   // Highlight if this lot's arrival was acknowledged via DPR in the last 2 days
-  const recentlyUpdated=lot.arrivalAckedAt&&(Date.now()-new Date(lot.arrivalAckedAt).getTime())<2*86400000;
+  const recentlyUpdated=isRecentlyUpdatedLot(lot);
 
   return '<div id="lot-'+lot.id+'" style="border:1px solid '+(recentlyUpdated?'#f0a500':'#e0e0e0')+';border-radius:8px;margin-bottom:8px;overflow:hidden;'+(recentlyUpdated?'box-shadow:0 0 0 1px #f0a500':'')+'">'
     // Lot header

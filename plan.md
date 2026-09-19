@@ -2852,3 +2852,27 @@ file and expect a replay.
 
 **Not fixed (out of scope, noted)**: 2 legacy DPR rows still have `created_by_id` null and only match by the
 old case-sensitive name check (unchanged from v2-22 — "site supervisor" test placeholders).
+
+
+### v2-41: Material tab — new information shown at the top (2026-09-19)
+
+**Request**: the team wants new information to appear at the top. Example given: the Material tab badge
+showed 8 (lots not yet arrived) but clicking in showed projects with "No lots dispatched yet" first, with the
+projects that actually had new lots buried further down (`Screenshot 2026-09-19 164519.png`).
+
+**Root cause**: not a bug — `renderMaterial()` listed projects in `state.projects` order and lots in DB
+order; nothing was sorted, so the badge count and the list order had no relationship.
+
+**Scope decision (user)**: Material only for now. Same rule for the other badged tabs (All Projects, Requests,
+DPR Log, Finance, New Vendors) is NOT done — to be confirmed separately.
+
+**Done**: `src/sections/material/materialTab.js` only. Lot priority: 0 = not yet arrived (what the badge
+counts), 1 = arrival acknowledged via DPR in the last 2 days (the existing "🆕 Updated via DPR" tag),
+2 = everything else. Projects sort by their most urgent lot; lots sort the same way inside each project.
+Array.sort is stable, so ties keep the existing order. `isRecentlyUpdatedLot()` is now shared with
+`renderLotCard` (same 2-day rule, no behaviour change there). Display-only — no data, DB or RLS change.
+
+**Verified** (TEST_MODE, real browser, in-memory lots injected): a project that was last in the list moves to
+the top once it has an in-transit lot; an in-transit lot sits above arrived lots in its project; a
+DPR-acknowledged lot leads its project; search filter still narrows correctly; badge unchanged. Not yet
+committed / not prod-verified.
