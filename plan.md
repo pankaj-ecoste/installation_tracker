@@ -2949,4 +2949,5 @@ anon-key select returns `[]`, anon-key insert is rejected (HTTP 401, RLS 42501);
 generated `score` gave 2 / −2 / 0 for Call+Email / Not Done+Not Done / WhatsApp+Not Done, and a second row for the same
 date+project was blocked by the unique constraint (23505); one policy exists (`sod_eod_log_admin_all`, ALL). Not
 tested on prod: the admin-JWT read path (no admin PIN available) — confirm by opening Reports as admin after deploy.
-**Still to do**: commit + push the frontend (Vercel deploys from `main`), then open Reports as admin on the live site.
+**Pushed** to `main` as 1ad9a14 (2026-09-19); Vercel deploys from `main`.
+**Still to do**: open Reports as admin on the live site and confirm load + save work (the one path not testable without an admin PIN).
