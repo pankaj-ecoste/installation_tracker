@@ -2758,3 +2758,33 @@ Not yet verified against the production database / real Team-module admin + mana
 installation and the attached Document link(s) — CNC only, via the existing `lines` array in
 `notifyManagementNewRequest()`. Re-verified in the browser (compose link captured, not sent): body
 shows all four; To/Cc unchanged. In TEST_MODE the document link is the mock `about:blank#...` URL.
+
+
+### v2-39: Admin can edit every CNC stage Actual date (2026-09-19)
+
+**Ask**: (screenshot `Screenshot 2026-09-19 151753.png`, admin view of a CNC request with no Preview PDF yet:
+"Preview created" showed "Sets when Preview PDF is attached", later stages showed "Attach Preview PDF
+first") — "the actual date can be editable by the admin".
+
+**Decision (refines v2-37 #2)**: the **admin** role can type/correct the Actual date on **every** stage,
+including "Preview created by Design team", with or without a Preview PDF attached. This is the manual
+override / correction path (wrong auto-date, PDF sent outside the app, etc.). Everyone else is unchanged:
+Ops Manager still can't type the Preview date and still has later stages locked until a Preview PDF
+exists; Design still can't type any date. Attaching a Preview PDF still auto-fills the date only when it
+is empty, so an admin-entered date is never overwritten.
+
+**Change**: `requestsTab.js` only — `renderCNCStageTimeline()` (admin gets date inputs on all rows, no lock
+text) and `setCNCStageActual()` (Preview/locked-stage guards skipped for admin).
+
+Also: a locked stage that already has an Actual date (set by admin) now shows that date read-only to
+non-admins instead of the "🔒 Attach Preview PDF first" text.
+
+**Built**: `npm run build` clean.
+
+**Verified against TEST_MODE mock data in a real browser** (port 5191, no production data touched): as
+`admin`, a fresh CNC request with no Preview PDF showed a date input on all 7 stages; typing the Preview
+created date and a later stage (Approval received) both saved (no alerts), and clearing the Preview date
+worked. Logged in as Ops Manager (`neelam`) on the same request: "Preview created" showed "Sets when
+Preview PDF is attached", Approval received showed the admin-entered "25 Sept 2026" read-only, and the
+untouched later stages still showed "🔒 Attach Preview PDF first" — Ops Manager behavior unchanged.
+Not yet verified against the production database.

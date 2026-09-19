@@ -518,6 +518,8 @@ export function renderCNCStageTimeline(r){
   const stages=(r.details&&r.details.cncStages)||[];
   if(!stages.length) return '<div style="font-size:12px;color:#888;margin-top:10px">Stage timeline not available for this request.</div>';
   const canEdit=canDo('addMilestone');
+  // v2-39: admin can type/correct every Actual date (incl. Preview created) regardless of the PDF.
+  const isAdmin=!!state.currentUser&&state.currentUser.role==='admin';
   const unlocked=cncPreviewUnlocked(r);
   const previewIdx=stages.findIndex(x=>x.key==='previewCreated');
   const rows=stages.map((s,i)=>{
@@ -525,12 +527,12 @@ export function renderCNCStageTimeline(r){
     // v2-37: "Preview created" is only ever set by attaching a Preview PDF (never typed by hand),
     // and every stage after it stays locked until that PDF exists.
     const isPreview=s.key==='previewCreated';
-    const lockedLater=!unlocked&&previewIdx>=0&&i>previewIdx;
+    const lockedLater=!isAdmin&&!unlocked&&previewIdx>=0&&i>previewIdx;
     const readOnlyCell=s.actual?('<span style="color:#1D9E75;font-weight:600">'+fmtDate(s.actual)+'</span>'):'<span style="color:#888">Pending</span>';
-    const actualCell=(canEdit&&!isPreview&&!lockedLater)
+    const actualCell=(canEdit&&(isAdmin||(!isPreview&&!lockedLater)))
       ? '<input type="date" class="form-input" style="padding:4px 6px;font-size:12px;width:140px" value="'+(s.actual||'')+'" onchange="setCNCStageActual('+r.id+',\''+s.key+'\',this.value)">'
       : (isPreview&&!s.actual?'<span style="color:#888;font-size:11px">Sets when Preview PDF is attached</span>'
-        :lockedLater?'<span style="color:#888;font-size:11px">\uD83D\uDD12 Attach Preview PDF first</span>':readOnlyCell);
+        :(lockedLater&&!s.actual)?'<span style="color:#888;font-size:11px">\uD83D\uDD12 Attach Preview PDF first</span>':readOnlyCell);
     return '<tr><td>'+s.label+'</td><td style="color:#666">'+fmtDate(s.planned)+'</td><td>'+actualCell+'</td><td style="color:'+gap.color+';font-weight:600">'+gap.text+'</td></tr>';
   }).join('');
   return '<div style="overflow-x:auto;margin-top:10px">'+
@@ -574,9 +576,10 @@ function renderCNCAttachments(r){
 export async function setCNCStageActual(id, stageKey, value){
   if(!canDo('addMilestone')){ alert('You do not have permission to update the CNC stage timeline.'); return; }
   const r=state.requests.find(x=>x.id===id); if(!r) return;
-  if(stageKey==='previewCreated'){ alert('This date is set automatically when the Preview PDF is attached.'); renderRequests(); return; }
+  const isAdmin=!!state.currentUser&&state.currentUser.role==='admin';
+  if(stageKey==='previewCreated'&&!isAdmin){ alert('This date is set automatically when the Preview PDF is attached.'); renderRequests(); return; }
   const ordered=r.details.cncStages||[];
-  if(!cncPreviewUnlocked(r)&&ordered.findIndex(s=>s.key===stageKey)>ordered.findIndex(s=>s.key==='previewCreated')){ alert('Attach the Preview PDF first \u2014 later stages stay locked until then.'); renderRequests(); return; }
+  if(!isAdmin&&!cncPreviewUnlocked(r)&&ordered.findIndex(s=>s.key===stageKey)>ordered.findIndex(s=>s.key==='previewCreated')){ alert('Attach the Preview PDF first \u2014 later stages stay locked until then.'); renderRequests(); return; }
   const stages=ordered.map(s=>s.key===stageKey?{...s,actual:value}:s);
   const newDetails={...r.details, cncStages:stages};
   const extra=(stageKey==='dispatched'&&value)?{status:'Dispatched'}:{};
