@@ -38,6 +38,20 @@ function countedProjectNames(){
     .filter(n=>groups[n].some(p=>p.status==='Not Started'||p.status==='In Progress'))
     .sort((a,b)=>a.localeCompare(b));
 }
+// Today's project set: live counted projects, plus anything already logged today for a project that has since left
+// Not Started/In Progress — keeps the numerator and the "/ max" denominator on the same set of projects.
+function todayTotalNames(){
+  const logged=state.sodEodLog.filter(r=>r.log_date===todayStr()).map(r=>r.project_name);
+  return [...new Set([...countedProjectNames(),...logged])];
+}
+// A day's maximum score = 2 x the number of counted projects. Today uses the live count (matches the top card);
+// any earlier day uses the count the database froze when that day's rows were saved (total_projects), so a later
+// status change never rewrites history. Legacy rows without a snapshot fall back to the live count.
+function dayMaxScore(day){
+  if(day===todayStr()) return todayTotalNames().length*2;
+  const snaps=state.sodEodLog.filter(r=>r.log_date===day&&r.total_projects!=null).map(r=>Number(r.total_projects));
+  return (snaps.length?Math.max(...snaps):countedProjectNames().length)*2;
+}
 const findRow=(date,project)=>state.sodEodLog.find(r=>r.log_date===date&&r.project_name===project);
 const optionsHTML=(sel)=>'<option value="">— select —</option>'+OPTIONS.map(o=>'<option value="'+o+'"'+(o===sel?' selected':'')+'>'+o+'</option>').join('');
 
@@ -91,9 +105,7 @@ function renderScoreCard(){
   const today=todayStr();
   const todayRows=state.sodEodLog.filter(r=>r.log_date===today);
   const loggedNames=todayRows.map(r=>r.project_name);
-  // Total = live counted projects, plus anything already logged today for a project that has since left
-  // Not Started/In Progress — keeps the numerator and the "/ max" denominator on the same set of projects.
-  const totalNames=[...new Set([...countedProjectNames(),...loggedNames])];
+  const totalNames=todayTotalNames();
   const total=totalNames.length;
   const score=todayRows.reduce((a,r)=>a+rowScore(r),0);
   const notDone=todayRows.reduce((a,r)=>a+notDoneSlots(r),0);
@@ -122,17 +134,19 @@ function renderFolders(){
   const today=todayStr();
   box.innerHTML=Object.keys(byDay).sort().reverse().map(day=>{
     const list=byDay[day].slice().sort((a,b)=>a.project_name.localeCompare(b.project_name));
-    const score=list.reduce((a,r)=>a+rowScore(r),0);
-    const notDone=list.reduce((a,r)=>a+notDoneSlots(r),0);
+    // Header always describes the whole day, even while a search narrows the rows listed below it.
+    const dayRows=state.sodEodLog.filter(r=>r.log_date===day);
+    const score=dayRows.reduce((a,r)=>a+rowScore(r),0);
+    const notDone=dayRows.reduce((a,r)=>a+notDoneSlots(r),0);
     // Today's folder starts open; searching opens every matching folder; otherwise the admin's last click wins.
     const explicit=state.sodEodOpenDays[day];
     const open=explicit!==undefined?explicit:(q?true:day===today);
     return '<div class="proj-card" style="cursor:default;padding:0;margin-bottom:8px;overflow:hidden">'+
       '<div onclick="toggleSodEodDay(\''+day+'\')" style="cursor:pointer;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 16px;background:'+(open?'#f4faf7':'#fff')+'">'+
         '<span style="font-weight:700;font-size:14px">'+(open?'📂':'📁')+' '+fmtDay(day)+(day===today?' <span class="badge bg">Today</span>':'')+'</span>'+
-        '<span class="count-pill" style="background:#e8e8e8;color:#444">'+list.length+' project'+(list.length!==1?'s':'')+'</span>'+
-        '<span class="count-pill" style="background:#e8f5f0;color:'+scoreColor(score)+'">Score '+signed(score)+'</span>'+
+        '<span class="count-pill" style="background:#e8e8e8;color:#444">'+dayRows.length+' project'+(dayRows.length!==1?'s':'')+'</span>'+
         (notDone?'<span class="count-pill" style="background:#fde8e8;color:#8b1a1a">'+notDone+' Not Done</span>':'')+
+        '<span class="count-pill" style="background:#e8f5f0;color:'+scoreColor(score)+'" title="Day score / maximum (2 per counted project)">'+signed(score)+' / '+dayMaxScore(day)+'</span>'+
       '</div>'+
       (open?'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'+
         '<thead><tr style="background:#f5f5f5;text-align:left">'+

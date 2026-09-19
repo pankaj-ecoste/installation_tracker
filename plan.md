@@ -2978,3 +2978,28 @@ OK; admin update and delete → 0 rows. Prod unchanged by that test (old policy 
 
 **Status**: migration 0019 APPLIED to prod, committed and pushed (2026-09-19). Still to confirm on the live site: as admin, a Not Done entry
 without remarks is refused and a saved entry shows locked.
+
+#### v2-42 follow-up 2: day-folder header shows the day's score out of its fixed maximum (2026-09-19)
+
+**Request** (user, from a screenshot of the 19 Sept folder): combine all rows of a day and show the day's total score next
+to the Not Done pill, e.g. `7 / 72`. Asked whether past days should use today's live project count or a fixed one → user:
+**"for that day just fixed — the total may be reduced or higher on the next date."**
+
+**Rule**: the folder header reads `[N projects] [K Not Done] [score / max]`, where max = 2 × the number of Not Started /
+In Progress projects (counted once per project name) **as it stood on that day**. It is fixed when the day is logged, so
+a later status change never rewrites an old day. Today's folder uses the live count, so it always equals the top card.
+The header always reflects the whole day, even while a search filters the rows shown beneath it.
+
+**Built**: migration `0020_sod_eod_day_total_projects.sql` — `sod_eod_log.total_projects` (smallint), set by a BEFORE INSERT
+trigger from the `projects` table (`count(distinct name)` where status in Not Started / In Progress — same rule as the UI),
+so it is DB-owned and the client never sends it; the one existing row is backfilled with the current count. A day's max =
+2 × the highest `total_projects` among that day's rows (rows logged earlier/later in the day can differ if a project
+changed status mid-day; the highest wins). Legacy rows without a value fall back to the live count. Frontend
+`sodEodReport.js`: folder header now shows the score pill after the Not Done pill (replaces the old "Score N" pill).
+
+**Verified** (TEST_MODE real browser): a past day keeps its frozen max (18 Sept stays `2 / 10` after a project's status changes
+live) while today's header and the top card follow the live count (`0 / 6` → `0 / 4`); today's header equals the card; the
+header stays whole-day while a search narrows the rows below it; rows without a snapshot fall back to the live count.
+Migration 0020 tested inside a rolled-back prod transaction: applies cleanly, backfills the 2 existing rows with 36 (matches the
+live count behind the team's `2 / 72` screenshot), and an admin insert that tries to send `total_projects=999` is stored as 36.
+**Status**: migration 0020 APPLIED to prod, committed and pushed (2026-09-19). To confirm on the live site: folder headers show `score / max`.
