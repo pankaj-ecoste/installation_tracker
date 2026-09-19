@@ -8,6 +8,7 @@ import { renderDPR } from './dpr/dprTab.js';
 import { renderFinance } from './finance/financeTab.js';
 import { renderGantt, renderPipeline } from './gantt/ganttTab.js';
 import { renderMaterial } from './material/materialTab.js';
+import { renderReports } from './reports/reportsTab.js';
 import { renderRequests } from './requests/requestsTab.js';
 import { renderTeamMgmt } from './team/teamMgmtTab.js';
 import { renderNewVendors } from './vendors/newVendorsTab.js';
@@ -72,8 +73,9 @@ export function setTab(t){
   if(t==='finance'&&!canDo('viewFinance')) t='projects';
   if(t==='dashboard'&&!canDo('viewFinance')) t='projects';
   if(t==='newvendors'&&(!state.currentUser||!['admin','finance'].includes(state.currentUser.role))) t='projects';
+  if(t==='reports'&&(!state.currentUser||state.currentUser.role!=='admin')) t='projects';
   state.activeTab=t;
-  ['projects','requests','gantt','pipeline','dpr','material','team','finance','dashboard','newvendors'].forEach(x=>{
+  ['projects','requests','gantt','pipeline','dpr','material','team','finance','dashboard','newvendors','reports'].forEach(x=>{
     const tab=document.getElementById('tab-'+x); if(tab) tab.classList.toggle('active',x===t);
     const view=document.getElementById('tab-'+x+'-view'); if(view) view.classList.toggle('hidden',x!==t);
   });
@@ -86,5 +88,6 @@ export function setTab(t){
   if(t==='finance') renderFinance();
   if(t==='dashboard') renderDashboard();
   if(t==='newvendors') renderNewVendors();
+  if(t==='reports'){ state.activeReport=null; renderReports(); }
 }
 

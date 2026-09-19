@@ -2876,3 +2876,77 @@ Array.sort is stable, so ties keep the existing order. `isRecentlyUpdatedLot()` 
 the top once it has an in-transit lot; an in-transit lot sits above arrived lots in its project; a
 DPR-acknowledged lot leads its project; search filter still narrows correctly; badge unchanged. Not yet
 committed / not prod-verified.
+
+### v2-42: Reports module — SOD/EOD Follow-Up Tracker, admin only (planned, not yet built) (2026-09-19)
+
+**Request** (management/team, via Neelam mam who is an admin): a new **Reports** module that will hold several
+reports over time. First report = **SOD / EOD Follow-Up Tracker**, with a simple score. Reference screenshot from
+the team: `WhatsApp Image 2026-09-18 at 12.10.33 PM.jpeg` (log form + today's completion score + entries table).
+Team's rule: "+1 per project for SOD done, +1 for EOD done … Total = sum across every Not Started / In Progress
+project. This tracker is only visible to admin, make sure."
+
+**Decisions (user, 2026-09-19)**
+- Only the SOD/EOD report is built now; Reports is built so more reports can be added later (one file each + one
+  registry line).
+- One row per project per day → many rows per day. Rows are grouped into **day folders** (one folder per date,
+  click to open and see that day's per-project rows).
+- SOD and EOD options: **Call, Email, WhatsApp, Not Done**. Single-choice dropdown each.
+- Scoring per slot: Call/Email/WhatsApp = **+1**, Not Done = **−1**. Both SOD and EOD are **required** on save
+  (no blank state — Neelam mam fills what was done, simple). So a project's day score is −2..+2.
+- Neelam mam's login is `admin`; nothing extra needed for her access.
+- Assumption (not yet explicitly confirmed): the −1 applies to each slot separately (SOD Not Done = −1 and EOD
+  Not Done = −1 → project can reach −2).
+
+**Design**
+- **Reports** nav tab, admin only (`setTab` redirect for non-admins, same pattern as Team/New Vendors). Opens a
+  report list; SOD/EOD Tracker is the first entry.
+- **Which projects count**: one per project *name* (towers grouped, same as the dashboard "Total projects" tile),
+  counted if any tower is Not Started or In Progress. On Hold / CNC / Only Supply / Completed are excluded.
+- **Log form**: Date, Project (dropdown of counted projects), SOD, EOD, Remarks (optional), Add Entry. Saving for a
+  project+date that already has a row edits that row (upsert) — no duplicates.
+- **Today's score card** (always today, live): Total Projects, Not Done Today (count of Not Done slots + points
+  lost), Score = sum / (2 × total projects), plus "not logged yet" count (projects with no row today, 0 pts).
+- **Day folders**, newest first: header e.g. "📁 19 Sept 2026 · 12 projects · Score 14 · 2 Not Done"; click opens
+  rows (Project, SOD, EOD, Score, Remarks, Edit). Only days with entries appear; project-name search across
+  folders. Past days show the score over rows logged that day, *without* a fixed "/N" denominator — project
+  statuses change over time, so a live denominator would silently rewrite history.
+- **Date handling**: `log_date` is a real `date` column; build the value from local date parts, never
+  `toISOString()` (see the DPR date gotcha — shifts a day in IST).
+
+**Data model** — migration `0018_sod_eod_log.sql`, table `sod_eod_log`:
+`id`, `log_date date not null`, `project_name text not null`, `sod text not null`, `eod text not null`
+(both `check in ('Call','Email','WhatsApp','Not Done')`), `remarks text`, `score smallint generated always as
+(…) stored` (DB-owned, client never sends it), `created_by`, `created_at`; **unique (log_date, project_name)**.
+Keyed by project *name* (not a per-tower id) because the report is per builder/project group; a rename of a
+project would leave old rows under the old name — accepted, renames are rare.
+
+**Access (two layers)**: tab hidden + `setTab` guard, **and** RLS on `sod_eod_log` restricting
+select/insert/update/delete to `app_is_active_team_member() and app_jwt_team_role()='admin'`. Because
+`loadAllData()` runs pre-login with the anon key (the open-read gap from the 2026-09-19 security review), this
+table is deliberately **not** added there — it is fetched only after an admin is logged in.
+
+**Files**: new `supabase/migrations/0018_sod_eod_log.sql`, `src/sections/reports/reportsTab.js`,
+`src/sections/reports/sodEodReport.js`; small edits to `index.html` (tab + view), `navigation.js` (`setTab`),
+`src/utils/domGlobals.js` (expose handlers). TEST_MODE mock computes `score` on insert (mock has no generated
+columns). No existing behavior changes; no storage bucket involved.
+
+**Verification plan**: TEST_MODE in a real browser as admin (add entries, edit-upsert, folder open/close, score
+math incl. Not Done = −1, non-admin can't see tab); then prod check that a non-admin JWT / anon key gets no rows
+from `sod_eod_log`.
+
+**Status**: BUILT + verified in TEST_MODE (real browser, admin), 2026-09-19. Not yet applied to prod / committed / pushed.
+Built as planned: `0018_sod_eod_log.sql`, `src/sections/reports/{reportsTab,sodEodReport}.js`, plus small edits to
+`index.html`, `navigation.js`, `teamAuth.js` (tab visibility), `domGlobals.js`, `state.js`. `src/lib/supabaseClient.js`
+untouched (mock computes nothing; the UI falls back to a score derived from SOD/EOD when the row has no `score`).
+Verified: tab visible only for admin and `setTab('reports')` redirects a non-admin to Projects; project grouping
+(towers counted once, Completed excluded); validation (SOD + EOD both required); save, edit and same-project/date
+upsert (no duplicate row); score math (Call+Email = 2, WhatsApp+Not Done = 0, Not Done+Not Done = −2; card total
+and Not Done count correct); day folders open/close, search, remarks HTML-escaped; production build passes.
+Notes: since each slot is ±1, a row's score is only ever −2, 0 or 2. No delete button (scope: a wrong entry can be
+edited, not removed). Mobile layout not visually verified (auto-fit grids + scrollable table, no horizontal page scroll seen).
+**Prod DB (2026-09-19)**: migration 0018 APPLIED to prod (runner reported it as the only pending file). Verified against prod:
+anon-key select returns `[]`, anon-key insert is rejected (HTTP 401, RLS 42501); in a rolled-back transaction the
+generated `score` gave 2 / −2 / 0 for Call+Email / Not Done+Not Done / WhatsApp+Not Done, and a second row for the same
+date+project was blocked by the unique constraint (23505); one policy exists (`sod_eod_log_admin_all`, ALL). Not
+tested on prod: the admin-JWT read path (no admin PIN available) — confirm by opening Reports as admin after deploy.
+**Still to do**: commit + push the frontend (Vercel deploys from `main`), then open Reports as admin on the live site.

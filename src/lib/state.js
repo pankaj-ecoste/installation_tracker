@@ -70,5 +70,11 @@ export const state = {
   dprPhotoUrls: [],
   dprReportPdfUrl: '',
   requestTimelineExpanded: {},
-  ackRequestId: null
+  ackRequestId: null,
+  // v2-42 Reports module (admin only) — sodEodLog is fetched after admin login, never in loadAllData().
+  activeReport: null,
+  sodEodLog: [],
+  sodEodOpenDays: {},
+  sodEodFormDate: '',
+  sodEodSearch: ''
 };

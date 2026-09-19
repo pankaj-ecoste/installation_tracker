@@ -91,6 +91,9 @@ export function showTeamDashboard(){
   });
   const newVendTab=document.getElementById('tab-newvendors');
   if(newVendTab) newVendTab.style.display=(state.currentUser&&['admin','finance'].includes(state.currentUser.role))?'':'none';
+  // Reports (v2-42) — admin only. The database enforces this too; hiding the tab is just the UI half.
+  const reportsTab=document.getElementById('tab-reports');
+  if(reportsTab) reportsTab.style.display=(state.currentUser&&state.currentUser.role==='admin')?'':'none';
   updateNewVendorBadge();
   // Material tab — Admin/Dispatch Head can manage; Supervisor gets view-only access
   // (right to view, not edit — the addLot permission still blocks adding/editing lots).
