@@ -5,6 +5,8 @@ import { TODAY } from '../../lib/config.js';
 /* ══ SOD / EOD FOLLOW-UP TRACKER (admin only — see plan.md v2-42) ══
    One row per project per day (DB unique on log_date + project_name). Both SOD and EOD are
    required. Score per slot: Call / Email / WhatsApp = +1, Not Done = -1 (so a row is -2, 0 or +2).
+   Remarks are mandatory when either slot is Not Done. A saved entry is locked: no edit, no delete
+   (DB policies allow only select + insert, see migration 0019).
    The score column is DB-owned (generated); slotPts() below only mirrors it as a fallback for
    rows that don't carry a score yet (TEST_MODE mock has no generated columns). */
 const OPTIONS=['Call','Email','WhatsApp','Not Done'];
@@ -53,10 +55,10 @@ export async function renderSodEodReport(el){
       '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px">'+
         '<div class="form-group"><label class="form-label">Date</label><input type="date" class="form-input" id="sodeod-date" value="'+state.sodEodFormDate+'" max="'+todayStr()+'" onchange="sodEodFormChanged()"></div>'+
         '<div class="form-group"><label class="form-label">Project</label><select class="form-input" id="sodeod-project" onchange="sodEodFormChanged()"><option value="">— select project —</option>'+names.map(n=>'<option value="'+esc(n)+'">'+esc(n)+'</option>').join('')+'</select></div>'+
-        '<div class="form-group"><label class="form-label">SOD Follow-Up</label><select class="form-input" id="sodeod-sod">'+optionsHTML('')+'</select></div>'+
-        '<div class="form-group"><label class="form-label">EOD Follow-Up</label><select class="form-input" id="sodeod-eod">'+optionsHTML('')+'</select></div>'+
+        '<div class="form-group"><label class="form-label">SOD Follow-Up</label><select class="form-input" id="sodeod-sod" onchange="sodEodSlotChanged()">'+optionsHTML('')+'</select></div>'+
+        '<div class="form-group"><label class="form-label">EOD Follow-Up</label><select class="form-input" id="sodeod-eod" onchange="sodEodSlotChanged()">'+optionsHTML('')+'</select></div>'+
       '</div>'+
-      '<div class="form-group" style="margin-top:12px"><label class="form-label">Remarks</label><input type="text" class="form-input" id="sodeod-remarks" placeholder="optional"></div>'+
+      '<div class="form-group" style="margin-top:12px"><label class="form-label" id="sodeod-remarks-label">Remarks</label><input type="text" class="form-input" id="sodeod-remarks" placeholder="optional"></div>'+
       '<div style="display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap">'+
         '<button class="btn btn-green btn-sm" id="sodeod-save" onclick="saveSodEodEntry()">+ Add Entry</button>'+
         '<span id="sodeod-note" style="font-size:12px;color:#888"></span>'+
@@ -134,7 +136,7 @@ function renderFolders(){
       '</div>'+
       (open?'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'+
         '<thead><tr style="background:#f5f5f5;text-align:left">'+
-          ['Project','SOD Follow-up','EOD Follow-up','Score','Remarks',''].map(h=>'<th style="padding:8px 12px;font-weight:600;color:#555;white-space:nowrap">'+h+'</th>').join('')+
+          ['Project','SOD Follow-up','EOD Follow-up','Score','Remarks'].map(h=>'<th style="padding:8px 12px;font-weight:600;color:#555;white-space:nowrap">'+h+'</th>').join('')+
         '</tr></thead><tbody>'+
         list.map(r=>{
           const sc=rowScore(r);
@@ -144,7 +146,6 @@ function renderFolders(){
             '<td style="padding:8px 12px;white-space:nowrap;color:'+(r.eod==='Not Done'?'#cc3333':'inherit')+'">'+esc(r.eod)+'</td>'+
             '<td style="padding:8px 12px;white-space:nowrap;font-weight:700;color:'+scoreColor(sc)+'">'+signed(sc)+' / 2</td>'+
             '<td style="padding:8px 12px;color:#666">'+(r.remarks?esc(r.remarks):'—')+'</td>'+
-            '<td style="padding:8px 12px"><button class="btn btn-outline btn-sm" onclick="editSodEodEntry('+r.id+')">Edit</button></td>'+
           '</tr>';
         }).join('')+
       '</tbody></table></div>':'')+
@@ -153,13 +154,24 @@ function renderFolders(){
 }
 
 /* ══ FORM ══ */
-function setFormNote(existing){
-  const btn=document.getElementById('sodeod-save'), note=document.getElementById('sodeod-note');
-  if(btn) btn.textContent=existing?'Update Entry':'+ Add Entry';
-  if(note) note.textContent=existing?'✏️ This project already has an entry for this date — saving updates it.':'';
+const needsRemarks=()=>document.getElementById('sodeod-sod').value==='Not Done'||document.getElementById('sodeod-eod').value==='Not Done';
+
+// Remarks label/placeholder follow the rule: mandatory when SOD or EOD is Not Done, otherwise optional.
+export function sodEodSlotChanged(){
+  const req=needsRemarks();
+  const label=document.getElementById('sodeod-remarks-label'), input=document.getElementById('sodeod-remarks');
+  if(label) label.textContent=req?'Remarks (required)':'Remarks';
+  if(input) input.placeholder=req?'Required — why was it not done?':'optional';
 }
 
-// Date or project changed: load that project's existing entry for the date, or clear the form.
+// A saved entry is final: show what was logged, read-only, and block saving another one for that date.
+function setFormLocked(row){
+  ['sodeod-sod','sodeod-eod','sodeod-remarks','sodeod-save'].forEach(id=>{ const el=document.getElementById(id); if(el) el.disabled=!!row; });
+  const note=document.getElementById('sodeod-note');
+  if(note) note.textContent=row?'🔒 Already logged for this date — saved entries are final and cannot be edited.':'';
+}
+
+// Date or project changed: if that project already has an entry for the date, show it locked; else a clean form.
 export function sodEodFormChanged(){
   const dateEl=document.getElementById('sodeod-date'); if(!dateEl) return;
   state.sodEodFormDate=dateEl.value||state.sodEodFormDate;
@@ -168,25 +180,9 @@ export function sodEodFormChanged(){
   document.getElementById('sodeod-sod').value=row?row.sod:'';
   document.getElementById('sodeod-eod').value=row?row.eod:'';
   document.getElementById('sodeod-remarks').value=row&&row.remarks?row.remarks:'';
-  setFormNote(!!row);
-}
-
-export function editSodEodEntry(id){
-  const row=state.sodEodLog.find(r=>r.id===id); if(!row) return;
-  document.getElementById('sodeod-date').value=row.log_date;
-  state.sodEodFormDate=row.log_date;
-  const sel=document.getElementById('sodeod-project');
-  // A project that has since left Not Started/In Progress isn't in the dropdown any more — add it back for this edit.
-  if(![...sel.options].some(o=>o.value===row.project_name)){
-    const opt=document.createElement('option'); opt.value=row.project_name; opt.textContent=row.project_name; sel.appendChild(opt);
-  }
-  sel.value=row.project_name;
-  document.getElementById('sodeod-sod').value=row.sod;
-  document.getElementById('sodeod-eod').value=row.eod;
-  document.getElementById('sodeod-remarks').value=row.remarks||'';
-  setFormNote(true);
-  document.getElementById('sodeod-msg').textContent='';
-  sel.scrollIntoView({behavior:'smooth',block:'center'});
+  setFormLocked(row);
+  sodEodSlotChanged();
+  const msg=document.getElementById('sodeod-msg'); if(msg) msg.textContent='';
 }
 
 export function toggleSodEodDay(day){
@@ -213,33 +209,28 @@ export async function saveSodEodEntry(){
   if(date>todayStr()) return fail('Date cannot be in the future.');
   if(!project) return fail('Please select a project.');
   if(!sod||!eod) return fail('Both SOD and EOD follow-up are required — pick one for each (use "Not Done" if it was not done).');
+  if(findRow(date,project)) return fail('This project is already logged for this date — saved entries are final and cannot be edited.');
+  if((sod==='Not Done'||eod==='Not Done')&&!remarks) return fail('Remarks are required when SOD or EOD is Not Done — say why it was not done.');
 
   const btn=document.getElementById('sodeod-save');
   btn.disabled=true;
   try{
-    const existing=findRow(date,project);
-    let res;
-    if(existing){
-      res=await db.from(TABLE).update({sod,eod,remarks:remarks||null}).eq('id',existing.id).select().single();
-    } else {
-      res=await db.from(TABLE).insert({log_date:date,project_name:project,sod,eod,remarks:remarks||null,created_by:state.currentUser?state.currentUser.id:null}).select().single();
-    }
+    const res=await db.from(TABLE).insert({log_date:date,project_name:project,sod,eod,remarks:remarks||null,created_by:state.currentUser?state.currentUser.id:null}).select().single();
     if(res.error) throw res.error;
-    const saved=Array.isArray(res.data)?res.data[0]:res.data;
-    if(existing) Object.assign(existing,saved); else state.sodEodLog.push(saved);
+    state.sodEodLog.push(Array.isArray(res.data)?res.data[0]:res.data);
     // Newly logged day opens so the admin sees what they just saved.
     state.sodEodOpenDays[date]=true;
     document.getElementById('sodeod-project').value='';
     document.getElementById('sodeod-sod').value='';
     document.getElementById('sodeod-eod').value='';
     document.getElementById('sodeod-remarks').value='';
-    setFormNote(false);
+    sodEodSlotChanged();
     msg.style.color='#1D9E75';
     msg.textContent='✅ Saved — '+project+' · '+fmtDay(date);
     refreshSodEod();
   }catch(e){
     console.error('SOD/EOD save failed', e);
-    fail('Could not save — '+((e&&e.message)||'please try again')+'. If someone else already logged this project for this date, reopen the report and edit that entry.');
+    fail('Could not save — '+((e&&e.message)||'please try again')+'. If this project was already logged for this date, reopen the report to see it.');
   }finally{
     btn.disabled=false;
   }

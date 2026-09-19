@@ -25,7 +25,7 @@ import { fieldRowHTML, captureDPRArrivalGeoLocation, captureGeoLocation, reqFiel
 import { renderTeamMgmt, togglePerm, openAddMember, openEditMember, updateRolePreview, saveMember, toggleMemberStatus, deleteMember } from '../sections/team/teamMgmtTab.js';
 import { renderVendorPortal } from '../sections/vendorPortal/vendorPortal.js';
 import { renderReports, openReport, closeReport } from '../sections/reports/reportsTab.js';
-import { sodEodFormChanged, saveSodEodEntry, editSodEodEntry, toggleSodEodDay, sodEodSearchChanged } from '../sections/reports/sodEodReport.js';
+import { sodEodFormChanged, sodEodSlotChanged, saveSodEodEntry, toggleSodEodDay, sodEodSearchChanged } from '../sections/reports/sodEodReport.js';
 import { updateNewVendorBadge, renderNewVendors, markVendorReviewed, markVendorApprovedByShashank } from '../sections/vendors/newVendorsTab.js';
 
 // Every function invoked from an inline onclick="..." attribute in index.html needs to
@@ -263,7 +263,7 @@ export function installDomGlobals(){
     closeReport,
     sodEodFormChanged,
     saveSodEodEntry,
-    editSodEodEntry,
+    sodEodSlotChanged,
     toggleSodEodDay,
     sodEodSearchChanged
   });

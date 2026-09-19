@@ -2951,3 +2951,30 @@ date+project was blocked by the unique constraint (23505); one policy exists (`s
 tested on prod: the admin-JWT read path (no admin PIN available) — confirm by opening Reports as admin after deploy.
 **Pushed** to `main` as 1ad9a14 (2026-09-19); Vercel deploys from `main`.
 **Still to do**: open Reports as admin on the live site and confirm load + save work (the one path not testable without an admin PIN).
+#### v2-42 follow-up: mandatory remarks on Not Done + locked entries (2026-09-19, after the team's first live check)
+
+**Request** (user, after testing on prod with admin): "if he selects Not Done then the remark is mandatory; if any other
+then it's optional; and edit for saved EOD/SOD is not required." Asked which reading of the second point was meant →
+user chose **"Locked, no editing"**.
+
+**Rules**: (1) Remarks required when SOD **or** EOD is Not Done (whitespace-only doesn't count); optional for
+Call/Email/WhatsApp. (2) A saved entry is final — no Edit button, no update-on-save, no delete.
+
+**Built**: `sodEodReport.js` — remarks label/placeholder switch to "Remarks (required)" when either slot is Not Done;
+save blocked without remarks; Edit column removed; picking a project+date that already has an entry shows it read-only
+with "🔒 Already logged … cannot be edited" and disables Save; insert-only save. `domGlobals.js` — `editSodEodEntry`
+replaced by `sodEodSlotChanged`. New migration `0019_sod_eod_locked_and_not_done_remarks.sql` enforces both rules in the
+DB: check constraint `sod_eod_log_not_done_needs_remarks`, and the FOR ALL admin policy replaced by admin **select +
+insert** only (no update/delete policy → denied for every API role incl. admin).
+
+**Consequence to remember**: a wrong entry can no longer be fixed from the app — only directly in the database
+(owner connection bypasses RLS). If the team later wants a correction path, add it deliberately (e.g. admin-only delete).
+
+**Verified**: TEST_MODE real browser (label switch, Not Done without/with-spaces remarks blocked, EOD-only Not Done
+blocked, Call/Email/WhatsApp saves without remarks, saved entry shown locked + Save disabled + forced save refused,
+unlocks on another project, no Edit buttons). 0019 SQL run inside a rolled-back transaction against prod: applies
+cleanly over the 1 existing row (Nyati Evoque, Call/Email); Not Done without/space remarks → 23514; admin insert/select
+OK; admin update and delete → 0 rows. Prod unchanged by that test (old policy still in place, 1 row).
+
+**Status**: migration 0019 APPLIED to prod, committed and pushed (2026-09-19). Still to confirm on the live site: as admin, a Not Done entry
+without remarks is refused and a saved entry shows locked.
