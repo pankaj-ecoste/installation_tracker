@@ -3003,3 +3003,28 @@ header stays whole-day while a search narrows the rows below it; rows without a 
 Migration 0020 tested inside a rolled-back prod transaction: applies cleanly, backfills the 2 existing rows with 36 (matches the
 live count behind the team's `2 / 72` screenshot), and an admin insert that tries to send `total_projects=999` is stored as 36.
 **Status**: migration 0020 APPLIED to prod, committed and pushed (2026-09-19). To confirm on the live site: folder headers show `score / max`.
+
+
+### v2-43: Material tab badge clears once the user has opened the tab (2026-09-19)
+
+**Request**: follow-up to v2-41 — once the admin has seen the 8 material items, the red number on the Material tab should
+vanish (it stayed at 8 because it was a live count of every lot not yet arrived).
+
+**Decisions (user)**: badge = lots the current user hasn't seen yet, cleared on opening the tab; stored per browser (no DB
+change). Considered a per-user DB table (clears on every device) — rejected for now: needs a production migration + RLS for a
+display-only convenience. Revisit if the team uses several devices.
+
+**Done**: `src/lib/seenLots.js` (new) keeps a per-username list of seen lot ids in localStorage (`ecoste_seen_lots_<username>`),
+with an in-memory fallback if storage is blocked. `alerts.js` `updateTabBadges()` now counts only in-transit lots NOT in the
+seen list. `materialTab.js` `renderMaterial()` marks every in-transit lot on the user's visible projects as seen when the
+Material tab is active, then calls `updateBell()`. The v2-41 sort is unchanged (in-transit still listed first) — only the red
+number clears. The bell count and the dispatch alerts inside it are unchanged.
+
+**Behaviour to know**: per user AND per browser — admin clearing it does not clear it for the dispatch head, and the same admin
+on a second device sees it once there. A newly dispatched lot has a new id, so it brings the badge back. Data is loaded once per
+page load (no polling), so a lot added by someone else shows as unseen after the next reload/login.
+
+**Verified** (TEST_MODE, real browser): 8 in-transit lots -> badge 8; opening Material -> hidden; a new lot -> 1; reopening ->
+hidden; logout/login as the same user -> still hidden (persisted); a second user (manager) still sees the full count and is
+cleared separately without touching the first user's list; lots still render in-transit-first after the badge clears; with
+localStorage reads/writes throwing, no crash and the same clear behaviour for the session. Not yet committed / not prod-verified.

@@ -3,6 +3,7 @@ import { db } from '../../lib/supabaseClient.js';
 import { logActivity } from '../../lib/activityLog.js';
 import { canDo, fmt, fmtDate, visibleProjects } from '../../lib/helpers.js';
 import { lotToRow, rowToLot } from '../../lib/mappers.js';
+import { markLotsSeen } from '../../lib/seenLots.js';
 import { uploadFiles } from '../../lib/uploads.js';
 import { updateBell } from '../alerts.js';
 import { closePanel, openPanel } from '../navigation.js';
@@ -86,6 +87,15 @@ export function renderMaterial(){
     +'</div>';
   });
   el.innerHTML=html;
+
+  // The user is looking at the Material tab, so every lot still in transit on their visible
+  // projects now counts as seen — the tab badge clears. Uses allVp (not the search-filtered
+  // list) so typing in the search box never leaves some lots "unseen".
+  if(state.activeTab==='material'&&state.currentUser){
+    const inTransitIds=state.materialLots.filter(l=>!l.actualArrival&&allVp.some(p=>p.id===l.projId)).map(l=>l.id);
+    markLotsSeen(state.currentUser.username,inTransitIds);
+    updateBell();
+  }
 }
 
 export function timelineMetric(label,val,color){

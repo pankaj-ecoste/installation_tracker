@@ -1,4 +1,5 @@
 import { state } from '../lib/state.js';
+import { getSeenLotIds } from '../lib/seenLots.js';
 import { syncProject } from '../data/loadAllData.js';
 import { CHECKLIST_DEFS, TODAY, reqTypeLabel } from '../lib/constants.js';
 import { canDo, daysDiff, fmt, fmtDate, needsFinanceReview, needsRABill, pct, visibleProjects } from '../lib/helpers.js';
@@ -79,7 +80,8 @@ export function updateBell(){
 // Same red-badge treatment as Requests, applied to the other places new activity shows up:
 // All Projects (open snags), DPR log (today's submissions), Material (undelivered
 // dispatches), Finance (RA bills pending generation) — all computed live from real data,
-// no separate "seen/unseen" tracking needed.
+// no separate "seen/unseen" tracking needed. Exception: Material, which counts only lots
+// the current user hasn't opened the tab to see yet (see lib/seenLots.js).
 export function setBadge(id,count){
   const el=document.getElementById(id); if(!el) return;
   if(count>0){ el.classList.remove('hidden'); el.textContent=count; }
@@ -96,8 +98,11 @@ export function updateTabBadges(){
   const checklistsAwaitingReview=vp.reduce((a,p)=>a+CHECKLIST_DEFS.filter(def=>p[def.completedField]&&!p[def.reviewedField]).length,0);
   setBadge('dpr-count', dprToday+checklistsAwaitingReview);
 
-  const undeliveredLots=state.materialLots.filter(l=>!l.actualArrival&&vp.some(p=>p.id===l.projId)).length;
-  setBadge('material-count', undeliveredLots);
+  // Only lots this user hasn't looked at yet — opening the Material tab marks them seen
+  // (renderMaterial), so the badge clears and returns only when a new lot is dispatched.
+  const seenLotIds=getSeenLotIds(state.currentUser.username);
+  const unseenLots=state.materialLots.filter(l=>!l.actualArrival&&!seenLotIds.has(l.id)&&vp.some(p=>p.id===l.projId)).length;
+  setBadge('material-count', unseenLots);
 
   const raBillPending=vp.filter(p=>needsRABill(p)).length;
   const financeReviewPending=vp.filter(p=>needsFinanceReview(p)).length;
