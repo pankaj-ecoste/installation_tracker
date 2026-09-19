@@ -2670,3 +2670,91 @@ production data touched): logged in as `admin`/`1234`.
   is unaffected by this change.
 
 Not yet verified live against the production database.
+
+### v2-37: CNC timeline attachments — "Rough Doc" + mandatory "Preview PDF" for Admin/Ops Manager too (starting 2026-09-19)
+
+**Ask**: On a saved CNC request (screenshot `Screenshot 2026-09-19 144541.png`, logged in as admin),
+the stage timeline showed no attachment fields. Team wants two attachments with the timeline:
+**Rough Doc** (optional, 1–5 files) and **Preview PDF** (mandatory, up to 20 files). Attaching the
+Preview PDF must update the "Preview created by Design team" Actual date.
+
+**Root cause**: v2-29 continued already built both uploads (`uploadCNCRoughDrawing` /
+`uploadCNCPreviewPdf`) and the Actual-date auto-fill, but they were gated to the **Design** role only
+and only rendered inside the Design-only branch of `renderRequestCard()`. Admin/Ops Manager saw
+neither field, so it looked like the feature was never built. Limits were also 3 (rough) not 5, the
+label read "Rough Drawing", and Preview PDF wasn't actually enforced as mandatory.
+
+**Decisions finalized with the user before building** (these supersede v2-29 decision #1):
+1. Who can attach: **Design + Admin + Ops Manager** (anyone with `addMilestone`, plus Design). Sales/
+   Viewer, Supervisor, Finance, Dispatch Head still can't add files (they still see the links).
+2. **"Mandatory" = Actual date only via upload**: the "Preview created by Design team" Actual date can
+   no longer be typed by hand for anyone; it auto-fills with today's local date when the first Preview
+   PDF is attached (still set-once, never overwritten by a later upload). Stages after it stay
+   locked until a Preview PDF exists.
+3. Limits are **totals per request**, not per selection: Rough Doc max 5, Preview PDF max 20.
+4. Label renamed Rough Drawing -> **Rough Doc** everywhere it's shown. Stored key `roughDrawingUrls`
+   unchanged, so nothing already saved is orphaned.
+
+**Design — files to change**: `requestsTab.js` only (+ `domGlobals.js` only if an export is needed).
+- New `renderCNCAttachments(r)` rendered inside `renderCNCStageTimeline()` (so every role that sees the
+  timeline sees the counts/links; the file inputs appear only for who may upload).
+- `uploadCNCRoughDrawing`/`uploadCNCPreviewPdf`: permission = Design or `addMilestone`; cap against
+  what's already attached; store `{name,url}` (real filenames) via `uploadFilesWithNames`; do NOT
+  touch the stage if every upload failed (previously a failed upload could still stamp the date).
+- `renderCNCStageTimeline()`/`setCNCStageActual()`: Preview created's Actual is read-only; later stages
+  locked until a Preview PDF exists (legacy requests whose Preview date was already typed stay
+  unlocked, so nothing in flight gets stuck).
+- Remove the now-duplicated inline file inputs from the Design branch of `renderRequestCard()`.
+
+**Not changed**: no DB migration (details is jsonb; same `'requests'` storage folder), stage
+planned-date logic, the Dispatched -> status flip, or any non-CNC request.
+
+**Built**: `npm run build` clean.
+
+**Verified against TEST_MODE mock data in a real browser** (separate dev server on port 5191, no
+production data touched), logged in as `admin`/`1234`, on a CNC request (PRE-0001) created through
+the real form:
+- Expanded stage timeline: "Preview created by Design team" Actual showed "Sets when Preview PDF is
+  attached" (no date input) and all 5 later stages showed "🔒 Attach Preview PDF first". Below the
+  table, two blocks: "Rough Doc (optional)" — "Optional — none attached", and "Preview PDF *" —
+  "Required — none attached yet" (admin now sees both file inputs).
+- Rough Doc: selecting 6 files was refused (limit 5); 2 files attached with real filenames and no effect on the
+  timeline; a further 4 was refused (cumulative cap, 3 left).
+- Preview PDF: attaching 3 files set "Preview created" Actual to today ("19 Sept 2026", "3d early") and unlocked
+  the later stages (date inputs appeared). A 4th file re-upload did **not** change that date. Calling the manual setter
+  on "Preview created" was refused with the auto-set message; "Approval received" then accepted a typed date.
+- "Rough Doc" label and both file lists show in the card's top "Documents" area too.
+
+**Not browser-verified**: Design-role and Sales/Viewer-role views (no Design user in mock data; Sales
+only sees its own requests). Gated by `canAttachCNCFiles()` = Design or `addMilestone`. Not yet
+verified against the production database.
+
+
+### v2-38: CNC new-request email — add the CNC team inbox to To, sales person to Cc (2026-09-19)
+
+**Ask**: When a CNC request is submitted, the notification email should also go to
+`cnc.ecoste@gmail.com` (To) with the sales person's email in Cc.
+
+**Reading of the ask (assumption, easy to flip)**: still **one** Gmail compose window (the existing
+admin notification, `notifyManagementNewRequest`), not a second one — To: admin + `cnc.ecoste@gmail.com`;
+Cc: existing management list + the request's `salesEmail`. One window avoids the popup blocker
+swallowing a second `window.open`. CNC only — every other request type's email is untouched. Emails
+are de-duplicated and anyone already in To is dropped from Cc.
+
+**Change**: `constants.js` new `CNC_TEAM_EMAIL`; `requestsTab.js` `notifyManagementNewRequest()` builds
+the CNC To/Cc as above. `salesEmail` is already a required CNC field. No DB change.
+
+**Built**: `npm run build` clean.
+
+**Verified against TEST_MODE mock data in a real browser** (port 5191, `window.open` stubbed to capture
+the Gmail link, nothing sent): saved a CNC request via the real form (sales email
+`rahul.sales@ecoste.in`) -> exactly one compose link, `to=admin@example.com,cnc.ecoste@gmail.com`
+(admin is the mock fallback address), `cc=rahul.sales@ecoste.in`. Saved a Pre-Mockup request ->
+still one link, `to=admin@example.com`, no cc — non-CNC types unchanged.
+
+Not yet verified against the production database / real Team-module admin + management emails.
+
+**Follow-up (same day)**: the CNC email body now also lists Client name, Size of grill (Sq Feet), Need
+installation and the attached Document link(s) — CNC only, via the existing `lines` array in
+`notifyManagementNewRequest()`. Re-verified in the browser (compose link captured, not sent): body
+shows all four; To/Cc unchanged. In TEST_MODE the document link is the mock `about:blank#...` URL.

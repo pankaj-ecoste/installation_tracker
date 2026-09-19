@@ -365,6 +365,9 @@ export const CNC_FIELDS = [
   {key:'developerName',label:'Developer name',required:true},
   {key:'needInstallation',label:'Need Installation?',type:'select',options:['Yes','No'],required:true}
 ];
+// v2-38: the CNC team's shared inbox — added to the "To:" of every new CNC request notification
+// email (alongside the admin), with the sales person Cc'd. See plan.md v2-38.
+export const CNC_TEAM_EMAIL = 'cnc.ecoste@gmail.com';
 // CNC production stage timeline — Planned dates are computed ONCE at request creation using these
 // fixed day-offsets (each chained from the previous stage's planned date), then never
 // recalculated afterward, even if an Actual date comes in late/early — confirmed with the user
