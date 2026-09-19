@@ -2788,3 +2788,67 @@ worked. Logged in as Ops Manager (`neelam`) on the same request: "Preview create
 Preview PDF is attached", Approval received showed the admin-entered "25 Sept 2026" read-only, and the
 untouched later stages still showed "🔒 Attach Preview PDF first" — Ops Manager behavior unchanged.
 Not yet verified against the production database.
+
+
+### v2-40: "Could not save DPR changes" came back — live DPR update policy had been reverted (2026-09-19)
+
+**Report**: supervisor Ravi, on mobile, got `Could not save DPR changes — check console.` again
+(`Screenshot WhatsApp Image 2026-09-19 at 3.56.29 PM.jpeg`) — the same error v2-22 "permanently" fixed.
+
+**Root cause (verified live, read-only)**: not a code bug. Production's `dpr_log_update` RLS policy was the
+ORIGINAL 0004 version (`supervisor = app_active_team_member_name()`, case-sensitive text compare), not
+0013's id-based version (`created_by_id = app_jwt_team_member_id()`). Ravi's DPRs store supervisor as
+"ravi" while his team_members.name is "Ravi", so his own edits matched 0 rows -> `.single()` PGRST116 ->
+the generic alert. A rolled-back JWT simulation reproduced it exactly: DPR 230 ("ravi") -> 0 rows updated;
+DPR 198 ("Ravi") -> 1 row. Blast radius: 116 of 197 DPR rows un-editable by their own supervisor
+(Durgendra 37/66, Ravi 30/33, Shubham 27/37, Karan 12/33, Mahesh 10/28).
+
+**Why it regressed**: `scripts/apply-migrations.mjs` has no applied-migrations tracking — it re-applies
+EVERY file in filename order on every run. A full re-run after v2-21 re-created all of 0004's policies
+(pg_policy oids for projects/dpr_log/requests/finance_ledger are all newer than 0015's objects), which
+resets dpr_log_update to the old rule, then aborted at `0010_project_tower_count.sql` (`ADD COLUMN`
+without `IF NOT EXISTS`, already flagged in v2-19 and left alone), so 0013/0014 — the files that override
+0004's dpr_log policies — never re-ran. Everything else 0004..0009 re-applied is identical to its final
+form, so dpr_log_update was the only policy that regressed (checked: finance_ledger_insert, storage
+folder allowlist, team_members column grants all still correct).
+
+**Plan (both requested by the user; production, so smallest possible blast radius)**:
+1. **Hotfix, DB only, no app deploy**: `ALTER POLICY dpr_log_update` (atomic — never a moment with no
+   update policy) to 0013's exact definition. Snapshot the old definition first for rollback; verify
+   with rolled-back JWT simulations (own row, someone else's row, admin/manager, legacy null-owner row).
+2. **Permanent**: `apply-migrations.mjs` records applied files in its own `app_migrations.applied` table
+   (own schema, so PostgREST never exposes it) and only runs unapplied ones; refuses to run against a
+   database that already has tables but no tracking (must `--baseline` once), plus `--dry-run`. Make
+   the non-idempotent migrations (0010, 0011, 0015, 0017) safe to re-run as defense in depth. Rule
+   documented in the script header: never edit an applied migration and re-run everything — add a new file.
+
+**Done — 1. Hotfix applied to production (2026-09-19)**: `ALTER POLICY dpr_log_update` to 0013's exact
+definition (single atomic statement, `lock_timeout 3s`, no app deploy needed). Old definition snapshotted
+for rollback before changing. Verified with rolled-back JWT simulations (no data written): Ravi editing his
+own DPR 230 -> 1 row (was 0); Ravi editing Karan's DPR -> 0; Karan editing his own -> 1; admin -> 1; Ops
+Manager -> 1; Sales/Viewer -> 0; another supervisor -> 0; legacy null-owner DPR by an unrelated supervisor
+-> 0; unknown/deactivated member id -> 0. All 9 as expected. Users need nothing — no refresh, no update.
+
+**Done — 2. Permanent fix (code, not yet committed)**:
+- `scripts/apply-migrations.mjs`: records applied files in `app_migrations.applied` (own schema — verified
+  NOT reachable through the public REST API: PGRST106 "only public, graphql_public exposed"), applies only
+  pending files, each file and its record in one transaction (a failure leaves neither), holds an advisory
+  lock so two runners can't overlap, `lock_timeout 10s`, plus `--dry-run` and `--baseline`. Refuses to run
+  at all against a database that has the app tables but no tracking (this is precisely the situation that
+  caused the incident).
+- Migrations made safe to re-run (defense in depth): 0010, 0011, 0017 (`ADD COLUMN IF NOT EXISTS`), 0015
+  (constraint add guarded; the three `setval` calls now use `greatest(..., last_value)` so a replay can never
+  move a request-number sequence BACKWARD — that would have re-issued duplicate PRE-/PPO- numbers).
+- Production baseline run once: 16 files recorded as applied, nothing executed. Then: plain run and `--dry-run`
+  both report "nothing to apply"; the untracked-DB refusal was tested first; a throwaway no-op `0099` file in a
+  temp folder applied alone (16 skipped), recorded, and was not re-run on a second pass (its test row removed
+  afterwards; tracking table = 16 rows). The four edited migrations were re-run inside a rolled-back
+  transaction: no errors, no-ops; sequence expressions equal current values (13/23/1).
+- Live DPR policy re-checked after all of the above: still the id-based one.
+
+**Going forward**: to ship a new migration, add `00NN_*.sql` and run
+`DATABASE_URL=... node scripts/apply-migrations.mjs` (optionally `--dry-run` first). Never edit an applied
+file and expect a replay.
+
+**Not fixed (out of scope, noted)**: 2 legacy DPR rows still have `created_by_id` null and only match by the
+old case-sensitive name check (unchanged from v2-22 — "site supervisor" test placeholders).

@@ -22,9 +22,9 @@ create sequence if not exists req_seq_sur;
 -- Seed each sequence past the highest number already used in its prefix (post the v2-21/09-03
 -- cleanup, so this doesn't collide with real historical data, including the just-renumbered
 -- PPO-0006/PPO-0007/PRE-0013).
-select setval('req_seq_ppo', greatest(1, (select coalesce(max(substring(request_number from 5)::int),0) from requests where request_number like 'PPO-%')), true);
-select setval('req_seq_pre', greatest(1, (select coalesce(max(substring(request_number from 5)::int),0) from requests where request_number like 'PRE-%')), true);
-select setval('req_seq_sur', greatest(1, (select coalesce(max(substring(request_number from 5)::int),0) from requests where request_number like 'SUR-%')), true);
+select setval('req_seq_ppo', greatest(1, (select last_value from req_seq_ppo), (select coalesce(max(substring(request_number from 5)::int),0) from requests where request_number like 'PPO-%')), true);
+select setval('req_seq_pre', greatest(1, (select last_value from req_seq_pre), (select coalesce(max(substring(request_number from 5)::int),0) from requests where request_number like 'PRE-%')), true);
+select setval('req_seq_sur', greatest(1, (select last_value from req_seq_sur), (select coalesce(max(substring(request_number from 5)::int),0) from requests where request_number like 'SUR-%')), true);
 
 create or replace function requests_set_request_number() returns trigger
 language plpgsql
@@ -50,4 +50,8 @@ create trigger requests_set_request_number_trg
   before insert on requests
   for each row execute function requests_set_request_number();
 
-alter table requests add constraint requests_request_number_unique unique (request_number);
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'requests_request_number_unique') then
+    alter table requests add constraint requests_request_number_unique unique (request_number);
+  end if;
+end $$;
