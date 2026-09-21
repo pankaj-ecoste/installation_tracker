@@ -3103,7 +3103,14 @@ still Stage 1; approved vendor -> lock note shown, both name inputs disabled, a 
 Finance login sees no Edit button and a direct `openVendorEdit()` call does nothing; Cancel / Back / Save all land on New Vendors tab.
 `vite build` clean.
 
-**Not yet verified / pending**: (1) apply `0021` to prod (needs a fresh confirm at that moment); (2) one REAL admin document upload on
-prod — TEST_MODE's mock storage cannot prove the storage policy; (3) not committed / pushed.
+**Prod (2026-09-21)**: migration `0021` applied via `scripts/apply-migrations.mjs` (dry-run first: it was the only pending file, 19
+already applied). Read-back of `pg_policies` on `storage.objects`: `uploads_insert_admin_vendor_kyc` present with the exact check
+(bucket `uploads` + active team member + role `admin` + folder `vendor-kyc`); `uploads_insert_team`, `uploads_insert_vendor_kyc`,
+`uploads_select_open` unchanged. Code pushed to `main` as `5467de2` (Vercel deploys from main). Only existing-code touch: one added
+branch in `reqFieldChanged` (`vendedit` prefix); no other existing function changed.
 
-**Status**: built and TEST_MODE-verified; prod migration + prod upload check + commit pending.
+**Still pending**: one REAL admin document upload on the live app (TEST_MODE's mock storage cannot prove the storage policy) — log in
+as admin, New Vendors -> Edit details on a vendor with a missing doc (e.g. KAIF TECH), pick a file, Save; expect the doc link to
+appear and no console error. Not done by Claude: needs the admin PIN and writes a real file to a real vendor's record.
+
+**Status**: shipped to prod 2026-09-21 (`5467de2`); prod admin-path upload check pending.
