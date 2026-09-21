@@ -3166,3 +3166,50 @@ Claude did not run it).
 
 **Status**: shipped to prod and prod-verified 2026-09-21 (`81a84af`). Open follow-up (not built): projects whose supervisor is
 "site engineer" / "—" (4 of 86) show the greyed pill until a real supervisor is assigned.
+
+### v2-46: SOD/EOD tracker rework — "Other" free text, no Not Done / no negatives, In Progress vs Not Started scores (2026-09-21)
+
+**Request** (management, after seeing the tracker live; user relayed it with `Screenshot 2026-09-21 182347.png`): the tracker's
+"Not Done" option was being used as a workaround ("SOD is done, EOD won't be possible, no manpower", "whatsapp and mail both
+are done" typed under a Not Done EOD) and cost the team points. Management wants: (1) points calculated separately for
+**In Progress** and **Not Started** projects — e.g. 4 In Progress → total 8, 8 Not Started → total 16; (2) a **free-text option**
+in the SOD/EOD dropdown that scores **0**; (3) **no "Not Done" option and no negative marking**.
+
+**Decisions (user, "go ahead with your recommendation")**
+- Per slot: Call / Email / WhatsApp = **+1**; **Other** (free text typed by the admin, required when Other is chosen) = **0**.
+  A project scores 0, 1 or 2 per day. No negatives anywhere.
+- Remarks become **always optional** (the Other free text carries the reason). Saved entries stay **locked** (v2-42 follow-up).
+- Score is shown **separately** for In Progress and Not Started projects, plus the combined total. Points per project are the
+  same (2) for both groups for now; each group's per-project value is a single constant so it can be changed later.
+- A project (grouped by name, towers together) is **In Progress if any tower is In Progress, otherwise Not Started**; it is only
+  counted while some tower is Not Started / In Progress (unchanged).
+- Each day's per-group maximums are **frozen when the day is logged** (same principle as `total_projects` in 0020); today uses the
+  live counts so the header equals the top card.
+- **Existing rows** with Not Done are converted to `Other` with the free text "Not Done" (their remarks untouched), so old rows
+  are re-scored under the new rule (0, not −1) — scores of old days go up. Chosen over leaving two rules mixed in one report.
+- **19 and 20 Sept cannot be split retroactively** (no record of which projects were In Progress vs Not Started then) → those days
+  keep showing only the combined `score / max`. Rows dated "today" (IST) at migration time are stamped with the exact current
+  split, so 21 Sept gets the full split.
+
+**Design**
+- Migration `0022_sod_eod_other_and_status_split.sql`: drop the old value/remarks check constraints and the generated `score`
+  column; add `sod_other`, `eod_other`, `project_group` ('In Progress'|'Not Started'), `total_in_progress`, `total_not_started`;
+  convert `Not Done` → `Other` + text; new checks (`sod/eod in Call|Email|WhatsApp|Other`, free text required when Other);
+  re-add `score` as generated (+1 per Call/Email/WhatsApp slot, 0 otherwise); replace the insert trigger so it stamps
+  `project_group`, `total_in_progress`, `total_not_started` and `total_projects` from the `projects` table (DB-owned — the client
+  never sends them). RLS unchanged (admin select + insert only).
+- Frontend `sodEodReport.js`: options Call/Email/WhatsApp/Other with a free-text box per slot; Remarks always optional; top card
+  = Total Projects (IP·NS split), Not Logged Yet, Other Today (0 pts), In Progress score, Not Started score, Total score; day
+  folder header = projects pill + `In Progress x / a` + `Not Started y / b` + bold total `s / m` (combined only for unsplittable
+  legacy days); rows show `Other: <text>`.
+
+**Built + verified 2026-09-21**. TEST_MODE real browser: dropdown has Call/Email/WhatsApp/Other only (no Not Done); Other shows a free-text
+box per slot and blocks save without text; Remarks optional; free text is HTML-escaped; saved Other rows show locked; top card and day
+headers show In Progress / Not Started / Total (e.g. IP 3/4, NS 2/6, total 5/10 for 2 In Progress + 3 Not Started projects); earlier days use
+their frozen group maximums (20 Sept 1/2 · 2/8 · 3/10) and an unsplittable legacy day shows only `Total 2 / 12`; a project logged today keeps
+its logged-time group even if its status changes later that day. Migration 0022 run against the REAL prod rows inside a rolled-back
+transaction: applies cleanly; all Not Done rows (8 EOD + 1 SOD) convert to Other with the text "Not Done" and remarks untouched; 21 Sept rows
+(9) are stamped with the live split 19 In Progress / 18 Not Started (37 total); 19 Sept rows stay unsplit; an admin insert that tries to send
+fake group/totals is overwritten by the trigger; Other without text (or spaces only) → 23514; Not Done → 23514; update still locked.
+Effect on existing numbers (from the rescore): 19 Sept 2 → 3, 21 Sept 2 → 10 (out of 72 / 74).
+**Status**: migration 0022 APPLIED to prod, committed and pushed (2026-09-21). To confirm on the live site as admin: dropdown has Other (no Not Done), top card shows In Progress / Not Started / Total, folder headers show the split.
