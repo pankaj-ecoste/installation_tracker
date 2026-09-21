@@ -542,6 +542,26 @@
   <div class="panel-footer"><button class="btn btn-outline" onclick="closePanel('panel-vendor-register')">Cancel</button><button class="btn btn-green" onclick="vendorRegister()">Register</button></div>
 </div>
 
+<!-- v2-44: ADMIN EDITS A SUBMITTED VENDOR FORM -->
+<div class="page-panel" id="panel-vendor-edit">
+  <div class="panel-topbar"><button class="btn btn-outline btn-sm" onclick="closeVendorEdit()">← Back</button><div class="panel-title">Edit vendor details</div></div>
+  <div class="panel-body">
+    <div class="form-card"><div class="form-card-title">Login</div>
+      <div class="form-group"><label class="form-label">Email (vendor's login — cannot be changed here)</label><input class="form-input" id="vendedit-email" disabled></div>
+    </div>
+    <div class="form-card"><div class="form-card-title">Company / KYC details</div>
+      <div id="vendedit-name-note" class="hidden" style="font-size:11px;color:#a06a00;background:#fff8e6;border-radius:6px;padding:8px 10px;margin-bottom:10px">🔒 Company / Trade name are locked because this vendor is approved — projects, finance and requests are linked to the vendor by this name.</div>
+      <div id="vendedit-fields-list"></div>
+    </div>
+    <div class="form-card"><div class="form-card-title">KYC documents</div>
+      <div style="font-size:11px;color:#888;margin-bottom:8px">Pick a file only for the document you want to add or replace — the others stay as they are.</div>
+      <div id="vendedit-kyc-list"></div>
+    </div>
+    <div class="error-msg hidden" id="vendedit-error"><span id="vendedit-err-msg"></span></div>
+  </div>
+  <div class="panel-footer"><button class="btn btn-outline" onclick="closeVendorEdit()">Cancel</button><button class="btn btn-green" id="vendedit-save-btn" onclick="saveVendorEdit()">Save changes</button></div>
+</div>
+
 <div class="page-section hidden" id="section-vendor-portal">
   <div class="client-topbar">
     <div style="display:flex;align-items:center;gap:8px;font-size:13px">

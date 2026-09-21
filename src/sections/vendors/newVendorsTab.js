@@ -27,6 +27,9 @@ export function renderNewVendors(){
       }).join('')+
     '</div>';
 
+  // v2-44: admin can edit a submitted vendor form at every stage (see vendorEdit.js).
+  const editBtn=v=>'<button class="btn btn-outline btn-sm" style="margin-left:6px" onclick="openVendorEdit(\''+v.user_id+'\')">✏️ Edit details</button>';
+
   // Finance gets a simplified, fully read-only view: Approved Vendor list only, nothing editable.
   if(!isAdmin){
     el.innerHTML=
@@ -46,19 +49,20 @@ export function renderNewVendors(){
     (pending.length?pending.map(v=>'<div class="proj-card" style="cursor:default;border-left:4px solid #f0a500">'+
       '<div class="proj-name">'+(v.trade_name||v.company_name)+' <span class="badge ba">🆕 New Vendor — Stage 1: Admin review</span></div>'+
       detailLines(v)+
-      (isAdmin?'<div style="margin-top:10px"><button class="btn btn-green btn-sm" onclick="markVendorReviewed(\''+v.user_id+'\')">✅ Admin: Approve (sends to Shashank for final approval)</button></div>':'')+
+      (isAdmin?'<div style="margin-top:10px"><button class="btn btn-green btn-sm" onclick="markVendorReviewed(\''+v.user_id+'\')">✅ Admin: Approve (sends to Shashank for final approval)</button>'+editBtn(v)+'</div>':'')+
     '</div>').join(''):'<div class="empty">No new vendor registrations awaiting admin review.</div>')+
     '<div class="section-hdr" style="margin-top:16px">📋 Reviewed by Admin — awaiting for approval <span class="count-pill" style="background:#d0e8f7;color:#0a3d6b">'+awaitingShashank.length+'</span></div>'+
     (awaitingShashank.length?awaitingShashank.map(v=>'<div class="proj-card" style="cursor:default;border-left:4px solid #0a3d6b">'+
       '<div class="proj-name">'+(v.trade_name||v.company_name)+' <span class="badge bb">📋 Stage 2: Awaiting Shashank\'s approval</span></div>'+
       detailLines(v)+
-      (isAdmin?'<div style="margin-top:10px"><button class="btn btn-green btn-sm" onclick="markVendorApprovedByShashank(\''+v.user_id+'\')">✅ Approve as Shashank — make available for assignment</button></div>':'')+
+      (isAdmin?'<div style="margin-top:10px"><button class="btn btn-green btn-sm" onclick="markVendorApprovedByShashank(\''+v.user_id+'\')">✅ Approve as Shashank — make available for assignment</button>'+editBtn(v)+'</div>':'')+
     '</div>').join(''):'<div class="empty">No vendors currently waiting on Shashank\'s approval.</div>')+
     '<div class="section-hdr" style="margin-top:16px">✅ Approved Vendor <span class="count-pill" style="background:#d4edda;color:#1a5e2a">'+approved.length+'</span></div>'+
     (approved.length?approved.map(v=>'<div class="proj-card" style="cursor:default;border-left:4px solid #1D9E75">'+
       '<div class="proj-name">'+(v.trade_name||v.company_name)+' <span class="badge bg">✅ Approved Vendor</span></div>'+
       detailLines(v)+
       '<div style="font-size:11px;color:#888;margin-top:8px">Available in Contractor/Vendor dropdowns across the app.</div>'+
+      '<div style="margin-top:8px">'+editBtn(v).replace('margin-left:6px','margin-left:0')+'</div>'+
     '</div>').join(''):'<div class="empty">No fully approved vendors yet.</div>');
 }
 export async function markVendorReviewed(userId){

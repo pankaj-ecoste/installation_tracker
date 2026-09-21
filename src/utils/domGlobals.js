@@ -27,6 +27,7 @@ import { renderVendorPortal } from '../sections/vendorPortal/vendorPortal.js';
 import { renderReports, openReport, closeReport } from '../sections/reports/reportsTab.js';
 import { sodEodFormChanged, sodEodSlotChanged, saveSodEodEntry, toggleSodEodDay, sodEodSearchChanged } from '../sections/reports/sodEodReport.js';
 import { updateNewVendorBadge, renderNewVendors, markVendorReviewed, markVendorApprovedByShashank } from '../sections/vendors/newVendorsTab.js';
+import { openVendorEdit, saveVendorEdit, closeVendorEdit } from '../sections/vendors/vendorEdit.js';
 
 // Every function invoked from an inline onclick="..." attribute in index.html needs to
 // be reachable on window - once this app moved into ES modules those functions stopped
@@ -258,6 +259,9 @@ export function installDomGlobals(){
     renderNewVendors,
     markVendorReviewed,
     markVendorApprovedByShashank,
+    openVendorEdit,
+    saveVendorEdit,
+    closeVendorEdit,
     renderReports,
     openReport,
     closeReport,

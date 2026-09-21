@@ -15,6 +15,10 @@ export const state = {
   activityLog: [],
   vendRegDetails: {},
   vendRegFiles: {},
+  // v2-44: admin editing a submitted vendor form — kept apart from vendRegDetails/vendRegFiles so it never mixes with a registration.
+  vendEditDetails: {},
+  vendEditFiles: {},
+  editingVendorId: null,
   currentVendor: null,
   projects: [],
   dprLog: [],

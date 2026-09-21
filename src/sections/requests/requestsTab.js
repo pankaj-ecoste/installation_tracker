@@ -89,7 +89,7 @@ export function captureGeoLocation(){
 }
 export function reqFieldChanged(el,idPrefix){
   const key=el.dataset.key;
-  const target = idPrefix==='req'?state.reqDetails : idPrefix==='reqv'?state.reqVisitDetails : idPrefix==='fin'?state.finRowDetails : idPrefix==='vend'?state.vendRegDetails : null;
+  const target = idPrefix==='req'?state.reqDetails : idPrefix==='reqv'?state.reqVisitDetails : idPrefix==='fin'?state.finRowDetails : idPrefix==='vend'?state.vendRegDetails : idPrefix==='vendedit'?state.vendEditDetails : null;
   if(target) target[key]=el.value;
   if(idPrefix==='fin') recalcFinanceComputed();
 }

@@ -3028,3 +3028,82 @@ page load (no polling), so a lot added by someone else shows as unseen after the
 hidden; logout/login as the same user -> still hidden (persisted); a second user (manager) still sees the full count and is
 cleared separately without touching the first user's list; lots still render in-transit-first after the badge clears; with
 localStorage reads/writes throwing, no crash and the same clear behaviour for the session. Not yet committed / not prod-verified.
+
+### v2-44: Admin can edit a submitted vendor form (planned, not yet built) (2026-09-21)
+
+**Request** (team, relayed by user): once a vendor has submitted the new-vendor form and it sits in the admin's **New Vendors**
+tab, the admin must be able to **edit that form** from the admin panel — so if any info changes, or a document that was missing
+at registration turns up later, the admin can fix it instead of the vendor having to re-register. Trigger: screenshot
+`Screenshot 2026-09-21 125041.png` — KAIF TECH registered with all 5 KYC documents missing and GSTIN "NA".
+
+**Root cause / current behaviour** (investigated 2026-09-21, no code changed)
+- Nothing to edit with: `newVendorsTab.js` only has `markVendorReviewed` / `markVendorApprovedByShashank`. After submit, vendor
+  data is frozen; re-registering is impossible with the same email.
+- **DB already allows it** — `vendor_profiles_update` (0004:232) lets any active admin update any column. No table migration.
+- **Storage would silently 400 for the admin** — the team JWT has no `sub`, so `auth.uid()` is null; `uploads_insert_vendor_kyc`
+  (0005:48) needs `auth.uid()` set, and `vendor-kyc` is not in the `uploads_insert_team` allowlist. Same gotcha as
+  [[project_storage_rls_folder_allowlist]]. Needs a storage-policy migration.
+- **Vendor name is denormalised text** — `projects.vendor`, finance `contractor`, request vendor, the vendor-portal project match
+  (`vendorPortal.js:10`), Finance "Scope" note (`financeTab.js:197`) and the assignment email lookup (`requestsTab.js:780`) all
+  match on `trade_name || company_name`. Renaming an approved vendor would silently break those links.
+- **`email` is the vendor's login** — `vendor_profiles.email` is only a copy of the Supabase Auth login; editing it in the
+  profile would not change how they log in.
+
+**Decisions (user, 2026-09-21 — "go with your recommendations")**
+1. Admin can edit vendors at **all three stages** (New, Awaiting Shashank, Approved).
+2. **Company name / Trade name are locked once the vendor is approved** (both approvals done), with an on-screen note; editable
+   before that (no project can be linked to a not-yet-approved vendor — the dropdowns only list approved ones). Cascade-rename
+   across projects/finance/requests is **not** built now; revisit if the team needs to rename approved vendors.
+3. **Email is read-only** in the edit form (it is the login).
+4. An edit does **not** reset approval status. It is written to the activity log: "Vendor details edited by Admin".
+5. **Documents: one file per slot** — each shows the current link + Replace/Upload; filling one slot never touches the others.
+6. **Admin only** (same as the approve buttons). Finance stays view-only; vendors get no self-edit (not requested).
+7. Same required fields as registration (`VENDOR_FIELDS`). Assumption to check before build: older vendor rows with blank required
+   fields would block saving until filled — query the live rows first.
+
+**Design**
+- **Edit button** on every vendor card in the admin view (all three sections). Opens a new panel `panel-vendor-edit`, modelled on
+  `panel-vendor-register`: fields from `VENDOR_FIELDS` pre-filled, KYC slots from `VENDOR_KYC_DOCS` showing the current file
+  link, Save / Cancel. Email shown read-only; name fields disabled + note when the vendor is approved.
+- **Save**: upload only the newly picked files (folder `vendor-kyc`), then `update` on `vendor_profiles` by `user_id` with the
+  changed columns; refresh `state.vendorProfiles`, re-render, `logActivity(...)`. A failed upload aborts before the row update
+  (no half-saved state), with a clear error message.
+- Field state kept in a separate `state.vendEditDetails` so it never mixes with an in-progress registration (`vendRegDetails`);
+  `reqFieldChanged` gets a new prefix for it.
+- Files likely touched: `newVendorsTab.js`, `vendorAuth.js` (or a new `vendorEdit.js`), `index.html` (new panel),
+  `requestsTab.js` (`reqFieldChanged` prefix), `state.js`, `domGlobals.js` (expose handlers), one new migration.
+
+**Migration** `0021_vendor_kyc_admin_upload.sql` — an **additive** policy `uploads_insert_admin_vendor_kyc` on `storage.objects`
+(insert; bucket `uploads`; folder `vendor-kyc`; `app_is_active_team_member() and app_jwt_team_role()='admin'`). Deliberately NOT a
+redefinition of the `uploads_insert_team` allowlist — re-defining that policy is exactly what regressed a live policy last time
+(see [[project_migration_rerun_regressed_dpr_policy]]). Applied with `db query --linked` per
+[[project_supabase_migration_state]]; needs a fresh confirm before touching prod.
+
+**Verify (real browser, TEST_MODE first, then prod admin path)**: edit each stage; change a text field; add one missing doc and
+confirm the other slots are untouched; approved vendor shows name locked; email read-only; approval status unchanged after save;
+activity log entry written; Finance user sees no Edit button; an upload as admin actually succeeds against live storage (TEST_MODE
+mock cannot prove the policy — needs one real upload on prod).
+
+**Built (2026-09-21)** — new `src/sections/vendors/vendorEdit.js` (`openVendorEdit`, `saveVendorEdit`, `closeVendorEdit`); `newVendorsTab.js`
+(✏️ Edit details button on every admin card, all 3 stages; Finance view untouched); `index.html` (`panel-vendor-edit`); `state.js`
+(`vendEditDetails`, `vendEditFiles`, `editingVendorId`); `requestsTab.js` (`reqFieldChanged` prefix `vendedit`); `domGlobals.js`
+(3 handlers); migration `0021_vendor_kyc_admin_upload.sql` (additive admin-only insert policy on `vendor-kyc`, **written, NOT yet applied to prod**).
+Beyond the plan: `closePanel()` ends in `showTeamDashboard()` which always resets to All Projects, so `closeVendorEdit()` sends the admin
+back to the New Vendors tab (Back, Cancel and Save all use it). The update uses `.select()` and treats 0 rows as a failure, so an RLS-refused
+update is never shown as saved. Locked name fields are also ignored on save (a DOM-tampered value does not get written).
+
+**Live data check (read-only, before build)**: no vendor has a blank required text field, so validation cannot block anyone. Missing
+docs on prod today: Mk Decorator, Viraaj construction, Precision Enterprises, Bharat Fabricator (all 5), KAIF TECH (all 5, still Stage 1),
+RSA Enterprises (4), Babu Khan Carpenter (3) — i.e. this feature is needed now, 6 of the 7 approved vendors are affected.
+
+**Verified** (TEST_MODE, real browser, no console errors): no-change save -> "No changes to save"; blank required -> error naming the field;
+partial edit (GSTIN + phone + GST cert only) saved and showed only the GST link, other 4 slots still missing, GSTIN uppercased, vendor
+still Stage 1; approved vendor -> lock note shown, both name inputs disabled, a DOM-forced name change NOT saved while another field
+(bank) was; approval status unchanged after edits; activity log has "Vendor details edited by Admin: <name> — updated: <fields>";
+Finance login sees no Edit button and a direct `openVendorEdit()` call does nothing; Cancel / Back / Save all land on New Vendors tab.
+`vite build` clean.
+
+**Not yet verified / pending**: (1) apply `0021` to prod (needs a fresh confirm at that moment); (2) one REAL admin document upload on
+prod — TEST_MODE's mock storage cannot prove the storage policy; (3) not committed / pushed.
+
+**Status**: built and TEST_MODE-verified; prod migration + prod upload check + commit pending.
