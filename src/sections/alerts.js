@@ -1,5 +1,6 @@
 import { state } from '../lib/state.js';
 import { getSeenLotIds } from '../lib/seenLots.js';
+import { supervisorWhatsApp } from '../lib/whatsapp.js';
 import { syncProject } from '../data/loadAllData.js';
 import { CHECKLIST_DEFS, TODAY, reqTypeLabel } from '../lib/constants.js';
 import { canDo, daysDiff, fmt, fmtDate, needsFinanceReview, needsRABill, pct, visibleProjects } from '../lib/helpers.js';
@@ -200,7 +201,12 @@ export function buildNotifHTML(){
   let html=reqSectionHTML;
   function cardHTML(a){
     const waMsg=encodeURIComponent('Hi '+a.proj.supervisor+',\n\nAlert — '+a.proj.name+' '+a.proj.tower+':\n'+a.msg+'\n'+a.detail+'\n\n— Ecoste Ops');
-    const waLink='https://wa.me/'+(a.proj.supervisorWA||'91XXXXXXXXXX')+'?text='+waMsg;
+    const waNumber=supervisorWhatsApp(a.proj);
+    const noSupervisor=!String(a.proj.supervisor||'').trim()||a.proj.supervisor==='—';
+    // No usable number -> a greyed, non-clickable pill instead of a link (v2-45; it used to open wa.me/91XXXXXXXXXX).
+    const waBtn=waNumber
+      ?'<a class="wa-btn" href="https://wa.me/'+waNumber+'?text='+waMsg+'" target="_blank">📲 WhatsApp '+a.proj.supervisor+'</a>'
+      :'<span class="wa-btn" style="background:#bbb;cursor:not-allowed" title="Add this person\'s WhatsApp no. in the Team tab">📲 '+(noSupervisor?'No supervisor assigned':'No WhatsApp number — '+a.proj.supervisor)+'</span>';
     return '<div class="alert-card">'+
       '<div class="alert-header">'+
         '<div class="alert-icon '+(a.sev==='red'?'red':'amber')+'">'+(iconMap[a.type]||'⚠️')+'</div>'+
@@ -212,7 +218,7 @@ export function buildNotifHTML(){
         '</div>'+
       '</div>'+
       '<div class="alert-footer">'+
-        '<a class="wa-btn" href="'+waLink+'" target="_blank">📲 WhatsApp '+a.proj.supervisor+'</a>'+
+        waBtn+
         alertViewButtonHTML(a)+
         (a.type==='constraint'?'<button class="btn btn-amber btn-sm" onclick="quickSolve('+a.proj.id+',\''+a.c.text.replace(/'/g,"\\'")+'\')">✅ Mark solved</button>':'')+
       '</div>'+

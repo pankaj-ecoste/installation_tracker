@@ -3114,3 +3114,51 @@ chat; Claude did not run it — it needs the admin PIN).
 
 **Status**: shipped to prod and prod-verified 2026-09-21 (`5467de2`). Deferred (not built): cascade-rename of an approved vendor across
 projects / finance / requests — revisit only if the team needs to rename approved vendors.
+
+### v2-45: Notification "WhatsApp <supervisor>" button opened a placeholder number (2026-09-21)
+
+**Report** (user, with screenshots `Screenshot 2026-09-21 154404.png` / `154453.png`): in the bell notifications, clicking
+"📲 WhatsApp shubham" opens `wa.me` with "Chat on WhatsApp with @91XXXXXXXXXX" — WhatsApp then says the number was not found.
+
+**Root cause** (investigated 2026-09-21, read-only, no numbers printed)
+1. `alerts.js:203` builds `https://wa.me/` + `(a.proj.supervisorWA || '91XXXXXXXXXX')`. `projects.supervisor_wa` is never filled by
+   any app path — Add Project (`addEditProject.js:302`), project-from-request (`requestsTab.js:885`) and CSV import
+   (`requestsTab.js:961`) all write `''`. Prod: **84 of 86 projects blank**; the only 2 filled are both Ajmera (Wadala Mumbai).
+   So nearly every alert fell back to the literal placeholder.
+2. The real numbers already exist in `team_members.wa` (Team tab "WhatsApp no."; every active supervisor has one) but the alert never
+   looked there. `projects.supervisor` is free text — mostly the username (karan, mahesh, durgendra, shubham, ravi, faizan), also
+   "Karan", "Shubham Salvi", "shashank soni", plus "site engineer" (2) and "—" (2) which match nobody.
+3. Latent second bug: the Team form stores numbers as 10 digits with NO country code (24 of 25 active members; the input is
+   `maxlength=10`). `wa.me` needs the country code, so a bare 10-digit number would also fail. The 2 project numbers are 12-digit `91…`.
+4. Same placeholder class: `NEELAM_WA` / `SHASHANK_WA` = `'91XXXXXXXXXX'` (`constants.js:226-227`). `notifyNewRequest` is the only user and
+   nothing calls it (dead code, not reachable by users) — deliberately NOT touched.
+
+**Decisions (user, 2026-09-21 — "ok lets fix this", proposal 1–4 accepted)**
+1. Resolve the number when the card is drawn: team member whose **username** matches `project.supervisor` (case-insensitive,
+   trimmed); if none, whose **display name** matches. Normalise: digits only; 10 digits -> prefix `91`; 12 digits starting `91` ->
+   as is; anything else is treated as "no usable number".
+2. No usable number -> **no WhatsApp link at all**: a greyed, non-clickable "📲 No WhatsApp number" pill (or "No supervisor
+   assigned" when supervisor is blank/"—"). Chosen over hiding the button so the card layout stays consistent (user did not pick
+   between grey and hidden; grey was the proposed default).
+3. `project.supervisorWA` stays as a per-project **override** — used first (normalised the same way) so the 2 Ajmera projects behave as before.
+4. Team form, dead constants, DB, and every other alert/flow untouched. No migration, no backfill.
+
+**Design**: new `src/lib/whatsapp.js` (`supervisorWhatsApp(proj)` -> normalised number or `null`); `alerts.js` `cardHTML()` uses it.
+Two files only. Deactivated members are still matched (the project's named supervisor is the intended recipient).
+
+**Verify**: TEST_MODE real browser — supervisor by username, by name, mixed case, 10-digit number, 12-digit number, project override,
+no match, "—"; the link must never contain `XXXX`; greyed pill is not a link. Then one real click on prod.
+
+**Built (2026-09-21)**: new `src/lib/whatsapp.js` (`normalizeWhatsAppNumber`, `supervisorWhatsApp`); `alerts.js` `cardHTML()` builds the
+WhatsApp button from it (link, or a greyed non-clickable pill: "No WhatsApp number — <name>" / "No supervisor assigned"). Nothing
+else touched (no DB, no migration, Team form and the two dead constants unchanged).
+
+**Verified** (TEST_MODE, real browser, no console errors): normaliser — 10-digit -> `91`+, 12-digit `91…` kept, `+91 98765-43210`
+cleaned, too-short / blank / null / `91XXXXXXXXXX` -> none; resolver — by username, mixed case, padded spaces, by display name,
+username beats name on a clash, no match, "—", blank, member with no number, project override (12- and 10-digit), a placeholder
+override falls back to the team member; rendered bell panel — real links `wa.me/91<number>`, greyed pills are `<span>` (no link),
+no `XXXX` anywhere, greyed pill looks right. `vite build` clean.
+**Live-data simulation (read-only, counts only)**: of 86 prod projects, **82 resolve to a real number**; the 4 that don't are
+supervisor "site engineer" (2) and "—" (2) — they will show the greyed pill. Was 2 of 86.
+
+**Status**: built + TEST_MODE-verified; not committed / pushed; prod click check pending.
