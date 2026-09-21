@@ -3109,8 +3109,8 @@ already applied). Read-back of `pg_policies` on `storage.objects`: `uploads_inse
 `uploads_select_open` unchanged. Code pushed to `main` as `5467de2` (Vercel deploys from main). Only existing-code touch: one added
 branch in `reqFieldChanged` (`vendedit` prefix); no other existing function changed.
 
-**Still pending**: one REAL admin document upload on the live app (TEST_MODE's mock storage cannot prove the storage policy) — log in
-as admin, New Vendors -> Edit details on a vendor with a missing doc (e.g. KAIF TECH), pick a file, Save; expect the doc link to
-appear and no console error. Not done by Claude: needs the admin PIN and writes a real file to a real vendor's record.
+**Prod check**: the real admin document upload on the live app was done and confirmed working by the user (2026-09-21, reported in
+chat; Claude did not run it — it needs the admin PIN).
 
-**Status**: shipped to prod 2026-09-21 (`5467de2`); prod admin-path upload check pending.
+**Status**: shipped to prod and prod-verified 2026-09-21 (`5467de2`). Deferred (not built): cascade-rename of an approved vendor across
+projects / finance / requests — revisit only if the team needs to rename approved vendors.
