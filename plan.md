@@ -3161,4 +3161,8 @@ no `XXXX` anywhere, greyed pill looks right. `vite build` clean.
 **Live-data simulation (read-only, counts only)**: of 86 prod projects, **82 resolve to a real number**; the 4 that don't are
 supervisor "site engineer" (2) and "—" (2) — they will show the greyed pill. Was 2 of 86.
 
-**Status**: built + TEST_MODE-verified; not committed / pushed; prod click check pending.
+**Prod check**: user clicked a live WhatsApp button in the bell after deploy and confirmed it works (2026-09-21, reported in chat;
+Claude did not run it).
+
+**Status**: shipped to prod and prod-verified 2026-09-21 (`81a84af`). Open follow-up (not built): projects whose supervisor is
+"site engineer" / "—" (4 of 86) show the greyed pill until a real supervisor is assigned.
