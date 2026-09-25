@@ -646,7 +646,9 @@ export function emailSalesPreviewUpdated(id){
   previewNoticeFor=null;
   const salesEmail=(d.salesEmail||'').trim();
   if(!salesEmail){ alert('No sales email is on file for '+r.requestNumber+', so the "CNC Preview Updated" email cannot be prepared. Edit the request and fill in "Sales team email" first.'); renderRequests(); return; }
-  const docLines=(d.previewPdfUrls||[]).map(x=>typeof x==='object'?(x.name||'Document')+' — '+x.url:x).join('\n');
+  // Name on one line, bare URL alone on the next, blank line between documents — so a link can be
+  // copied exactly and Gmail linkifies it once sent (a "name — url" line was copied whole and failed).
+  const docLines=(d.previewPdfUrls||[]).map(x=>typeof x==='object'?(x.name||'Document')+'\n'+x.url:x).join('\n\n');
   const subject='CNC Preview Updated — '+r.requestNumber+(d.clientName?' — '+d.clientName:'');
   const body='🔔 Notification: CNC Preview Updated\n\n'+
     'Dear Sales Team,\n\n'+

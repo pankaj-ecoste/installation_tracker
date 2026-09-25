@@ -3428,3 +3428,12 @@ already empty for Design. Nothing else in the bell leaks.
 the only CNC lines it could show duplicate the "New requests" section Design already gets. All other roles unchanged.
 **Files to change**: `src/sections/alerts.js` only.
 **Status**: built + verified in TEST_MODE 2026-09-25 (admin still sees the feed incl. non-CNC lines; a Design login gets an empty bell request section, no "Recent activity", no request numbers); pushed with this commit; prod re-check pending.
+
+#### Item 4 — FOLLOW-UP: one link per line in the Preview email (LOCKED 2026-09-25, user: "yes make that link change")
+**Why**: user pasted a link copied from the Gmail draft into Chrome and "it yielded nothing". Checked the exact prod URL: HTTP 200, `application/pdf`,
+117 KB, valid `%PDF` body, public, no blocking headers — the link itself is fine. Likely cause: the whole `name — https://…` line was copied (Chrome treats the
+mixed text as a search), plus draft links aren't clickable until sent. So the format made copying error-prone.
+**Decision**: in the "Documents Attached" section each document is `name` on one line and its bare URL alone on the next line, a blank line between documents.
+Template wording otherwise unchanged. Sales still receives LINKS, not attachments (real attachments = server-side sending, discussed and not chosen for now).
+**Files to change**: `src/sections/requests/requestsTab.js` (`docLines` in `emailSalesPreviewUpdated`).
+**Status**: built + verified in TEST_MODE 2026-09-25 (each document = name line, bare URL line, blank line between); pushed with this commit; prod re-check pending.
