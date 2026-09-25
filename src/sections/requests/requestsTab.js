@@ -1,7 +1,7 @@
 import { state } from '../../lib/state.js';
 import { db } from '../../lib/supabaseClient.js';
 import { logActivity } from '../../lib/activityLog.js';
-import { CNC_FIELDS, CNC_STAGES, CNC_TEAM_EMAIL, HARISH_EMAIL, MS_MAIN, MS_MAINORDER_STEPS, MS_MOCKUP_STEPS, MS_POSTMOCKUP_STEPS, MS_PREMAINSURVEY_STEPS, MS_PREMOCKUP, MS_SAMPLING, NEELAM_WA, POSTPO_DOC_CATEGORIES, POSTPO_FIELDS, PREPO_FIELDS, SURVEY_FIELDS, VISIT_FIELDS, computeCNCStages, getAdminEmail, getManagementCcEmails, gmailComposeLink, milestoneKeyFor, notifyByGmail, reqFieldGroup, reqNumberPrefix, reqTypeLabel } from '../../lib/constants.js';
+import { CNC_FIELDS, CNC_STAGES, CNC_TEAM_EMAIL, HARISH_EMAIL, MS_MAIN, MS_MAINORDER_STEPS, MS_MOCKUP_STEPS, MS_POSTMOCKUP_STEPS, MS_PREMAINSURVEY_STEPS, MS_PREMOCKUP, MS_SAMPLING, NEELAM_WA, POSTPO_DOC_CATEGORIES, POSTPO_FIELDS, PREPO_FIELDS, SURVEY_FIELDS, VISIT_FIELDS, computeCNCStages, getAdminEmail, getManagementCcEmails, milestoneKeyFor, notifyByGmail, reqFieldGroup, reqNumberPrefix, reqTypeLabel } from '../../lib/constants.js';
 import { canDo, daysDiff, fmtDate, visibleProjects } from '../../lib/helpers.js';
 import { projectToRow, requestToRow, rowToProject, rowToRequest } from '../../lib/mappers.js';
 import { docLink, fileUploadRowHTML, pickFilesOrWarn, uploadFiles, uploadFilesWithNames } from '../../lib/uploads.js';
@@ -564,7 +564,7 @@ function cncPreviewUnlocked(r){
   const pv=(d.cncStages||[]).find(s=>s.key==='previewCreated');
   return !!(pv&&pv.actual);
 }
-function cncAttachmentBlock(r, label, required, docs, max, handler){
+function cncAttachmentBlock(r, label, required, docs, max, handler, extraHTML){
   const n=(docs||[]).length;
   const canUpload=canAttachCNCFiles();
   const status=n?'<span style="color:#1D9E75">\u2713 '+n+' of '+max+' attached</span>'
@@ -572,13 +572,21 @@ function cncAttachmentBlock(r, label, required, docs, max, handler){
   return '<div style="margin-top:10px;padding:10px;border:1px solid #eee;border-radius:6px;font-size:12px">'+
     '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>'+label+(required?' *':' (optional)')+'</b><span>'+status+'</span></div>'+
     (n?'<div style="margin-top:6px">'+docs.map((doc,i)=>docLink(doc,i)).join('&nbsp;&nbsp;')+'</div>':'')+
+    (extraHTML||'')+
     (canUpload&&n<max?'<div style="margin-top:6px"><input type="file" multiple accept="image/*,.pdf,.doc,.docx" style="font-size:12px" onchange="'+handler+'('+r.id+',this)"> <span style="color:#888">(up to '+(max-n)+' more)</span></div>':'')+
   '</div>';
 }
 function renderCNCAttachments(r){
   const d=r.details||{};
   return cncAttachmentBlock(r,'Rough Doc',false,d.roughDrawingUrls,CNC_ROUGH_MAX,'uploadCNCRoughDrawing')+
-    cncAttachmentBlock(r,'Preview PDF',true,d.previewPdfUrls,CNC_PREVIEW_MAX,'uploadCNCPreviewPdf')+
+    cncAttachmentBlock(r,'Preview PDF',true,d.previewPdfUrls,CNC_PREVIEW_MAX,'uploadCNCPreviewPdf',
+      // v2-47 item 4 amendment: a real click opens the Gmail draft, so it can't be pop-up blocked (an
+      // auto-open after the async upload was blocked in prod). Shown once a Preview PDF exists.
+      (canAttachCNCFiles()&&(d.previewPdfUrls||[]).length
+        ?'<div style="margin-top:8px">'+
+          (previewNoticeFor===r.id?'<div style="color:#1D9E75;margin-bottom:6px">✓ Preview attached — click "Email sales team" to notify sales.</div>':'')+
+          '<button class="btn btn-outline btn-sm" onclick="emailSalesPreviewUpdated('+r.id+')">📧 Email sales team</button></div>'
+        :''))+
     (canAttachCNCFiles()&&!cncPreviewUnlocked(r)?'<div style="font-size:11px;color:#888;margin-top:6px">Attaching the Preview PDF marks "Preview created by Design team" done and unlocks the later stages.</div>':'');
 }
 // Saves one CNC stage's Actual date inline from the request card (see plan.md v2-29). Saving the
@@ -624,19 +632,21 @@ export async function uploadCNCPreviewPdf(id, inputEl){
   const now=new Date();
   const todayLocal=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
   const stages=(res.r.details.cncStages||[]).map(s=>(s.key==='previewCreated'&&!s.actual)?{...s,actual:todayLocal}:s);
-  const alreadyAttached=(res.r.details.previewPdfUrls||[]).length;
+  previewNoticeFor=id;
   await updateRequestFields(id,{details:{...res.r.details, previewPdfUrls:res.merged, cncStages:stages}});
-  notifySalesPreviewUpdated(res.r, res.merged.slice(alreadyAttached));
 }
-// v2-47 item 4: every successful Preview PDF attach opens a pre-filled Gmail draft to the sales person
-// who filled the request (details.salesEmail), Cc Harish ji, using the team's fixed template. Only the
-// files attached in THIS upload are listed. It opens after an async upload, so a browser may block the
-// pop-up — the fallback message tells the user to allow pop-ups.
-function notifySalesPreviewUpdated(r, newDocs){
+// v2-47 item 4 (amended): the "CNC Preview Updated" draft to the sales person who filled the request
+// (details.salesEmail), Cc Harish ji, using the team's fixed template, listing ALL attached Preview
+// PDFs. Opened from the "Email sales team" button (a real click), never automatically after an
+// upload — an auto-open there was blocked as a pop-up in prod.
+let previewNoticeFor=null; // request id whose card shows the "Preview attached" hint after an upload
+export function emailSalesPreviewUpdated(id){
+  const r=state.requests.find(x=>x.id===id); if(!r) return;
   const d=r.details||{};
+  previewNoticeFor=null;
   const salesEmail=(d.salesEmail||'').trim();
-  if(!salesEmail){ alert('Preview PDF attached. No sales email is on file for '+r.requestNumber+', so the "CNC Preview Updated" email could not be prepared.'); return; }
-  const docLines=(newDocs||[]).map(x=>typeof x==='object'?(x.name||'Document')+' — '+x.url:x).join('\n');
+  if(!salesEmail){ alert('No sales email is on file for '+r.requestNumber+', so the "CNC Preview Updated" email cannot be prepared. Edit the request and fill in "Sales team email" first.'); renderRequests(); return; }
+  const docLines=(d.previewPdfUrls||[]).map(x=>typeof x==='object'?(x.name||'Document')+' — '+x.url:x).join('\n');
   const subject='CNC Preview Updated — '+r.requestNumber+(d.clientName?' — '+d.clientName:'');
   const body='🔔 Notification: CNC Preview Updated\n\n'+
     'Dear Sales Team,\n\n'+
@@ -646,9 +656,9 @@ function notifySalesPreviewUpdated(r, newDocs){
     'Please ensure that the client\'s approval is received for the design.\n\n'+
     'Thank you!';
   const cc=HARISH_EMAIL.toLowerCase()===salesEmail.toLowerCase()?'':HARISH_EMAIL;
-  const w=window.open(gmailComposeLink(salesEmail, subject, body, cc),'_blank');
-  if(!w) alert('Preview PDF attached, but your browser blocked the email window. Please allow pop-ups for this site and send the "CNC Preview Updated" email to '+salesEmail+' from Gmail.');
-  else logActivity('Preview email drafted', r.requestNumber+' — "CNC Preview Updated" draft opened for '+salesEmail);
+  notifyByGmail(salesEmail, subject, body, cc);
+  logActivity('Preview email drafted', r.requestNumber+' — "CNC Preview Updated" draft opened for '+salesEmail);
+  renderRequests();
 }
 
 // v2-20: uploaded docs were being saved into r.details all along but never shown anywhere —

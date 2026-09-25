@@ -3396,3 +3396,23 @@ Files touched overall: `src/lib/constants.js`, `src/sections/requests/requestsTa
 - Real pop-up-blocker behaviour of the item 4 Gmail window (TEST_MODE stubbed `window.open`); the fallback alert exists. Also the no-sales-email alert path was not exercised in the browser.
 - **Adjacent finding (not fixed, scope discipline)**: the "Recent activity" list at the bottom of the bell shows every activity line (e.g. "New request: PRE-0002 — Pre-Mockup request logged by admin") to every role including Design, so Design still sees non-CNC request numbers there. Needs a decision whether to filter it.
 - Committed and pushed (533347e); not verified on prod yet.
+
+#### Item 4 — AMENDMENT (LOCKED 2026-09-25, user: "agree with your suggestion"): button instead of auto-open
+**Why**: prod test (screenshot, installation-tracker-five.vercel.app): attaching a Preview PDF worked (file attached, stage date set) but Chrome
+**blocked the auto-opened Gmail window** — it opens after an async upload, so there is no user click behind it. This is the risk accepted
+with option A; option A proved unreliable in real use, so the agreed fallback (button) is now built.
+
+**Decisions**
+- Remove the auto-open. Attaching a Preview PDF no longer calls `window.open`.
+- New **"📧 Email sales team"** button inside the Preview PDF block (`cncAttachmentBlock` area, `requestsTab.js`), shown only when at least one
+  Preview PDF is attached, and only to users who can attach (`canAttachCNCFiles`: Design, admin, manager). It stays after upload so the email can be re-sent.
+- Click opens the same "CNC Preview Updated" draft (same template, To = `details.salesEmail`, Cc = `HARISH_EMAIL`). Because it is a real click it cannot be blocked.
+- The email lists **all currently attached Preview PDFs** (not just the last upload — the button is not tied to one upload). Supersedes the earlier "only files just attached" rule.
+- After a successful upload, the blocking alert is replaced by a non-blocking hint on the card: "Preview attached — click "Email sales team" to notify sales." (cleared once the button is clicked).
+- No sales email on the request -> an alert says the email can't be prepared and to fill in "Sales team email".
+- Activity-log line ("Preview email drafted") is kept, written when the button is clicked.
+
+**Files changed**: `src/sections/requests/requestsTab.js` (button, `emailSalesPreviewUpdated`, auto-open removed), `src/utils/domGlobals.js` (handler exposed for the inline onclick).
+**Status**: built + verified in TEST_MODE 2026-09-25 (upload opens no window and raises no alert; button + hint appear; click opens one draft with
+To = sales email, Cc = Harish ji, all attached Preview PDFs listed; hint clears). The no-sales-email alert path was not exercised in the browser.
+Pushed with this commit; prod re-check pending.
