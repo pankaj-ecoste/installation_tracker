@@ -3546,3 +3546,22 @@ New projects keep `0` / `''` as before.
 - Verified against the backup: 46 constraints on the 3 projects compared, 28 dates as planned, 0 other-field changes, 0 unplanned date changes; a fresh dry run now finds 0 left to restore. Pioneer Shaft re-read from the DB shows 24 Aug … 22 Sept as expected.
 - **Left as they were (by decision)**: 2 really dated 23 Sept (Vibgyor, Pioneer "No manpower"); 10 Omaxe "Material shortage…" repeats (11 constraints vs 12 DPRs, pairing would be a guess); 10 added by hand with no DPR (AMPL 1, ITD CEM 1, Kumar Live Space 2, PCPL 2, Platinum 4) — original dates unknown; 9 others dated 15/16/17/22/25 Sept that differ from their DPR by days (can be late-filed DPRs).
 - Not restorable: RA bill qty / actual completion date wiped by earlier Edit Project saves (no record of the old values) — re-enter via Update Progress.
+
+### v2-50: Saved JMR files were never shown anywhere (2026-09-25)
+
+**Report (team)**: on Update Progress, a JMR file uploaded fine ("1 file(s) uploaded.") but later "vanished even after saving".
+**Root cause (checked in code + production, read-only)**: JMR files ARE saved — `saveUpdate` merges `state.jmrUploadedUrls` into `p.jmrDocs` (`addEditProject.js:585`) and `projects.jmr_docs` holds them
+(Khetan id 77 has 2). But `jmrDocs` is never RENDERED anywhere in the app (only that write + the client-login mapper). The panel's "N file(s) uploaded" line lists only this visit's uploads and
+is reset on every open (`state.jmrUploadedUrls=[]`, `addEditProject.js:484`). WCC / RA bill / project documents each have a display; JMR has none. So a saved file looks gone.
+Separately: the upload to storage happens on file pick but the file only joins the project on **Save Changes**; 5 `jmr-reports/` files in storage belong to no project (picked, then panel left without saving — incl. the test at 18:47 IST).
+
+**Decisions (user, "agree with your suggestion")**
+1. Show the saved JMR files as a clickable list under the JMR upload in Update Progress.
+2. Also show them on the Finance tab next to the WCC / RA bill files.
+3. Show real file names: new uploads keep the original name (`{name,url}`); old plain-URL entries show the file name from the URL without the timestamp prefix. New JMR-only link helper — the shared `docLink` (used by other lists) is NOT changed.
+4. After picking a file the panel says it is uploaded and must be saved ("click Save Changes to attach").
+5. No "remove file" action for now. The 5 orphaned files are NOT linked automatically — read-only look for likely projects, shown to the user before anything is written.
+**Files**: `src/lib/uploads.js` (name helper), `src/sections/projects/addEditProject.js` (panel list, named uploads, hint), `src/sections/finance/financeTab.js` (JMR list), `index.html` (list container).
+**Status**: built + verified in TEST_MODE 2026-09-25 (an old plain-URL entry shows its file name without the timestamp; a new upload shows "1 file(s) uploaded — click Save Changes to attach it", is NOT in the project until Save; after Save + reopen both are listed; a name with < > & is escaped; the Finance tab lists them); committed and pushed; prod re-check pending. The 5 orphaned files are NOT linked (see notes).
+
+**Orphaned JMR files (read-only look, nothing linked)**: 5 files in `jmr-reports/` belong to no project. Only weak clues: the two 10 Sept 14:39 IST WhatsApp images sit within minutes of a "JMR updated — YTT life and Joy — Additional" event (possible match, not certain); the 22 Sept `jmr.jpeg` coincides with several "Project completed" events (no clear project); the 24 Sept image and today's 18:47 test PDF have no nearby activity. Not linked automatically — a wrong link would attach a document to the wrong project.

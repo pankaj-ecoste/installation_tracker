@@ -17,6 +17,27 @@ export function docLink(doc,i,style){
   const name=isObj&&doc.name?doc.name:'Document '+(i+1);
   return '<a href="'+url+'" target="_blank" style="'+(style||'font-size:11px;color:#1D9E75')+'">📎 '+name+'</a>';
 }
+// v2-50: shows a document's real file name. New uploads carry {name,url}; older entries are plain
+// URLs whose file name is "<timestamp>_<original name>" — strip the timestamp so staff see what they
+// uploaded. Separate from docLink on purpose (other lists keep their existing labels). Escapes the
+// name because it comes from a user's file.
+export function docDisplayName(doc,i){
+  const isObj=doc&&typeof doc==='object';
+  if(isObj&&doc.name) return doc.name;
+  const url=isObj?doc.url:doc;
+  try{
+    const last=decodeURIComponent(String(url||'').split('?')[0].split('/').pop()||'');
+    const name=last.replace(/^\d{10,}_/,'');
+    if(name) return name;
+  }catch(e){ /* fall through */ }
+  return 'Document '+(i+1);
+}
+export function namedDocLink(doc,i,style){
+  const isObj=doc&&typeof doc==='object';
+  const url=isObj?doc.url:doc;
+  const esc=t=>String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return '<a href="'+esc(url)+'" target="_blank" style="'+(style||'font-size:11px;color:#1D9E75')+'">📎 '+esc(docDisplayName(doc,i))+'</a>';
+}
 export async function uploadFiles(fileList, folder){
   const urls=[];
   for(const file of fileList){

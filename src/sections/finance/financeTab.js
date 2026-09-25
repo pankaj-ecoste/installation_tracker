@@ -6,7 +6,7 @@ import { FINANCE_FIELDS } from '../../lib/constants.js';
 import { canDo, fmt, needsFinanceReview, needsRABill, visibleProjects } from '../../lib/helpers.js';
 import { projectNeedsFinanceAction } from '../../lib/attentionKeys.js';
 import { financeRowToRow, rowToFinanceRow } from '../../lib/mappers.js';
-import { docLink, pickFilesOrWarn, uploadFilesWithNames } from '../../lib/uploads.js';
+import { docLink, namedDocLink, pickFilesOrWarn, uploadFilesWithNames } from '../../lib/uploads.js';
 import { updateBell } from '../alerts.js';
 import { renderDashboard } from '../dashboard/dashboardTab.js';
 import { timelineMetric } from '../material/materialTab.js';
@@ -179,6 +179,9 @@ export function renderFinance(){
             ((p.raBillDocs||[]).length?'<div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap">'+(p.raBillDocs||[]).map((doc,i)=>docLink(doc,i)).join('')+'</div>':'')+
           '</div>'+
         '</div>'+
+        // v2-50: JMR reports / photos uploaded from Update Progress — they were saved all along but never shown.
+        ((p.jmrDocs||[]).length?'<div style="margin-top:10px"><label class="form-label" style="font-size:11px">📋 JMR reports &amp; photos</label>'+
+          '<div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap">'+(p.jmrDocs||[]).map((doc,i)=>namedDocLink(doc,i)).join('')+'</div></div>':'')+
       '</div>'+
       (needsRABill(p)?
         '<div style="background:#fff8e6;border-bottom:1px solid #e0e0e0;padding:10px 16px;font-size:12px">'+

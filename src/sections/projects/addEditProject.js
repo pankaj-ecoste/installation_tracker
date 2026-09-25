@@ -6,7 +6,7 @@ import { logActivity } from '../../lib/activityLog.js';
 import { CHECKLIST_DEFS, CHECKLIST_TEMPLATES, checklistDoneItems, checklistTotalItems, isChecklistActive, milestoneKeyFor, notifyJMRUpload } from '../../lib/constants.js';
 import { canDo, daysDiff, fmt, fmtDate } from '../../lib/helpers.js';
 import { projectToRow, rowToProject } from '../../lib/mappers.js';
-import { pickFilesOrWarn, uploadFiles } from '../../lib/uploads.js';
+import { namedDocLink, pickFilesOrWarn, uploadFiles, uploadFilesWithNames } from '../../lib/uploads.js';
 import { updateBell } from '../alerts.js';
 import { renderDashboard } from '../dashboard/dashboardTab.js';
 import { approvedVendors, renderFinance } from '../finance/financeTab.js';
@@ -482,13 +482,19 @@ export function openUpdate(id){
   document.getElementById('u-jmr-files').value='';
   document.getElementById('u-jmr-files-list').textContent='';
   state.jmrUploadedUrls=[];
+  // v2-50: JMR files already saved on this project (they were saved all along but never shown anywhere).
+  document.getElementById('u-jmr-saved-list').innerHTML=(p.jmrDocs||[]).length
+    ?'<div style="font-size:11px;color:#666;margin-bottom:2px">Saved JMR files ('+p.jmrDocs.length+'):</div><div style="display:flex;flex-direction:column;gap:3px">'+p.jmrDocs.map((doc,i)=>namedDocLink(doc,i)).join('')+'</div>'
+    :'<div style="font-size:11px;color:#888">No JMR files saved yet.</div>';
   document.getElementById('u-jmr-files').onchange=async function(){
     const files=pickFilesOrWarn(this,5); if(!files) return;
     document.getElementById('u-jmr-files-list').textContent='Uploading '+files.length+' file(s)...';
-    const urls=await uploadFiles(files,'jmr-reports');
-    state.jmrUploadedUrls=[...state.jmrUploadedUrls,...urls];
-    document.getElementById('u-jmr-files-list').textContent=state.jmrUploadedUrls.length+' file(s) uploaded.';
-    notifyJMRUpload(p, urls);
+    // keep the original file names ({name,url}) so they can be shown later
+    const uploaded=await uploadFilesWithNames(files,'jmr-reports');
+    state.jmrUploadedUrls=[...state.jmrUploadedUrls,...uploaded];
+    // The file is only attached to the project when Save Changes is clicked.
+    document.getElementById('u-jmr-files-list').textContent=state.jmrUploadedUrls.length+' file(s) uploaded — click "Save Changes" to attach '+(state.jmrUploadedUrls.length===1?'it':'them')+' to this project.';
+    notifyJMRUpload(p, uploaded.map(x=>x.url));
   };
   const canInstall=canDo('updateProgress');
   const canFin=canDo('editFinance');
