@@ -3416,3 +3416,15 @@ with option A; option A proved unreliable in real use, so the agreed fallback (b
 **Status**: built + verified in TEST_MODE 2026-09-25 (upload opens no window and raises no alert; button + hint appear; click opens one draft with
 To = sales email, Cc = Harish ji, all attached Preview PDFs listed; hint clears). The no-sales-email alert path was not exercised in the browser.
 Pushed with this commit; prod re-check pending.
+
+#### Item 7 — FOLLOW-UP: hide "Recent activity" for Design (LOCKED 2026-09-25, user: "yes hide it for Design")
+**Root cause**: the bell's "📋 Recent activity" block (`buildRequestActivityHTML`, `src/sections/alerts.js:172-178`) shows the last 15 company-wide
+`activity_log` lines to every role. The lines are free text with no request-type tag, and include non-CNC request lines AND project / finance
+events (RA bill amounts, ledger updates, JMR, dispatch, vendor approvals). Design only ever gets CNC requests, so none of that belongs to them.
+**Also checked**: Design has `viewAll:false`, so `visibleProjects()` returns nothing for them — the bell's project alerts and checklist sections are
+already empty for Design. Nothing else in the bell leaks.
+
+**Decision**: for the Design role the **whole "Recent activity" section is hidden** (not line-filtered): line-filtering would mean parsing free text, and
+the only CNC lines it could show duplicate the "New requests" section Design already gets. All other roles unchanged.
+**Files to change**: `src/sections/alerts.js` only.
+**Status**: built + verified in TEST_MODE 2026-09-25 (admin still sees the feed incl. non-CNC lines; a Design login gets an empty bell request section, no "Recent activity", no request numbers); pushed with this commit; prod re-check pending.

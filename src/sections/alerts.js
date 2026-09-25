@@ -169,7 +169,9 @@ export function buildRequestActivityHTML(){
       '</div></div>';
     }).join('');
   }
-  const recent=(state.activityLog||[]).slice(0,15);
+  // v2-47 item 7 follow-up: the feed is company-wide free text (projects, finance, other request
+  // types), so it is hidden entirely for Design, which only works on CNC requests.
+  const recent=(state.currentUser&&state.currentUser.role==='design')?[]:(state.activityLog||[]).slice(0,15);
   if(recent.length){
     html+='<div class="section-hdr">📋 Recent activity</div>';
     html+='<div style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:4px 14px;margin-bottom:10px">'+
