@@ -225,7 +225,19 @@ export async function saveProject(){
   const code=document.getElementById('f-code').value.trim().toUpperCase();
   if(!name){ showFormErr('Project name is required.'); return; }
   if(!code){ showFormErr('Client access code is required.'); return; }
-  const cObjs=state.pendingConstraints.map(t=>({text:t,status:'open',date:fmtDate(new Date().toISOString().slice(0,10))}));
+  // The form only holds constraint TEXT, so rebuilding every constraint from it re-dated all of a
+  // project's constraints to the save day, reset them to open and dropped solvedDate/nextAction
+  // (plan.md v2-49). Instead, match each text to the stored constraint with that text (in order, so
+  // duplicate texts pair up correctly) and keep that object as it is; only newly typed text becomes a
+  // new constraint, dated today (local date, same format as the other constraint creators).
+  const existingForConstraints=state.editingId?state.projects.find(p=>p.id===state.editingId):null;
+  const unmatchedConstraints=[...(existingForConstraints?.constraints||[])];
+  const todayForConstraints=new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+  const cObjs=state.pendingConstraints.map(t=>{
+    const at=unmatchedConstraints.findIndex(c=>c.text===t);
+    if(at>=0) return unmatchedConstraints.splice(at,1)[0];
+    return {text:t,status:'open',date:todayForConstraints,nextAction:'',solvedDate:''};
+  });
   const selectedMs=state.formMilestones.filter(m=>m.selected).map(m=>({label:m.label,planned:m.planned,actual:m.actual||'',gap:m.gap!=null?m.gap:null,key:m.key||milestoneKeyFor(m.label)}));
   const vendors=state.formVendors.filter(v=>v.name.trim());
   const products=state.formProducts.filter(pr=>pr.name.trim());

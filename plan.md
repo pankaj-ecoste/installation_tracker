@@ -3497,3 +3497,37 @@ roll the date back a day in IST — see the DPR date text/timezone gotcha.)
 **Adjacent, NOT changed**: the "DPR not submitted in N days" alert (`alerts.js:61`) picks the latest DPR with a plain string comparison of the same text dates
 (`d.date>latest.date`), which does not order "21 Aug 2026"-style dates chronologically — possible wrong "days since last DPR". Needs its own decision.
 **Status**: built + verified in TEST_MODE 2026-09-25 (2 DPRs dated today in the real saved format "25 Sept 2026" -> badge 2; yesterday + unparseable dates ignored; opening the tab clears; a new one returns); pushed with this commit; prod re-check pending. Caveat: date text is parsed with `new Date()` like the existing DPR date filter, so a browser that cannot parse "Sept" would skip those DPRs (undercount, no crash) — the team uses Chrome, where it parses.
+
+### v2-49: Edit Project → Save re-dated every constraint to the save day (2026-09-25)
+
+**Report (team)**: after the date corrections, constraints that had different raised dates all show 23 Sep; they were resolved on 24 Sep.
+
+**Root cause (found, confirmed against production data, read-only)**: the Edit Project form only holds constraint TEXT (`openEditProject`, `addEditProject.js:192`
+`pendingConstraints=p.constraints.map(c=>c.text)`). `saveProject` (`addEditProject.js:228`) rebuilds EVERY constraint from that text as
+`{text, status:'open', date:<today>}` and the update branch spreads it over the stored project (`...baseData`, incl. `constraints:cObjs`). So each Edit Project → Save
+on a project re-dates all its constraints to the save day, resets them to open, and drops `solvedDate` and `nextAction`. Nothing about it is specific to date
+corrections — the team's date corrections on 23 Sep saved many projects at once. The v2-28 backfill (9 Sep) had dated them correctly (e.g. Omaxe 19 Aug–9 Sep).
+**Data**: 50 constraints on 8 projects (Omaxe, Pioneer, Platinum, PCPL, Vibgyor, AMPL, ITD CEM, Kumar Live Space) carry "23 Sept 2026"; their originating DPRs are dated 19 Aug–22 Sep;
+all were re-solved on 24 Sep by the team; none has a next action left.
+
+**Decisions (user, "agree with your suggestion")**
+1. **Code fix**: saving Edit Project keeps the existing constraint objects (status, date, solvedDate, nextAction) — each text in the form is matched to the stored constraint with that
+   text (in order, so duplicates work); only newly typed text becomes a new object dated today; removed text drops out. New-constraint date uses the local `toLocaleDateString('en-IN',...)`
+   form the other constraint creators already use (not the UTC `toISOString()` one). `constraintsOpen` is recomputed as before.
+2. **Data restore, but only after a dry run**: for constraints logged via a DPR, restore the raised date to the EARLIEST DPR date on that project containing the exact text (what the 9 Sep backfill used);
+   leave ones with no matching DPR (added by hand — original date unknown) and ones whose DPR is genuinely 23 Sep; KEEP the team's 24 Sep solved status/dates. Show the user the full before/after list first;
+   apply only after a fresh explicit go-ahead (production write).
+3. **Also check the other days** in the distribution (15 Sep, 25 Sep, etc.) for the same re-dating and include any in the dry-run list.
+4. **Audit** the same save for other fields rebuilt from form-only state.
+**Files to change**: `src/sections/projects/addEditProject.js` (saveProject). Data restore = a one-off script, not the app.
+**Status**: locked, not built.
+
+**v2-49 progress (2026-09-25)**
+- **Code fix BUILT + verified in TEST_MODE** (`saveProject`, `addEditProject.js`): a project with 4 constraints (different dates / statuses / solvedDate / nextAction, two with identical text) edited via the
+  real Edit Project form — changed the city, removed one constraint, added one — kept every remaining constraint exactly as it was (dates, statuses, solved date, next action; duplicates paired in order), the removed one
+  dropped, the new one dated today (25 Sept 2026); `constraintsOpen` correct. Committed and pushed with this note; prod re-check pending.
+- **Audit finding (NOT changed — needs a decision)**: the same edit branch spreads `baseData`, which hard-codes `raBillQty:0` and `actualDate:''`. Both are set elsewhere (Update Progress panel: "Bill qty",
+  "Actual date"), so every Edit Project → Save zeroes the project's RA bill qty and clears its actual completion date. Prod data is consistent with that: 48 projects are Completed but only 2 have an actual date,
+  and 0 projects have a raBillQty although 2 have an RA bill amount. Not proven to be caused by this alone. Fix would be `raBillQty:existing?.raBillQty||0` (no side effects) and `actualDate:existing?.actualDate||''`
+  (open question: the old behaviour also cleared the date when an admin moved a project out of Completed via this form).
+- **Data restore**: dry run pending, nothing written to production.
