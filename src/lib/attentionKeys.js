@@ -6,7 +6,7 @@
    counts as new again. The rules below are the badge rules that existed before v2-48, unchanged. */
 import { state } from './state.js';
 import { canDo, needsFinanceReview, needsRABill, visibleProjects } from './helpers.js';
-import { CHECKLIST_DEFS } from './constants.js';
+import { CHECKLIST_DEFS, TODAY } from './constants.js';
 
 // Requests: Admin/Manager act on brand-new and visit-done requests; a Supervisor on requests
 // just assigned to them. Every other role has no Requests badge (and so no top group).
@@ -49,10 +49,15 @@ export const projectNeedsFinanceAction = p => needsRABill(p) || needsFinanceRevi
 // for the note on its date comparison) plus checklists completed but not yet reviewed.
 export function dprAttentionKeys(){
   const vp = visibleProjects();
-  const todayStr = new Date().toISOString().slice(0, 10);
   const keys = [];
+  // DPR dates are saved as text ("21 Aug 2026"), so compare LOCAL calendar-date parts — comparing to
+  // an ISO string never matched, and toISOString() shifts the day in IST (plan.md v2-48 follow-up).
+  const localDay = dt => dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
+  const todayLocal = localDay(TODAY);
   state.dprLog.forEach((d, i) => {
-    if(d.date === todayStr && vp.some(p => p.id === d.projId)) keys.push('dpr:' + (d.id != null ? d.id : i));
+    const parsed = new Date(d.date);
+    if(isNaN(parsed) || localDay(parsed) !== todayLocal) return;
+    if(vp.some(p => p.id === d.projId)) keys.push('dpr:' + (d.id != null ? d.id : i));
   });
   vp.forEach(p => CHECKLIST_DEFS.forEach(def => {
     if(p[def.completedField] && !p[def.reviewedField]) keys.push('chk:' + def.key + '-' + p.id);

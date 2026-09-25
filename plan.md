@@ -3485,3 +3485,15 @@ active marks the counted lots seen via `markLotsSeen` (`src/lib/seenLots.js`, lo
 - A request the user creates while on Requests shows as unseen until they open the tab again (closing the panel returns to the default tab) — same as a request that arrived elsewhere.
 - Clearing a badge is not "done": the bell count stays the persistent reminder (untouched).
 - Per browser only: another device shows the badge again (upgrade path: a per-user seen table in the DB).
+
+#### v2-48 follow-up — fix the DPR badge date compare (LOCKED 2026-09-25, user: "yes fix the DPR badge date compare")
+**Root cause**: the DPR Log badge's "today's DPRs" part compared `d.date` to `new Date().toISOString().slice(0,10)` (an ISO string, and UTC). DPRs are saved as text via
+`fmtDate` (e.g. "21 Aug 2026"), so the two never matched: that part of the badge has always been 0 and only pending checklists ever counted. (`toISOString()` would also
+roll the date back a day in IST — see the DPR date text/timezone gotcha.)
+**Fix**: in `dprAttentionKeys` (`src/lib/attentionKeys.js`) parse `d.date` and compare LOCAL calendar-date parts against local parts of `TODAY` (the app's "today", honours
+`VITE_TODAY_OVERRIDE`) — same approach as the DPR date filter in `dprTab.js`. Unparseable dates are ignored. Seen-tracking is unchanged (key `dpr:<id>`).
+**Effect (intended)**: today's DPR entries now count toward the DPR Log badge until the user opens the tab, like any other new item.
+**Files to change**: `src/lib/attentionKeys.js` only.
+**Adjacent, NOT changed**: the "DPR not submitted in N days" alert (`alerts.js:61`) picks the latest DPR with a plain string comparison of the same text dates
+(`d.date>latest.date`), which does not order "21 Aug 2026"-style dates chronologically — possible wrong "days since last DPR". Needs its own decision.
+**Status**: built + verified in TEST_MODE 2026-09-25 (2 DPRs dated today in the real saved format "25 Sept 2026" -> badge 2; yesterday + unparseable dates ignored; opening the tab clears; a new one returns); pushed with this commit; prod re-check pending. Caveat: date text is parsed with `new Date()` like the existing DPR date filter, so a browser that cannot parse "Sept" would skip those DPRs (undercount, no crash) — the team uses Chrome, where it parses.
