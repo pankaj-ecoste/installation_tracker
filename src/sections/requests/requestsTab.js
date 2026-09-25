@@ -3,6 +3,8 @@ import { db } from '../../lib/supabaseClient.js';
 import { logActivity } from '../../lib/activityLog.js';
 import { CNC_FIELDS, CNC_STAGES, CNC_TEAM_EMAIL, HARISH_EMAIL, MS_MAIN, MS_MAINORDER_STEPS, MS_MOCKUP_STEPS, MS_POSTMOCKUP_STEPS, MS_PREMAINSURVEY_STEPS, MS_PREMOCKUP, MS_SAMPLING, NEELAM_WA, POSTPO_DOC_CATEGORIES, POSTPO_FIELDS, PREPO_FIELDS, SURVEY_FIELDS, VISIT_FIELDS, computeCNCStages, getAdminEmail, getManagementCcEmails, milestoneKeyFor, notifyByGmail, reqFieldGroup, reqNumberPrefix, reqTypeLabel } from '../../lib/constants.js';
 import { canDo, daysDiff, fmtDate, visibleProjects } from '../../lib/helpers.js';
+import { markKeysSeen } from '../../lib/seenItems.js';
+import { requestAttentionKey, requestAttentionKeys } from '../../lib/attentionKeys.js';
 import { projectToRow, requestToRow, rowToProject, rowToRequest } from '../../lib/mappers.js';
 import { docLink, fileUploadRowHTML, pickFilesOrWarn, uploadFiles, uploadFilesWithNames } from '../../lib/uploads.js';
 import { updateBell } from '../alerts.js';
@@ -421,6 +423,17 @@ export function renderRequests(){
     }
     return true;
   });
+  // v2-48: requests that need this user's attention (rules in attentionKeys.js) float to the top —
+  // stable sort, so the existing order holds inside each group. Roles with no Requests badge have
+  // no attention keys, so their order is unchanged.
+  filtered.sort((a,b)=>(requestAttentionKey(a)?0:1)-(requestAttentionKey(b)?0:1));
+  // The user is looking at the Requests tab, so everything currently counted on the badge is now
+  // seen and the number clears (a new request, or a status change, brings it back). Marks ALL
+  // attention keys, not just the filtered ones, so a filter never leaves some "unseen".
+  if(state.activeTab==='requests'&&state.currentUser){
+    markKeysSeen('requests',state.currentUser.username,requestAttentionKeys());
+    updateBell();
+  }
   if(!filtered.length){ el.innerHTML='<div class="empty">No requests yet'+(state.requests.length===0&&visible.length===0?' — or the requests table hasn\'t been created in Supabase yet.':'.')+'</div>'; return; }
   el.innerHTML=filtered.map(r=>renderRequestCard(r)).join('');
 }

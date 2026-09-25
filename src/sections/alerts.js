@@ -1,5 +1,7 @@
 import { state } from '../lib/state.js';
 import { getSeenLotIds } from '../lib/seenLots.js';
+import { countUnseen } from '../lib/seenItems.js';
+import { requestAttentionKeys } from '../lib/attentionKeys.js';
 import { supervisorWhatsApp } from '../lib/whatsapp.js';
 import { syncProject } from '../data/loadAllData.js';
 import { CHECKLIST_DEFS, TODAY, reqTypeLabel } from '../lib/constants.js';
@@ -114,14 +116,10 @@ export function updateTabBadges(){
 export function updateRequestsBadge(){
   const badge=document.getElementById('requests-count');
   if(!badge||!state.currentUser) return;
-  let count=0;
-  if(canDo('addProject')||canDo('manageTeam')){
-    // New unacknowledged requests AND visits/surveys completed but not yet reviewed —
-    // both need Admin/Manager action, so both should show on the tab itself.
-    count=state.requests.filter(r=>r.status==='New'||r.status==='Visit Done').length;
-  } else if(state.currentUser.role==='supervisor'){
-    count=state.requests.filter(r=>r.assignedSupervisor===state.currentUser.username&&r.status==='Acknowledged').length;
-  }
+  // Admin/Manager: new unacknowledged requests AND visits/surveys done but not yet reviewed;
+  // Supervisor: newly assigned requests (rules in attentionKeys.js). v2-48: only the ones this
+  // user hasn't seen yet count — opening the Requests tab marks them seen (renderRequests).
+  const count=countUnseen('requests',state.currentUser.username,requestAttentionKeys());
   if(count>0){ badge.classList.remove('hidden'); badge.textContent=count; }
   else badge.classList.add('hidden');
 }

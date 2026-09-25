@@ -3437,3 +3437,28 @@ mixed text as a search), plus draft links aren't clickable until sent. So the fo
 Template wording otherwise unchanged. Sales still receives LINKS, not attachments (real attachments = server-side sending, discussed and not chosen for now).
 **Files to change**: `src/sections/requests/requestsTab.js` (`docLines` in `emailSalesPreviewUpdated`).
 **Status**: built + verified in TEST_MODE 2026-09-25 (each document = name line, bare URL line, blank line between); pushed with this commit; prod re-check pending.
+
+### v2-48: "New info on top + badge clears when seen" for the other badged tabs (2026-09-25) — LOCKED, being built tab by tab
+
+**Ask (user)**: Material already does two things (v2-41 sort + v2-43 seen-clears-badge). Do the same for the other modules: when a new item arrives the tab shows a
+number; opening the tab shows the new item at the top and the number vanishes; a later new item brings it back.
+
+**What Material does today (checked in code, not just memory)**: `renderMaterial` (`materialTab.js`) sorts in-transit lots/projects first (stable sort), and when the tab is
+active marks the counted lots seen via `markLotsSeen` (`src/lib/seenLots.js`, localStorage key `ecoste_seen_lots_<username>`, memory fallback);
+`updateTabBadges` (`alerts.js`) counts only unseen ones. The bell count is deliberately untouched.
+
+**Decisions (user, "agree with your suggestion")**
+- **Tabs (all five)**: Requests, All Projects, DPR Log, Finance, New Vendors. Material is NOT changed.
+- **Trigger**: the tab's badge clears when the user opens that tab (all currently counted items become "seen"), exactly as Material.
+- **Storage**: per user, per browser (localStorage + memory fallback), no DB change — same trade-off accepted for Material. A generic `src/lib/seenItems.js`
+  keyed by module (`ecoste_seen_<module>_<username>`); `seenLots.js` and Material stay untouched.
+- **Item identity**: each item has a stable key that CHANGES when the item's state changes, so it counts as new again:
+  Requests `id:status`; All Projects the snag's identity; DPR `dpr id` / checklist `defKey-projId`; Finance `ra:projId` and `jmr:projId:jmrQty`; New Vendors `vendorId:stage`.
+- **Sort**: items needing attention float to the top of each tab (stable, display-only; original order inside each group), like Material.
+- **CNC requests** keep counting as "needs action" for the top group of Requests (they stay `New` until Dispatched).
+- Clearing a badge does NOT mean the work is done; the bell count stays as the persistent reminder (untouched).
+- Build order: Requests -> Finance -> New Vendors -> DPR Log -> All Projects. Each verified in the browser before the next.
+
+**Files (expected)**: new `src/lib/seenItems.js`; `src/sections/alerts.js` (badge counts); the render function of each tab
+(`requestsTab.js`, `financeTab.js`, `newVendorsTab.js`, `dprTab.js`, `projectCards.js`).
+**Status**: locked, not built.
