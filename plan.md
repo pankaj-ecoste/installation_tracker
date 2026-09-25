@@ -3245,7 +3245,7 @@ The key `remarks` is already used by the Post-PO/Survey field groups but CNC has
 
 **Files to change**: `src/lib/constants.js` (one `CNC_FIELDS` entry), `src/sections/requests/requestsTab.js` (textarea type in
 `fieldRowHTML`, email line). `complete.html` is the frozen baseline copy from Phase 0 — NOT touched.
-**Status**: built + verified in TEST_MODE (2026-09-25), not committed yet.
+**Status**: built + verified in TEST_MODE, committed and pushed 533347e (2026-09-25); prod verification pending.
 
 #### Item 2 — Size of Grill no longer mandatory (LOCKED 2026-09-25, user: "agree with your suggestion")
 **Root cause / where it lives**: `required:true` on the `grillSizeSqFt` entry in `CNC_FIELDS` (`src/lib/constants.js:364`). The form's
@@ -3257,7 +3257,7 @@ red `*` and the save-time required check both read that one flag, so removing it
 - Existing requests untouched — they keep whatever size they saved.
 
 **Files to change**: `src/lib/constants.js` only (drop `required:true` on one line).
-**Status**: built + verified in TEST_MODE (2026-09-25), not committed yet.
+**Status**: built + verified in TEST_MODE, committed and pushed 533347e (2026-09-25); prod verification pending.
 
 #### Item 3 — Harish ji added to "To" of the CNC new-request email (LOCKED 2026-09-25, user: "agree with your suggestion")
 **Root cause / where it lives**: the CNC "To" list is built in `notifyManagementNewRequest` (`src/sections/requests/requestsTab.js:338-344`)
@@ -3271,7 +3271,7 @@ as admin + `CNC_TEAM_EMAIL` (`src/lib/constants.js:370`); de-duplicated, and any
 - Not verified whether he already exists in the Team tab (CLI not logged in); does not change the plan.
 
 **Files to change**: `src/lib/constants.js` (constant), `src/sections/requests/requestsTab.js` (import + one entry in `toList`).
-**Status**: built + verified in TEST_MODE (2026-09-25), not committed yet.
+**Status**: built + verified in TEST_MODE, committed and pushed 533347e (2026-09-25); prod verification pending.
 
 #### Item 4 — "CNC Preview Updated" email to the requesting sales person (LOCKED 2026-09-25)
 **Re-scoped by the user**: NOT the at-creation email. A separate, simple email to only the sales person who filled the CNC request,
@@ -3299,7 +3299,7 @@ Mitigation: fall back to a message saying pop-ups must be allowed; if it proves 
 
 **Files to change**: `src/sections/requests/requestsTab.js` (new email function + call at end of `uploadCNCPreviewPdf`); uses `HARISH_EMAIL`
 from `constants.js` (added in item 3).
-**Status**: built + verified in TEST_MODE (2026-09-25), not committed yet.
+**Status**: built + verified in TEST_MODE, committed and pushed 533347e (2026-09-25); prod verification pending.
 
 #### Item 5 — Document upload limit 5 -> 20, CNC only (LOCKED 2026-09-25, user: "agree with your suggestion")
 **Root cause / where it lives**: the 5 is hard-coded twice in `renderRequestFields` (`src/sections/requests/requestsTab.js:118` label,
@@ -3315,7 +3315,7 @@ Precedent: `CNC_PREVIEW_MAX` / `CNC_ROUGH_MAX` named constants for the post-save
 - At build time also verify: storage policy / per-file size limit allows it, and the creation email stays usable with up to 20 links.
 
 **Files to change**: `src/lib/constants.js` (constant), `src/sections/requests/requestsTab.js` (label + picker limit in `renderRequestFields`).
-**Status**: built + verified in TEST_MODE (2026-09-25), not committed yet.
+**Status**: built + verified in TEST_MODE, committed and pushed 533347e (2026-09-25); prod verification pending.
 
 #### Item 6 — "Type of CNC Request" dropdown, Fresh / Revise (LOCKED 2026-09-25, user: "agree with your suggestion")
 **Root cause / where it lives**: one more entry in `CNC_FIELDS` (`src/lib/constants.js:360`), same shape as the existing select
@@ -3331,7 +3331,7 @@ Precedent: `CNC_PREVIEW_MAX` / `CNC_ROUGH_MAX` named constants for the post-save
 - Old requests have no value -> no badge, "—" in the email/panel; unaffected.
 
 **Files to change**: `src/lib/constants.js` (field), `src/sections/requests/requestsTab.js` (email line in `notifyManagementNewRequest`, badge in `renderRequestCard`).
-**Status**: built + verified in TEST_MODE (2026-09-25), not committed yet.
+**Status**: built + verified in TEST_MODE, committed and pushed 533347e (2026-09-25); prod verification pending.
 
 #### Item 7 — Design role sees only CNC requests (LOCKED 2026-09-25)
 **Confirmed by user**: Arvind ji is on the Design team (role `design`). Applied to the **whole Design role**, not hard-coded to his username.
@@ -3352,7 +3352,7 @@ Precedent: `CNC_PREVIEW_MAX` / `CNC_ROUGH_MAX` named constants for the post-save
 **Files to change**: `src/sections/requests/requestsTab.js` (Design filter), `src/sections/alerts.js` (`buildRequestActivityHTML`, Design branch).
 **Adjacent finding, NOT in this item (scope discipline)**: the project-based alerts in the same bell were not checked for what Design sees — logged for a
 possible separate item.
-**Status**: built + verified in TEST_MODE (2026-09-25), not committed yet.
+**Status**: built + verified in TEST_MODE, committed and pushed 533347e (2026-09-25); prod verification pending.
 
 #### Item 8 — Request-type filter dropdown (LOCKED 2026-09-25, user: "agree with your suggestion")
 **Root cause / where it lives**: the Requests tab only filters by status (`#req-f-status`) and a search box (`index.html:102-103`), read by
@@ -3370,7 +3370,7 @@ possible separate item.
 
 **Files to change**: `index.html` (dropdown), `src/sections/requests/requestsTab.js` (filter in `renderRequests`, hide for Design),
 `src/sections/alerts.js` (reset in `goToRequestCard`).
-**Status**: built + verified in TEST_MODE (2026-09-25), not committed yet.
+**Status**: built + verified in TEST_MODE, committed and pushed 533347e (2026-09-25); prod verification pending.
 
 #### v2-47 summary — all 8 items LOCKED and BUILT (2026-09-25); verified in TEST_MODE, not committed or prod-verified yet
 Files touched overall: `src/lib/constants.js`, `src/sections/requests/requestsTab.js`, `src/sections/alerts.js`, `index.html`. No migration needed for any item.
@@ -3395,4 +3395,4 @@ Files touched overall: `src/lib/constants.js`, `src/sections/requests/requestsTa
 **Not verified / open**
 - Real pop-up-blocker behaviour of the item 4 Gmail window (TEST_MODE stubbed `window.open`); the fallback alert exists. Also the no-sales-email alert path was not exercised in the browser.
 - **Adjacent finding (not fixed, scope discipline)**: the "Recent activity" list at the bottom of the bell shows every activity line (e.g. "New request: PRE-0002 — Pre-Mockup request logged by admin") to every role including Design, so Design still sees non-CNC request numbers there. Needs a decision whether to filter it.
-- Not committed, not pushed, not verified on prod.
+- Committed and pushed (533347e); not verified on prod yet.
