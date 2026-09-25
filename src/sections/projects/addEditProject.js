@@ -282,6 +282,9 @@ export async function saveProject(){
       supervisor:existing?.supervisor||'—', supervisorWA:existing?.supervisorWA||'',
       installedQty:existing?.installedQty||0, jmrQty:existing?.jmrQty||0,
       raBillAmt:existing?.raBillAmt||0, paymentCollected:existing?.paymentCollected||0,
+      // v2-49: baseData hard-codes raBillQty:0 / actualDate:'' (right for a NEW project). Neither is on this
+      // form — they are set in Update Progress — so an edit must keep what is stored, not wipe it.
+      raBillQty:existing?.raBillQty||0, actualDate:existing?.actualDate||'',
       raBillReady:existing?.raBillReady||false
     };
     const idx=state.projects.findIndex(p=>p.id===state.editingId);

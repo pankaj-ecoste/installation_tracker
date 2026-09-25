@@ -3531,3 +3531,10 @@ all were re-solved on 24 Sep by the team; none has a next action left.
   and 0 projects have a raBillQty although 2 have an RA bill amount. Not proven to be caused by this alone. Fix would be `raBillQty:existing?.raBillQty||0` (no side effects) and `actualDate:existing?.actualDate||''`
   (open question: the old behaviour also cleared the date when an admin moved a project out of Completed via this form).
 - **Data restore**: dry run pending, nothing written to production.
+
+#### v2-49 — audit finding fix (LOCKED 2026-09-25, user: "data should be same … correct it but data should be same")
+**Decision**: Edit Project → Save must not change data the form does not show. In the edit branch of `saveProject` (`addEditProject.js`), `raBillQty` and `actualDate` are now taken from the
+stored project (`existing?.raBillQty||0`, `existing?.actualDate||''`) instead of the hard-coded `0` / `''` in `baseData`. They are only ever changed from the Update Progress panel (unchanged).
+The old "clears actual date when moved out of Completed" behaviour is dropped in favour of "data stays the same" (edge case noted: a project moved out of Completed keeps its old actual date until changed in Update Progress).
+New projects keep `0` / `''` as before.
+**Files**: `src/sections/projects/addEditProject.js` only. **Status**: built + verified in TEST_MODE 2026-09-25 (project with raBillQty 1234, actualDate 2026-09-20, RA bill amt, JMR, installed qty: after Edit Project → change city → Save every one unchanged, city updated); committed and pushed; prod re-check pending. Existing wiped data (48 Completed projects, 2 with an actual date) is NOT restored by this — nothing is known to restore it from.
