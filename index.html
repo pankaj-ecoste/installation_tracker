@@ -99,6 +99,7 @@
         </div>
       </div>
       <div class="filters">
+        <select id="req-f-type" onchange="renderRequests()"><option value="">All request types</option><option value="pre-mockup">Pre-Mockup</option><option value="mockup">Mockup</option><option value="post-mockup">Post-Mockup</option><option value="pre-main-survey">Pre-Main Order Survey</option><option value="sampling-survey">Sampling Survey</option><option value="main-order">Main Order</option><option value="post-main-order">Post-Main Order</option><option value="cnc">CNC</option></select>
         <select id="req-f-status" onchange="renderRequests()"><option value="">All statuses</option><option>New</option><option>Acknowledged</option><option>Visit Done</option><option>Reviewed</option><option>Converted to Project</option><option>Dispatched</option></select>
         <input type="text" id="req-f-search" placeholder="Search by sales person or project..." oninput="renderRequests()" style="min-width:220px">
       </div>

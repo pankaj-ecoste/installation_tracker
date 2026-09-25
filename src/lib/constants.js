@@ -361,13 +361,21 @@ export const CNC_FIELDS = [
   {key:'salesName',label:'Sales team name',required:true},
   {key:'salesEmail',label:'Sales team email',required:true},
   {key:'clientName',label:'Client name',required:true},
-  {key:'grillSizeSqFt',label:'Size of Grill (Sq Feet)',type:'number',required:true},
+  // v2-47: Fresh / Revise, mandatory, no default.
+  {key:'cncRequestType',label:'Type of CNC Request',type:'select',options:['Fresh','Revise'],required:true},
+  // v2-47: no longer mandatory.
+  {key:'grillSizeSqFt',label:'Size of Grill (Sq Feet)',type:'number'},
   {key:'developerName',label:'Developer name',required:true},
-  {key:'needInstallation',label:'Need Installation?',type:'select',options:['Yes','No'],required:true}
+  {key:'needInstallation',label:'Need Installation?',type:'select',options:['Yes','No'],required:true},
+  // v2-47: optional multi-line remarks.
+  {key:'remarks',label:'Remarks',type:'textarea'}
 ];
 // v2-38: the CNC team's shared inbox — added to the "To:" of every new CNC request notification
 // email (alongside the admin), with the sales person Cc'd. See plan.md v2-38.
 export const CNC_TEAM_EMAIL = 'cnc.ecoste@gmail.com';
+// v2-47: Harish ji — added to the "To:" of the CNC new-request email and Cc'd on the "CNC Preview
+// Updated" email to the sales person. See plan.md v2-47 items 3 and 4.
+export const HARISH_EMAIL = 'gm.plant@ecoste.in';
 // CNC production stage timeline — Planned dates are computed ONCE at request creation using these
 // fixed day-offsets (each chained from the previous stage's planned date), then never
 // recalculated afterward, even if an Actual date comes in late/early — confirmed with the user

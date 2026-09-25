@@ -103,6 +103,9 @@ export function showTeamDashboard(){
   // "Pipeline" aren't gated by any permission for any other role today, so this is an explicit
   // check rather than a side effect of the `can` flags above.
   const isDesign=state.currentUser&&state.currentUser.role==='design';
+  // v2-47 item 8: the request-type filter is pointless for Design (only CNC is visible to them).
+  const reqTypeFilter=document.getElementById('req-f-type');
+  if(reqTypeFilter){ reqTypeFilter.style.display=isDesign?'none':''; if(isDesign) reqTypeFilter.value=''; }
   const projTab=document.getElementById('tab-projects');
   if(projTab) projTab.style.display=isDesign?'none':'';
   const pipelineTab=document.getElementById('tab-pipeline');

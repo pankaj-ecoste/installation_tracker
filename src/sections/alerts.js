@@ -129,10 +129,12 @@ export function updateRequestsBadge(){
 // New requests and overdue-review requests, surfaced at the top of Notifications —
 // separate from the project-based alerts since requests aren't tied to a project yet.
 export function buildRequestActivityHTML(){
-  const newReqs=state.requests.filter(r=>r.status==='New');
+  // v2-47 item 7: the Design role only ever sees CNC requests, so its bell lists only those too.
+  const reqPool=(state.currentUser&&state.currentUser.role==='design')?state.requests.filter(r=>r.requestType==='cnc'):state.requests;
+  const newReqs=reqPool.filter(r=>r.status==='New');
   // Every request sitting at "Visit Done" needs review — shown immediately, not just once
   // overdue. This is what actually notifies Admin the moment a Supervisor finishes a visit.
-  const awaitingReview=state.requests.filter(r=>r.status==='Visit Done'&&r.actualVisitDate);
+  const awaitingReview=reqPool.filter(r=>r.status==='Visit Done'&&r.actualVisitDate);
   let html='';
   if(newReqs.length){
     html+='<div class="section-hdr">🆕 New requests <span class="count-pill" style="background:#d4edda;color:#1a5e2a">'+newReqs.length+'</span></div>';
@@ -279,7 +281,8 @@ export function goToDPRForProject(projId){
 export function goToRequestCard(reqId){
   showSection('team'); setTab('requests');
   const sf=document.getElementById('req-f-status');
-  if(sf&&sf.value){ sf.value=''; renderRequests(); }
+  const tf=document.getElementById('req-f-type');
+  if((sf&&sf.value)||(tf&&tf.value)){ if(sf) sf.value=''; if(tf) tf.value=''; renderRequests(); }
   setTimeout(()=>{
     const el=document.getElementById('req-card-'+reqId);
     if(el){ el.scrollIntoView({behavior:'smooth',block:'start'}); flashHighlight(el); }

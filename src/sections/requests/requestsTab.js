@@ -1,7 +1,7 @@
 import { state } from '../../lib/state.js';
 import { db } from '../../lib/supabaseClient.js';
 import { logActivity } from '../../lib/activityLog.js';
-import { CNC_FIELDS, CNC_STAGES, CNC_TEAM_EMAIL, MS_MAIN, MS_MAINORDER_STEPS, MS_MOCKUP_STEPS, MS_POSTMOCKUP_STEPS, MS_PREMAINSURVEY_STEPS, MS_PREMOCKUP, MS_SAMPLING, NEELAM_WA, POSTPO_DOC_CATEGORIES, POSTPO_FIELDS, PREPO_FIELDS, SURVEY_FIELDS, VISIT_FIELDS, computeCNCStages, getAdminEmail, getManagementCcEmails, milestoneKeyFor, notifyByGmail, reqFieldGroup, reqNumberPrefix, reqTypeLabel } from '../../lib/constants.js';
+import { CNC_FIELDS, CNC_STAGES, CNC_TEAM_EMAIL, HARISH_EMAIL, MS_MAIN, MS_MAINORDER_STEPS, MS_MOCKUP_STEPS, MS_POSTMOCKUP_STEPS, MS_PREMAINSURVEY_STEPS, MS_PREMOCKUP, MS_SAMPLING, NEELAM_WA, POSTPO_DOC_CATEGORIES, POSTPO_FIELDS, PREPO_FIELDS, SURVEY_FIELDS, VISIT_FIELDS, computeCNCStages, getAdminEmail, getManagementCcEmails, gmailComposeLink, milestoneKeyFor, notifyByGmail, reqFieldGroup, reqNumberPrefix, reqTypeLabel } from '../../lib/constants.js';
 import { canDo, daysDiff, fmtDate, visibleProjects } from '../../lib/helpers.js';
 import { projectToRow, requestToRow, rowToProject, rowToRequest } from '../../lib/mappers.js';
 import { docLink, fileUploadRowHTML, pickFilesOrWarn, uploadFiles, uploadFilesWithNames } from '../../lib/uploads.js';
@@ -18,7 +18,9 @@ import { renderProjects } from '../projects/projectCards.js';
 export function fieldRowHTML(f, valObj, idPrefix){
   const val=String(valObj[f.key]!=null?valObj[f.key]:'');
   const inputId=idPrefix+'-'+f.key;
-  const inputHtml=f.type==='select'
+  const inputHtml=f.type==='textarea'
+    ? '<textarea class="form-input" rows="3" id="'+inputId+'" data-key="'+f.key+'" oninput="reqFieldChanged(this,\''+idPrefix+'\')" placeholder="'+(f.placeholder||f.label)+'">'+val.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</textarea>'
+    : f.type==='select'
     ? '<select class="form-input" id="'+inputId+'" data-key="'+f.key+'" onchange="reqFieldChanged(this,\''+idPrefix+'\')">'+
         '<option value="">— Select —</option>'+
         f.options.map(o=>'<option '+(val===o?'selected':'')+'>'+o+'</option>').join('')+
@@ -115,9 +117,13 @@ export function renderRequestFields(){
 
   // Document upload (up to 2), per the doc — mandatory only for CNC (see plan.md v2-29); stays
   // optional for every other request type exactly as before.
-  document.getElementById('req-doc-upload').innerHTML=fileUploadRowHTML('req-docs','Document upload'+(group==='cnc'?' *':''),5);
+  // v2-47: CNC allows up to 20 documents in total per request; every other type stays at 5 per pick.
+  const docMax=group==='cnc'?CNC_DOC_MAX:5;
+  document.getElementById('req-doc-upload').innerHTML=fileUploadRowHTML('req-docs','Document upload'+(group==='cnc'?' *':''),docMax);
   document.getElementById('req-docs').onchange=async function(){
-    const files=pickFilesOrWarn(this,5); if(!files) return;
+    const room=group==='cnc'?docMax-(state.reqDetails.documentUrls||[]).length:docMax;
+    if(room<=0){ alert('This request already has the maximum of '+docMax+' documents.'); this.value=''; return; }
+    const files=pickFilesOrWarn(this,room); if(!files) return;
     document.getElementById('req-docs-list').textContent='Uploading '+files.length+' file(s)...';
     const urls=await uploadFiles(files,'requests');
     state.reqDetails.documentUrls=[...(state.reqDetails.documentUrls||[]),...urls];
@@ -322,8 +328,10 @@ export function notifyManagementNewRequest(r){
   } else {
     // v2-38: the CNC team reads this email, so include the CNC-specific details up front.
     lines.push('Client name: '+(d.clientName||'—'));
+    lines.push('Type of CNC request: '+(d.cncRequestType||'—'));
     lines.push('Size of grill (Sq Feet): '+(d.grillSizeSqFt||'—'));
     lines.push('Need installation: '+(d.needInstallation||'—'));
+    lines.push('Remarks: '+(d.remarks||'—'));
     const docs=(d.documentUrls||[]).map(x=>typeof x==='object'?x.url:x).filter(Boolean);
     lines.push('Documents: '+(docs.length?'\n'+docs.join('\n'):'—'));
   }
@@ -337,7 +345,7 @@ export function notifyManagementNewRequest(r){
   // dropped from Cc:.
   let to=getAdminEmail(), cc=getManagementCcEmails();
   if(reqFieldGroup(r.requestType)==='cnc'){
-    const toList=[...new Set([to, CNC_TEAM_EMAIL].filter(Boolean))];
+    const toList=[...new Set([to, CNC_TEAM_EMAIL, HARISH_EMAIL].filter(Boolean))];
     const salesEmail=(d.salesEmail||'').trim();
     const ccList=[...new Set([...cc.split(','), salesEmail].map(e=>e.trim()).filter(e=>e&&!toList.includes(e)))];
     to=toList.join(','); cc=ccList.join(',');
@@ -399,10 +407,13 @@ export function renderRequests(){
     // list. Every other request type only becomes visible to Design once the site survey is
     // confirmed (Visit Done / Reviewed) — there's nothing for Design to act on before that,
     // including a non-CNC request Design might have raised themselves. See plan.md v2-29.
-    visible=state.requests.filter(r=>r.requestType==='cnc'?r.status==='New':['Visit Done','Reviewed'].includes(r.status));
+    // v2-47 item 7: superseded — Design now sees ONLY CNC requests (still until Dispatched).
+    visible=state.requests.filter(r=>r.requestType==='cnc'&&r.status==='New');
   }
+  const tf=document.getElementById('req-f-type')?.value||'';
   const filtered=visible.filter(r=>{
     if(sf&&r.status!==sf) return false;
+    if(tf&&r.requestType!==tf) return false;
     if(sch){
       const d=r.details||{};
       const haystack=[r.createdBy,d.salesName,d.projectName,d.projectNameKnown,d.developerName].filter(Boolean).join(' ').toLowerCase();
@@ -541,7 +552,7 @@ export function renderCNCStageTimeline(r){
   '</div>'+renderCNCAttachments(r);
 }
 // v2-37: caps are TOTALS per request (files already attached count), not per selection.
-const CNC_ROUGH_MAX=5, CNC_PREVIEW_MAX=20;
+const CNC_ROUGH_MAX=5, CNC_PREVIEW_MAX=20, CNC_DOC_MAX=20;
 function canAttachCNCFiles(){
   return !!state.currentUser&&(state.currentUser.role==='design'||canDo('addMilestone'));
 }
@@ -613,7 +624,31 @@ export async function uploadCNCPreviewPdf(id, inputEl){
   const now=new Date();
   const todayLocal=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
   const stages=(res.r.details.cncStages||[]).map(s=>(s.key==='previewCreated'&&!s.actual)?{...s,actual:todayLocal}:s);
+  const alreadyAttached=(res.r.details.previewPdfUrls||[]).length;
   await updateRequestFields(id,{details:{...res.r.details, previewPdfUrls:res.merged, cncStages:stages}});
+  notifySalesPreviewUpdated(res.r, res.merged.slice(alreadyAttached));
+}
+// v2-47 item 4: every successful Preview PDF attach opens a pre-filled Gmail draft to the sales person
+// who filled the request (details.salesEmail), Cc Harish ji, using the team's fixed template. Only the
+// files attached in THIS upload are listed. It opens after an async upload, so a browser may block the
+// pop-up — the fallback message tells the user to allow pop-ups.
+function notifySalesPreviewUpdated(r, newDocs){
+  const d=r.details||{};
+  const salesEmail=(d.salesEmail||'').trim();
+  if(!salesEmail){ alert('Preview PDF attached. No sales email is on file for '+r.requestNumber+', so the "CNC Preview Updated" email could not be prepared.'); return; }
+  const docLines=(newDocs||[]).map(x=>typeof x==='object'?(x.name||'Document')+' — '+x.url:x).join('\n');
+  const subject='CNC Preview Updated — '+r.requestNumber+(d.clientName?' — '+d.clientName:'');
+  const body='🔔 Notification: CNC Preview Updated\n\n'+
+    'Dear Sales Team,\n\n'+
+    'The CNC Preview has been successfully completed and updated.\n\n'+
+    'Kindly review the updated CNC Preview and share it with the client for their review and approval of the design.\n\n'+
+    'Documents Attached:\n'+(docLines||'—')+'\n\n'+
+    'Please ensure that the client\'s approval is received for the design.\n\n'+
+    'Thank you!';
+  const cc=HARISH_EMAIL.toLowerCase()===salesEmail.toLowerCase()?'':HARISH_EMAIL;
+  const w=window.open(gmailComposeLink(salesEmail, subject, body, cc),'_blank');
+  if(!w) alert('Preview PDF attached, but your browser blocked the email window. Please allow pop-ups for this site and send the "CNC Preview Updated" email to '+salesEmail+' from Gmail.');
+  else logActivity('Preview email drafted', r.requestNumber+' — "CNC Preview Updated" draft opened for '+salesEmail);
 }
 
 // v2-20: uploaded docs were being saved into r.details all along but never shown anywhere —
@@ -659,6 +694,7 @@ export function renderRequestCard(r){
         '<div class="proj-sub">'+sub+' · Logged by '+r.createdBy+'</div>'+
         '<div class="proj-meta">'+
           '<span class="badge '+(group==='order'?'bb':group==='survey'?'bg':'ba')+'">'+reqTypeLabel(r.requestType)+'</span>'+
+          (group==='cnc'&&d.cncRequestType?'<span class="badge '+(d.cncRequestType==='Revise'?'bp':'bg')+'">'+d.cncRequestType+'</span>':'')+
           (r.requestSubType?'<span class="badge bgr">'+r.requestSubType+'</span>':'')+
           '<span class="badge '+(isOnlySupply?'bt':'bgr')+'">'+scope+'</span>'+
           '<span class="badge '+(REQ_STATUS_COLOR[r.status]||'bgr')+'">'+r.status+'</span>'+
@@ -711,7 +747,7 @@ export function renderRequestCard(r){
 export function viewRequestReadOnly(id){
   openEditRequest(id);
   setTimeout(()=>{
-    document.querySelectorAll('#panel-add-request input, #panel-add-request select').forEach(el=>el.disabled=true);
+    document.querySelectorAll('#panel-add-request input, #panel-add-request select, #panel-add-request textarea').forEach(el=>el.disabled=true);
     document.querySelectorAll('#panel-add-request .panel-footer button').forEach(btn=>{ if(!btn.textContent.includes('Back')&&!btn.textContent.includes('Cancel')) btn.style.display='none'; });
   },20);
 }

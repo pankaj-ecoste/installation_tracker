@@ -3213,3 +3213,186 @@ transaction: applies cleanly; all Not Done rows (8 EOD + 1 SOD) convert to Other
 fake group/totals is overwritten by the trigger; Other without text (or spaces only) → 23514; Not Done → 23514; update still locked.
 Effect on existing numbers (from the rescore): 19 Sept 2 → 3, 21 Sept 2 → 10 (out of 72 / 74).
 **Status**: migration 0022 APPLIED to prod, committed and pushed (2026-09-21). To confirm on the live site as admin: dropdown has Other (no Not Done), top card shows In Progress / Not Started / Total, folder headers show the split.
+
+### v2-47: CNC request — batch of small team-suggested changes (2026-09-25) — being discussed one by one, nothing built yet
+
+**Process (user)**: discuss each item -> root cause -> lock decision here -> only then build. One item at a time.
+
+**The team's 8 items**
+1. Add a "Remarks" field to the new CNC request form — **LOCKED (below)**
+2. Remove the mandatory requirement from "Size of Grill (Sq Feet)" — **LOCKED (below)**
+3. Add Harish ji's email to the "To" of new-request emails — **LOCKED (below)**
+4. Sales-team notification email — re-scoped by the user to "CNC Preview Updated" email, fires when the Preview PDF is attached — **LOCKED (below)**
+5. Raise "Document upload" limit from 5 to 20 files — **LOCKED (below)**
+6. New "Type of CNC Request" dropdown (Fresh / Revise) — **LOCKED (below)**
+7. Arvind ji should see only CNC requests in the Requests tab — **LOCKED (below)**
+8. Request-type filter dropdown in the Requests tab (so the team can pull up all CNC requests) — **LOCKED (below)**. (First read as a
+   "CNC converts to Pre-mockup/Main order" question; user clarified it is only a filter. v2-29 item 9 stands: CNC never converts to a project.)
+
+#### Item 1 — Remarks field (LOCKED 2026-09-25, user: "agree with your suggestion")
+**Root cause / where it lives**: the CNC form is driven entirely by the `CNC_FIELDS` array (`src/lib/constants.js:360`); the form,
+required-check and save all read that list, and values are stored in the request's `details` jsonb, so no DB change or migration.
+The key `remarks` is already used by the Post-PO/Survey field groups but CNC has its own list, so no clash.
+
+**Decisions**
+- **CNC only** (other request types already have their own remarks).
+- **Optional** (not required).
+- **Multi-line** textarea — needs a small new `textarea` type in `fieldRowHTML` (`src/sections/requests/requestsTab.js:18`); the
+  form only knows single-line inputs today.
+- **Shown** in the CNC new-request notification email (one extra line in `notifyManagementNewRequest`) and in the edit / view-only
+  panel; **not** on the request card (keeps cards compact).
+- **Position**: last in the field list, right after "Need Installation?", above Document upload.
+
+**Files to change**: `src/lib/constants.js` (one `CNC_FIELDS` entry), `src/sections/requests/requestsTab.js` (textarea type in
+`fieldRowHTML`, email line). `complete.html` is the frozen baseline copy from Phase 0 — NOT touched.
+**Status**: built + verified in TEST_MODE (2026-09-25), not committed yet.
+
+#### Item 2 — Size of Grill no longer mandatory (LOCKED 2026-09-25, user: "agree with your suggestion")
+**Root cause / where it lives**: `required:true` on the `grillSizeSqFt` entry in `CNC_FIELDS` (`src/lib/constants.js:364`). The form's
+red `*` and the save-time required check both read that one flag, so removing it is the whole change.
+
+**Decisions**
+- Field **stays, becomes optional** (not removed).
+- Notification email keeps the line "Size of grill (Sq Feet): —" when blank (already the behaviour, `requestsTab.js:325`).
+- Existing requests untouched — they keep whatever size they saved.
+
+**Files to change**: `src/lib/constants.js` only (drop `required:true` on one line).
+**Status**: built + verified in TEST_MODE (2026-09-25), not committed yet.
+
+#### Item 3 — Harish ji added to "To" of the CNC new-request email (LOCKED 2026-09-25, user: "agree with your suggestion")
+**Root cause / where it lives**: the CNC "To" list is built in `notifyManagementNewRequest` (`src/sections/requests/requestsTab.js:338-344`)
+as admin + `CNC_TEAM_EMAIL` (`src/lib/constants.js:370`); de-duplicated, and anyone in To is dropped from Cc.
+
+**Decisions**
+- Address: `gm.plant@ecoste.in` (given by the user).
+- New constant `HARISH_EMAIL` next to `CNC_TEAM_EMAIL` in `constants.js`; **reused by item 4** (Harish ji in Cc there).
+- **CNC requests only** — other request types keep their current recipients.
+- Added to the CNC `toList`; existing dedupe means if he is also an admin/manager in the Team tab he appears once, in To.
+- Not verified whether he already exists in the Team tab (CLI not logged in); does not change the plan.
+
+**Files to change**: `src/lib/constants.js` (constant), `src/sections/requests/requestsTab.js` (import + one entry in `toList`).
+**Status**: built + verified in TEST_MODE (2026-09-25), not committed yet.
+
+#### Item 4 — "CNC Preview Updated" email to the requesting sales person (LOCKED 2026-09-25)
+**Re-scoped by the user**: NOT the at-creation email. A separate, simple email to only the sales person who filled the CNC request,
+fired when the Design team (or admin / ops manager) attaches the **Preview PDF** (the "Preview PDF *" box under the stage timeline).
+
+**Root cause / where it lives**: `uploadCNCPreviewPdf` (`src/sections/requests/requestsTab.js:611`) — the single place a Preview PDF is
+attached (it also stamps the "Preview created by Design team" stage). `attachCNCFiles` already returns the uploaded `{name,url}` list.
+
+**Decisions (user)**
+- **Option A**: on a successful Preview PDF attach, open a pre-filled Gmail compose tab automatically (same mechanism as the other
+  emails; the person still presses Send). Chosen over a button (B) or server-side auto-send (C).
+- **To**: the request's `details.salesEmail` (the sales person who filled the request). **Cc**: Harish ji (`HARISH_EMAIL`, item 3).
+- **Template** = the user's text verbatim: "🔔 Notification: CNC Preview Updated / Dear Sales Team, The CNC Preview has been successfully
+  completed and updated. Kindly review the updated CNC Preview and share it with the client for their review and approval of the design.
+  Documents Attached: <names + links> / Please ensure that the client's approval is received for the design. / Thank you!"
+  Subject adds request number + client name. **No Size of Grill** in this email (template doesn't have it).
+- "Documents Attached" lists the file names + links of the files attached in that upload.
+- **Fires on every successful attach** (a corrected preview also notifies sales) — my recommendation; the user's reply did not
+  explicitly object. Only files just attached are listed. Confirm if "first upload only" is wanted instead.
+- **No sales email on the request** -> no compose window; a short message says the email couldn't be prepared.
+- The at-creation CNC email is **unchanged** (sales person still Cc'd; item 3 only adds Harish ji to To).
+
+**Known risk (accepted with option A)**: the compose tab opens after an async upload, so a browser can block it as a pop-up.
+Mitigation: fall back to a message saying pop-ups must be allowed; if it proves unreliable in real use, add a card button (option B).
+
+**Files to change**: `src/sections/requests/requestsTab.js` (new email function + call at end of `uploadCNCPreviewPdf`); uses `HARISH_EMAIL`
+from `constants.js` (added in item 3).
+**Status**: built + verified in TEST_MODE (2026-09-25), not committed yet.
+
+#### Item 5 — Document upload limit 5 -> 20, CNC only (LOCKED 2026-09-25, user: "agree with your suggestion")
+**Root cause / where it lives**: the 5 is hard-coded twice in `renderRequestFields` (`src/sections/requests/requestsTab.js:118` label,
+`:120` `pickFilesOrWarn(this,5)`), and it only caps files picked per pick — uploads already accumulate in `documentUrls`, so it was never a total.
+Precedent: `CNC_PREVIEW_MAX` / `CNC_ROUGH_MAX` named constants for the post-save upload boxes.
+
+**Decisions**
+- **CNC only** -> 20; every other request type stays at 5.
+- **Total cap of 20 per request** (warn when a pick would exceed the remaining room, same as the Preview PDF box) — stricter than the
+  old per-pick behaviour.
+- Label for CNC: "(up to 20 files)".
+- New named constant (e.g. `CNC_DOC_MAX = 20`) in `constants.js`.
+- At build time also verify: storage policy / per-file size limit allows it, and the creation email stays usable with up to 20 links.
+
+**Files to change**: `src/lib/constants.js` (constant), `src/sections/requests/requestsTab.js` (label + picker limit in `renderRequestFields`).
+**Status**: built + verified in TEST_MODE (2026-09-25), not committed yet.
+
+#### Item 6 — "Type of CNC Request" dropdown, Fresh / Revise (LOCKED 2026-09-25, user: "agree with your suggestion")
+**Root cause / where it lives**: one more entry in `CNC_FIELDS` (`src/lib/constants.js:360`), same shape as the existing select
+"Need Installation?". Saved in the request's `details` jsonb — no DB change / migration.
+
+**Decisions**
+- Field: `{key:'cncRequestType', label:'Type of CNC Request', type:'select', options:['Fresh','Revise'], required:true}` — **mandatory**, no default
+  (starts on "— Select —").
+- Options worded exactly "Fresh" and "Revise".
+- **Position**: right after "Client Name", before "Size of Grill".
+- **Shown**: extra line in the creation email ("Type of CNC request: ..."), and a **badge on the request card** next to the "CNC" badge.
+  Not added to the item-4 Preview email (fixed template).
+- Old requests have no value -> no badge, "—" in the email/panel; unaffected.
+
+**Files to change**: `src/lib/constants.js` (field), `src/sections/requests/requestsTab.js` (email line in `notifyManagementNewRequest`, badge in `renderRequestCard`).
+**Status**: built + verified in TEST_MODE (2026-09-25), not committed yet.
+
+#### Item 7 — Design role sees only CNC requests (LOCKED 2026-09-25)
+**Confirmed by user**: Arvind ji is on the Design team (role `design`). Applied to the **whole Design role**, not hard-coded to his username.
+
+**Root cause / where it lives**
+- Requests list: `renderRequests` Design filter (`src/sections/requests/requestsTab.js:396-402`) shows CNC until `Dispatched`, but every other
+  type once `Visit Done` / `Reviewed` (incl. requests Design raised itself).
+- Notifications bell: `buildRequestActivityHTML` (`src/sections/alerts.js:131`) lists every `New` request of every type to any user,
+  Design included — so Design saw non-CNC "New request" lines it can't open.
+- Requests tab badge (`updateRequestsBadge`, `alerts.js:114`) is NOT affected (no count for Design).
+
+**Decisions (user, "agree with your suggestion")**
+- Requests list, Design role: **CNC only**, same rule as today (visible from creation, drops off once `Dispatched`). All other roles unchanged.
+- Bell, Design role: the request section lists **only CNC** requests (new CNC requests still notify him; nothing else).
+- Search / status filter run on the same filtered list, so they can't get around it.
+- Non-CNC "Visit Done / Reviewed" branch for Design is removed.
+
+**Files to change**: `src/sections/requests/requestsTab.js` (Design filter), `src/sections/alerts.js` (`buildRequestActivityHTML`, Design branch).
+**Adjacent finding, NOT in this item (scope discipline)**: the project-based alerts in the same bell were not checked for what Design sees — logged for a
+possible separate item.
+**Status**: built + verified in TEST_MODE (2026-09-25), not committed yet.
+
+#### Item 8 — Request-type filter dropdown (LOCKED 2026-09-25, user: "agree with your suggestion")
+**Root cause / where it lives**: the Requests tab only filters by status (`#req-f-status`) and a search box (`index.html:102-103`), read by
+`renderRequests` (`src/sections/requests/requestsTab.js:383`). There is no filter by request type, although every request stores one
+(`REQUEST_TYPE_LABELS`, `src/lib/constants.js:308`). Front-end only — no DB change.
+
+**Decisions**
+- New dropdown **"All request types"**, placed **before** the status dropdown, with the **full type list** (Pre-Mockup, Mockup, Post-Mockup,
+  Pre-Main Order Survey, Sampling Survey, Main Order, Post-Main Order, CNC), built from `REQUEST_TYPE_LABELS`.
+- Combines with the status dropdown and search box (all three apply together).
+- Filters the visible list only — badge counts and the bell are unchanged.
+- **Hidden for the Design role** (item 7 already limits them to CNC, so it would do nothing).
+- **Not remembered**: opens on "All request types" each time, like the status filter.
+- `goToRequestCard` (`src/sections/alerts.js:279`, bell "View in Requests ->") must also reset the type filter, otherwise the target card can be hidden.
+
+**Files to change**: `index.html` (dropdown), `src/sections/requests/requestsTab.js` (filter in `renderRequests`, hide for Design),
+`src/sections/alerts.js` (reset in `goToRequestCard`).
+**Status**: built + verified in TEST_MODE (2026-09-25), not committed yet.
+
+#### v2-47 summary — all 8 items LOCKED and BUILT (2026-09-25); verified in TEST_MODE, not committed or prod-verified yet
+Files touched overall: `src/lib/constants.js`, `src/sections/requests/requestsTab.js`, `src/sections/alerts.js`, `index.html`. No migration needed for any item.
+
+**Build notes (2026-09-25)**
+- Item 5's constant `CNC_DOC_MAX = 20` lives in `requestsTab.js` next to `CNC_ROUGH_MAX` / `CNC_PREVIEW_MAX` (not `constants.js` as first planned) — same file that uses it.
+- Item 1 extra: the read-only view (`viewRequestReadOnly`) now also disables `textarea`s, otherwise Remarks stayed editable there.
+- Item 8 also hides the filter for Design in `src/auth/teamAuth.js` (where the other Design UI gating already lives).
+- Item 4 also writes an activity-log entry ("Preview email drafted") when the compose window opens.
+
+**Verification (TEST_MODE, real browser DOM, mock DB — no prod data touched)**
+- CNC form: fields in order Sales name, Sales email, Client name, Type of CNC Request*, Size of Grill (no `*`), Developer, Need Installation*, Remarks (textarea); label "Document upload * (up to 20 files)".
+- Saving without the type -> `"Type of CNC Request" is required.`; saving without Size of Grill works. 20 docs accepted, a 21st -> "already has the maximum of 20 documents".
+- Creation email: To = admin, CNC inbox, `gm.plant@ecoste.in`; Cc = sales person; body has Type of CNC request, Size (`—` when blank), Remarks (multi-line kept), documents.
+- Card badge "Fresh" (green) next to "CNC"; edit panel round-trips Remarks exactly (HTML-escaped, `<b>` shown literally).
+- Item 4: attaching a Preview PDF (as admin and as Design) opened a draft: To = the request's sales email, Cc = Harish ji, subject `CNC Preview Updated — PRE-0001 — ACME Client`, the user's template, and only the file(s) attached in THAT upload listed.
+- Item 7: Design login sees only the CNC request in the list; the type filter is hidden; bell "New requests"/"Awaiting review" sections list CNC only.
+- Item 8: as admin the dropdown lists all 8 types; CNC / Pre-Mockup / Mockup filter correctly, combine with status, and the bell "View in Requests ->" resets both filters.
+- Non-CNC untouched: Pre-Mockup still shows "(up to 5 files)" and rejects 6, keeps its own required Remarks, and still saves.
+- No console errors.
+
+**Not verified / open**
+- Real pop-up-blocker behaviour of the item 4 Gmail window (TEST_MODE stubbed `window.open`); the fallback alert exists. Also the no-sales-email alert path was not exercised in the browser.
+- **Adjacent finding (not fixed, scope discipline)**: the "Recent activity" list at the bottom of the bell shows every activity line (e.g. "New request: PRE-0002 — Pre-Mockup request logged by admin") to every role including Design, so Design still sees non-CNC request numbers there. Needs a decision whether to filter it.
+- Not committed, not pushed, not verified on prod.
