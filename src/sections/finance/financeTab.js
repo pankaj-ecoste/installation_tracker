@@ -4,6 +4,7 @@ import { syncProject } from '../../data/loadAllData.js';
 import { logActivity } from '../../lib/activityLog.js';
 import { FINANCE_FIELDS } from '../../lib/constants.js';
 import { canDo, fmt, needsFinanceReview, needsRABill, visibleProjects } from '../../lib/helpers.js';
+import { projectNeedsFinanceAction } from '../../lib/attentionKeys.js';
 import { financeRowToRow, rowToFinanceRow } from '../../lib/mappers.js';
 import { docLink, pickFilesOrWarn, uploadFilesWithNames } from '../../lib/uploads.js';
 import { updateBell } from '../alerts.js';
@@ -141,6 +142,9 @@ export function renderFinance(){
   if(!allVp.length){ el.innerHTML='<div class="empty">No projects visible.</div>'; return; }
   const vp=allVp.filter(p=>!sch||(p.name||'').toLowerCase().includes(sch)||(p.tower||'').toLowerCase().includes(sch));
   if(!vp.length){ el.innerHTML='<div class="empty">No projects match your search.</div>'; return; }
+  // v2-48: projects needing Finance action (RA bill to generate / JMR to review) float to the top —
+  // stable sort, so the existing order holds inside each group. Display-only.
+  vp.sort((a,b)=>(projectNeedsFinanceAction(a)?0:1)-(projectNeedsFinanceAction(b)?0:1));
   const cols=[['product','Product'],['contractor','Contractor'],['woQty','WO qty'],['contractValue','Contract value'],['paymentGiven','Released to vendor'],['raBillStatus','RA bill status'],['raBillBalance','RA balance'],['workStatus','Status']];
   el.innerHTML=vp.map(p=>{
     const rows=state.financeLedger.filter(f=>f.projId===p.id);

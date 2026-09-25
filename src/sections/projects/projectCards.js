@@ -2,6 +2,7 @@ import { state } from '../../lib/state.js';
 import { syncProject } from '../../data/loadAllData.js';
 import { CHECKLIST_DEFS, TODAY, checklistDoneItems, checklistTotalItems } from '../../lib/constants.js';
 import { canDo, fillCls, fmt, fmtDate, needsRABill, pct, statusBadge, visibleProjects } from '../../lib/helpers.js';
+import { projectHasOpenSnag } from '../../lib/attentionKeys.js';
 import { docLink, pickFilesOrWarn, uploadFilesWithNames } from '../../lib/uploads.js';
 import { updateBell } from '../alerts.js';
 import { renderDPR } from '../dpr/dprTab.js';
@@ -33,6 +34,9 @@ export function renderProjects(){
     if(!byProject[p.name]){ byProject[p.name]=[]; order.push(p.name); }
     byProject[p.name].push(p);
   });
+  // v2-48: projects with an open snag float to the top (a project group counts if any of its towers
+  // has one). Stable sort of the groups only — the order of towers inside a group is untouched.
+  order.sort((a,b)=>(byProject[a].some(projectHasOpenSnag)?0:1)-(byProject[b].some(projectHasOpenSnag)?0:1));
   grid.innerHTML=banner+order.map(projName=>{
     const towers=byProject[projName];
     const dev=towers[0].developer;

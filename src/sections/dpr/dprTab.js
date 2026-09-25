@@ -4,6 +4,7 @@ import { syncProject } from '../../data/loadAllData.js';
 import { logActivity } from '../../lib/activityLog.js';
 import { CHECKLIST_DEFS, blankChecklistData, checklistDoneItems, checklistTotalItems, getAdminEmail, isChecklistActive, notifyByGmail } from '../../lib/constants.js';
 import { daysDiff, fmt, fmtDate, visibleProjects } from '../../lib/helpers.js';
+import { projectHasChecklistAwaitingReview } from '../../lib/attentionKeys.js';
 import { dprToRow, lotToRow, rowToDpr } from '../../lib/mappers.js';
 import { pickFilesOrWarn, uploadFiles, uploadFilesWithNames } from '../../lib/uploads.js';
 import { updateBell } from '../alerts.js';
@@ -78,7 +79,9 @@ export function renderDPR(){
     const total=entries.reduce((s,d)=>s+(d.products||[]).reduce((s2,r)=>s2+(r.todayInstalled||0),0),0);
     avgPerDayByProj[p.id]=Math.round(total/entries.length);
   });
-  const checklistSectionsHtml=vp.filter(p=>CHECKLIST_DEFS.some(def=>p[def.dataField])).map(p=>
+  // v2-48: projects with a checklist completed and awaiting review float to the top of the checklist
+  // cards (stable sort — order is otherwise unchanged).
+  const checklistSectionsHtml=vp.filter(p=>CHECKLIST_DEFS.some(def=>p[def.dataField])).sort((a,b)=>(projectHasChecklistAwaitingReview(a)?0:1)-(projectHasChecklistAwaitingReview(b)?0:1)).map(p=>
     '<div class="proj-card" id="dpr-checklist-'+p.id+'" style="cursor:default;margin-bottom:10px"><div class="proj-name" style="margin-bottom:4px">'+p.name+' — '+p.tower+'</div>'+renderAllChecklistDropdowns(p)+'</div>'
   ).join('');
   el.innerHTML=checklistSectionsHtml+visible.map(d=>{

@@ -3,12 +3,16 @@ import { db } from '../../lib/supabaseClient.js';
 import { logActivity } from '../../lib/activityLog.js';
 import { TEST_MODE } from '../../lib/config.js';
 import { VENDOR_KYC_DOCS, notifyByGmail } from '../../lib/constants.js';
+import { countUnseen } from '../../lib/seenItems.js';
+import { vendorAttentionKeys } from '../../lib/attentionKeys.js';
 
 /* ══ NEW VENDORS (admin review tab) ══ */
 export function updateNewVendorBadge(){
   const badge=document.getElementById('newvendor-count');
   if(!badge) return;
-  const count=state.vendorProfiles.filter(v=>!(v.reviewed_by_admin&&v.approved_by_shashank)).length;
+  // v2-48: only vendor forms this user hasn't seen at their current stage — opening the New Vendors
+  // tab marks them seen (setTab in navigation.js); a form moving to the next stage counts as new again.
+  const count=state.currentUser?countUnseen('vendors',state.currentUser.username,vendorAttentionKeys()):vendorAttentionKeys().length;
   if(count>0){ badge.classList.remove('hidden'); badge.textContent=count; }
   else badge.classList.add('hidden');
 }

@@ -1,7 +1,7 @@
 import { state } from '../lib/state.js';
 import { getSeenLotIds } from '../lib/seenLots.js';
 import { countUnseen } from '../lib/seenItems.js';
-import { requestAttentionKeys } from '../lib/attentionKeys.js';
+import { dprAttentionKeys, financeAttentionKeys, requestAttentionKeys, snagAttentionKeys } from '../lib/attentionKeys.js';
 import { supervisorWhatsApp } from '../lib/whatsapp.js';
 import { syncProject } from '../data/loadAllData.js';
 import { CHECKLIST_DEFS, TODAY, reqTypeLabel } from '../lib/constants.js';
@@ -93,13 +93,12 @@ export function setBadge(id,count){
 export function updateTabBadges(){
   if(!state.currentUser) return;
   const vp=visibleProjects();
-  const openSnagCount=vp.reduce((a,p)=>a+(p.snags||[]).filter(s=>s.status!=='resolved').length,0);
-  setBadge('projects-count', openSnagCount);
-
-  const todayStr=new Date().toISOString().slice(0,10);
-  const dprToday=state.dprLog.filter(d=>d.date===todayStr&&vp.some(p=>p.id===d.projId)).length;
-  const checklistsAwaitingReview=vp.reduce((a,p)=>a+CHECKLIST_DEFS.filter(def=>p[def.completedField]&&!p[def.reviewedField]).length,0);
-  setBadge('dpr-count', dprToday+checklistsAwaitingReview);
+  // v2-48: All Projects (open snags), DPR Log (today's DPRs + checklists awaiting review) and Finance
+  // (RA bill / JMR review) count only what this user hasn't seen yet — opening the tab marks them
+  // seen (setTab in navigation.js). The rules for WHAT counts are unchanged (attentionKeys.js).
+  const me=state.currentUser.username;
+  setBadge('projects-count', countUnseen('projects',me,snagAttentionKeys()));
+  setBadge('dpr-count', countUnseen('dpr',me,dprAttentionKeys()));
 
   // Only lots this user hasn't looked at yet — opening the Material tab marks them seen
   // (renderMaterial), so the badge clears and returns only when a new lot is dispatched.
@@ -107,9 +106,7 @@ export function updateTabBadges(){
   const unseenLots=state.materialLots.filter(l=>!l.actualArrival&&!seenLotIds.has(l.id)&&vp.some(p=>p.id===l.projId)).length;
   setBadge('material-count', unseenLots);
 
-  const raBillPending=vp.filter(p=>needsRABill(p)).length;
-  const financeReviewPending=vp.filter(p=>needsFinanceReview(p)).length;
-  setBadge('finance-count', raBillPending+financeReviewPending);
+  setBadge('finance-count', countUnseen('finance',me,financeAttentionKeys()));
 }
 // Highlights the Requests nav tab in red: new unacknowledged requests for Admin/Manager,
 // or newly-assigned requests awaiting a visit/survey report for Supervisor.

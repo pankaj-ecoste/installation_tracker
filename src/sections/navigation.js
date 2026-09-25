@@ -1,6 +1,8 @@
 import { state } from '../lib/state.js';
 import { showTeamDashboard } from '../auth/teamAuth.js';
 import { canDo } from '../lib/helpers.js';
+import { markKeysSeen } from '../lib/seenItems.js';
+import { TAB_ATTENTION } from '../lib/attentionKeys.js';
 import { buildNotifHTML, updateBell } from './alerts.js';
 import { renderClientPortal } from './clientPortal/clientPortal.js';
 import { renderDashboard } from './dashboard/dashboardTab.js';
@@ -11,7 +13,7 @@ import { renderMaterial } from './material/materialTab.js';
 import { renderReports } from './reports/reportsTab.js';
 import { renderRequests } from './requests/requestsTab.js';
 import { renderTeamMgmt } from './team/teamMgmtTab.js';
-import { renderNewVendors } from './vendors/newVendorsTab.js';
+import { renderNewVendors, updateNewVendorBadge } from './vendors/newVendorsTab.js';
 
 /* ══ SECTION MANAGEMENT ══ */
 export function showSection(name){
@@ -89,5 +91,15 @@ export function setTab(t){
   if(t==='dashboard') renderDashboard();
   if(t==='newvendors') renderNewVendors();
   if(t==='reports'){ state.activeReport=null; renderReports(); }
+  // v2-48: opening All Projects / DPR Log / Finance / New Vendors marks everything currently counted
+  // on that tab's badge as seen, so the number clears (a new item, or one whose state changed, brings
+  // it back). Done here — an explicit tab click or link — and NOT in the render functions, because
+  // login lands on All Projects without anyone "opening" it. (Requests marks itself in renderRequests.)
+  const attention=TAB_ATTENTION[t];
+  if(attention&&state.currentUser){
+    markKeysSeen(attention[0],state.currentUser.username,attention[1]());
+    updateBell();
+    updateNewVendorBadge(); // the New Vendors badge has its own updater (not part of updateBell)
+  }
 }
 

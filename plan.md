@@ -3461,4 +3461,27 @@ active marks the counted lots seen via `markLotsSeen` (`src/lib/seenLots.js`, lo
 
 **Files (expected)**: new `src/lib/seenItems.js`; `src/sections/alerts.js` (badge counts); the render function of each tab
 (`requestsTab.js`, `financeTab.js`, `newVendorsTab.js`, `dprTab.js`, `projectCards.js`).
-**Status**: locked, not built.
+**Status**: BUILT + verified in TEST_MODE (2026-09-25), committed and pushed; prod verification pending.
+
+**Build notes (2026-09-25)**
+- New: `src/lib/seenItems.js` (generic per-user, per-browser seen store), `src/lib/attentionKeys.js` (per-tab "needs attention" keys, one source for badge + mark-seen + sort).
+  Changed: `alerts.js` (badge counts), `navigation.js` (`setTab` marks the opened tab seen), `newVendorsTab.js` (badge), and the sorts in `requestsTab.js`, `financeTab.js`, `dprTab.js`, `projectCards.js`.
+- **Where "seen" is marked**: Requests in `renderRequests` (as first built); All Projects / DPR Log / Finance / New Vendors inside `setTab`, i.e. on an explicit tab click or link.
+  NOT in the render functions for those four, because login lands on All Projects without anyone "opening" it — marking in `renderProjects` would have cleared that badge at login.
+  So on All Projects the number shows after login and clears when the user clicks the tab.
+- **Sort by tab**: Requests — New/Visit Done (Supervisor: Acknowledged) first; Finance — projects with RA bill/JMR action first; DPR Log — checklist cards with a checklist awaiting
+  review first; All Projects — project groups containing an open snag first (towers inside a group keep their order); New Vendors — no change needed (already sectioned Pending / Awaiting / Approved).
+- The New Vendors badge has its own updater (`updateNewVendorBadge`), not part of `updateBell`; `setTab` calls both.
+
+**Verification (TEST_MODE, real browser; items injected into app state where the mock data had none)**
+- Requests: 2 new -> badge 2 -> open -> 0; status change New -> Visit Done while away -> badge 1 -> reopen -> 0; a Reviewed request sinks below New ones.
+- Finance: 3 at login -> open -> 0, other badges untouched; a project not needing action sinks.
+- All Projects: 2 snags -> 2 -> click -> 0; a new snag -> 1 -> click -> 0; the group with the open snag moves to the top.
+- DPR Log: checklist awaiting review -> 1 -> open -> 0. New Vendors: 2 -> open -> 0; a form moving pending -> awaiting -> 1 -> open -> 0.
+- Per-user keys in localStorage (`ecoste_seen_<module>_<username>`); no console errors seen.
+
+**Known / adjacent (NOT changed, scope discipline)**
+- **DPR badge "today's DPRs" part never counts**: it compares `d.date` (saved as text like "21 Aug 2026") to an ISO date, so it has always been 0; only the checklist part ever counted. Kept exactly as-is.
+- A request the user creates while on Requests shows as unseen until they open the tab again (closing the panel returns to the default tab) — same as a request that arrived elsewhere.
+- Clearing a badge is not "done": the bell count stays the persistent reminder (untouched).
+- Per browser only: another device shows the badge again (upgrade path: a per-user seen table in the DB).
