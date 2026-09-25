@@ -3538,3 +3538,11 @@ stored project (`existing?.raBillQty||0`, `existing?.actualDate||''`) instead of
 The old "clears actual date when moved out of Completed" behaviour is dropped in favour of "data stays the same" (edge case noted: a project moved out of Completed keeps its old actual date until changed in Update Progress).
 New projects keep `0` / `''` as before.
 **Files**: `src/sections/projects/addEditProject.js` only. **Status**: built + verified in TEST_MODE 2026-09-25 (project with raBillQty 1234, actualDate 2026-09-20, RA bill amt, JMR, installed qty: after Edit Project → change city → Save every one unchanged, city updated); committed and pushed; prod re-check pending. Existing wiped data (48 Completed projects, 2 with an actual date) is NOT restored by this — nothing is known to restore it from.
+
+**v2-49 data restore — APPLIED to production 2026-09-25 (user confirmed after seeing the full list)**
+- One transaction, one-off script (`DATABASE_URL`, not the app). Rows locked and every planned entry re-checked (index, text, current date) before writing; a mismatch would have aborted with nothing written.
+- **28 constraint raised dates restored**: Omaxe 8, Pioneer Shaft 15, Platinum 5. ONLY `date` changed; status, solvedDate, nextAction and text untouched.
+- Before the write, the three projects' constraints were saved to a backup file (scratchpad `constraints_backup_before_restore.json`, session-temporary — not in the repo).
+- Verified against the backup: 46 constraints on the 3 projects compared, 28 dates as planned, 0 other-field changes, 0 unplanned date changes; a fresh dry run now finds 0 left to restore. Pioneer Shaft re-read from the DB shows 24 Aug … 22 Sept as expected.
+- **Left as they were (by decision)**: 2 really dated 23 Sept (Vibgyor, Pioneer "No manpower"); 10 Omaxe "Material shortage…" repeats (11 constraints vs 12 DPRs, pairing would be a guess); 10 added by hand with no DPR (AMPL 1, ITD CEM 1, Kumar Live Space 2, PCPL 2, Platinum 4) — original dates unknown; 9 others dated 15/16/17/22/25 Sept that differ from their DPR by days (can be late-filed DPRs).
+- Not restorable: RA bill qty / actual completion date wiped by earlier Edit Project saves (no record of the old values) — re-enter via Update Progress.
