@@ -3699,3 +3699,20 @@ Re-confirmed the exact rows first (id 52 PRE-0031, id 53 PRE-0032 — both `requ
 `linked_project_id` null), backed up their full rows to a session-temporary file, then deleted inside a transaction with a rowcount check
 (would have rolled back if anything other than exactly 2 rows matched). Deleted, committed. Production now has 0 CNC requests — the
 dashboard will show all zeros until a real CNC request is raised. Nothing else in the database was touched.
+
+### v2-52: Weekly projection/actual qty in DPR (2026-09-28) — flow locked, build starting
+Team ask: 3 new numbers on the DPR.
+1. **Weekly Committed Qty** — auto sum of `Today projection qty` (already collected per-day) across Mon–Sat for that project's week.
+2. **Weekly Actual Qty** — auto sum of `Today's installed qty` (already collected per-day, per-product) across Mon–Sat for that project's week.
+3. **Next Week Projection Qty** — new, free-text/numeric, manually entered by staff.
+
+Locked decisions (asked the user, all 3 answered with the recommended option):
+- Shown on **every daily DPR card** (not a separate weekly-summary section) — 1 & 2 are computed live from existing `dpr_log` history, no new UI section.
+- Next Week Projection Qty stored as a **new nullable column on `dpr_log`** (`next_week_projection_qty`), same pattern as `today_projection_qty` (migration 0017) — not a new table. It's saved with whichever day's entry the staff fills it on; that becomes the week's number.
+- Editable on **any day, any DPR entry** — optional, not mandatory (unlike `today_projection_qty`).
+
+Week = Monday–Saturday, computed from the DPR entry's own `date` using local date parts (never `toISOString()` — see the DPR date/timezone gotcha above; `dpr_log.date` is free text like "21 Aug 2026").
+
+Files: `supabase/migrations/0023_dpr_next_week_projection_qty.sql` (new column), `src/lib/mappers.js` (dprToRow/rowToDpr mapping), `src/sections/dpr/dprTab.js` (week-range helper, weekly sums in `renderDPR()`, new form field + save/restore in `openEditDPR()`/`saveDPR()`).
+
+**v2-52 progress (2026-09-28)**: migration 0023 applied to production (`node scripts/apply-migrations.mjs`, additive nullable column only). Code built successfully (`npm run build`). Browser-verified against production data (logged in as admin/support): real DPR cards show "Weekly Committed Qty (Mon–Sat): X sq ft · Weekly Actual Qty: Y sq ft" correctly (e.g. Pioneer — Shaft showed 100/0 matching its single day-28 entry), and the Add DPR form shows the new optional "Next Week Projection Qty (Sq Ft)" field next to the mandatory "Today Projection Qty" — closed via Cancel without submitting, so no test row was written. Not yet committed/pushed.

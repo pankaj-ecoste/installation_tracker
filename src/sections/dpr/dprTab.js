@@ -70,6 +70,22 @@ export function renderDPR(){
   });
   const el=document.getElementById('dpr-list');
   if(!visible.length){ el.innerHTML='<div class="empty">'+(dateFilter||search?'No DPRs found matching your search/filter.':'No DPRs found for your projects.')+'</div>'; return; }
+  // v2-52: Weekly Committed Qty / Weekly Actual Qty — pure sums of figures already collected
+  // per day (today_projection_qty, and each product's todayInstalled), grouped into Mon-Sat
+  // weeks. Cached per "projId|weekStart" key so each project/week's history is only summed once
+  // even though every DPR card in that week calls this.
+  const weeklySumsByKey={};
+  function weeklySumsFor(projId,dateLike){
+    const range=dprWeekRange(dateLike); if(!range) return null;
+    const key=projId+'|'+range.start;
+    if(!weeklySumsByKey[key]){
+      const entries=state.dprLog.filter(e=>e.projId===projId&&isInWeekRange(e.date,range));
+      const committed=entries.reduce((s,e)=>s+(e.todayProjectionQty||0),0);
+      const actual=entries.reduce((s,e)=>s+(e.products||[]).reduce((s2,r)=>s2+(r.todayInstalled||0),0),0);
+      weeklySumsByKey[key]={committed,actual};
+    }
+    return weeklySumsByKey[key];
+  }
   // Average working per day, per project — computed from all DPR history for that project,
   // used to flag any day that comes in significantly below (or above) the norm.
   const avgPerDayByProj={};
@@ -98,6 +114,7 @@ export function renderDPR(){
     // Flag if today's work is less than 60% of the project's own average — a genuine dip,
     // not just normal day-to-day variation.
     const isBelowAvg=avgPerDay>0&&totalToday<avgPerDay*0.6;
+    const weekly=weeklySumsFor(d.projId,d.date);
     const productRows=d.products&&d.products.length?d.products.map(r=>`
       <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr 1.5fr;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid #f0f0f0;font-size:12px">
         <div style="font-weight:500">${r.product||'—'}</div>
@@ -138,6 +155,8 @@ export function renderDPR(){
       ${d.remarks?`<div style="font-size:12px;margin-bottom:4px"><span style="color:#666;font-weight:500">Remarks: </span>${d.remarks}</div>`:''}
       ${d.next&&d.next!=='—'?`<div style="font-size:12px;margin-bottom:4px"><span style="color:#666;font-weight:500">Next day plan: </span>${d.next}</div>`:''}
       ${d.todayProjectionQty!=null?`<div style="font-size:12px;margin-bottom:4px"><span style="color:#666;font-weight:500">Today's projection: </span>${fmt(d.todayProjectionQty)} sq ft</div>`:''}
+      ${weekly?`<div style="font-size:12px;margin-bottom:4px"><span style="color:#666;font-weight:500">Weekly Committed Qty (Mon–Sat): </span>${fmt(weekly.committed)} sq ft &nbsp;·&nbsp; <span style="color:#666;font-weight:500">Weekly Actual Qty: </span>${fmt(weekly.actual)} sq ft</div>`:''}
+      ${d.nextWeekProjectionQty!=null?`<div style="font-size:12px;margin-bottom:4px"><span style="color:#666;font-weight:500">Next week projection: </span>${fmt(d.nextWeekProjectionQty)} sq ft</div>`:''}
       ${d.photoUrls&&d.photoUrls.length?`<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">${d.photoUrls.map(u=>`<img src="${u}" style="width:48px;height:48px;object-fit:cover;border-radius:4px;border:1px solid #e0e0e0">`).join('')}</div>`:''}
       ${d.reportPdfUrl?`<div style="margin-top:6px"><a href="${d.reportPdfUrl}" target="_blank" style="font-size:12px;color:#1D9E75">📄 Daily report PDF</a></div>`:''}
       <!-- Internal (only visible to team) -->
@@ -182,6 +201,7 @@ export function openEditDPR(id){
     document.getElementById('dpr-committed-mp').value=d.committedMp||0;
     document.getElementById('dpr-manpower').value=d.actualMp||d.manpower||0;
     document.getElementById('dpr-today-projection').value=d.todayProjectionQty!=null?d.todayProjectionQty:'';
+    document.getElementById('dpr-next-week-projection').value=d.nextWeekProjectionQty!=null?d.nextWeekProjectionQty:'';
     document.getElementById('dpr-action').value=d.actionTaken||'';
     document.getElementById('dpr-remarks').value=d.remarks||'';
     document.getElementById('dpr-internal-hindrance').value=d.internalHindrance||'';
@@ -254,6 +274,7 @@ export function renderDPRForm(selectedProjId){
       '</div>'+
       '<div class="form-row" style="margin-top:10px">'+
         '<div class="form-group"><label class="form-label">Today projection qty (sq ft) *</label><input class="form-input" type="number" id="dpr-today-projection" min="0" placeholder="e.g. 500"></div>'+
+        '<div class="form-group"><label class="form-label">Next week projection qty (sq ft)</label><input class="form-input" type="number" id="dpr-next-week-projection" min="0" placeholder="Optional — e.g. 3000"></div>'+
       '</div>'+
       '<div class="form-row" style="margin-top:10px">'+
         '<div class="form-group"><label class="form-label">Photos (up to 10 files)</label><input type="file" id="dpr-photos" multiple accept="image/*" style="font-size:12px"><div id="dpr-photos-list" style="font-size:11px;color:#1D9E75;margin-top:4px"></div></div>'+
@@ -393,6 +414,24 @@ export function renderDPRForm(selectedProjId){
 function toLocalISODate(dateLike){
   const d=new Date(dateLike); if(isNaN(d)) return null;
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+// v2-52: the Monday-Saturday week (as local "YYYY-MM-DD" start/end strings) that a given DPR
+// date falls into — used to group daily entries into weeks for Weekly Committed/Actual Qty.
+// Built off local date parts (via toLocalISODate), same reasoning as that function: never derive
+// this from toISOString(), which would shift the date in IST. A Sunday date rolls forward into
+// the week that just ended (days since Monday = 6) rather than starting a new one, since Sunday
+// isn't a working day this project tracks DPRs for.
+function dprWeekRange(dateLike){
+  const d=new Date(dateLike); if(isNaN(d)) return null;
+  const day=d.getDay();
+  const diffToMonday=day===0?-6:1-day;
+  const monday=new Date(d.getFullYear(),d.getMonth(),d.getDate()+diffToMonday);
+  const saturday=new Date(monday.getFullYear(),monday.getMonth(),monday.getDate()+5);
+  return {start:toLocalISODate(monday), end:toLocalISODate(saturday)};
+}
+function isInWeekRange(dateLike,range){
+  const local=toLocalISODate(dateLike);
+  return !!local&&local>=range.start&&local<=range.end;
 }
 // "Today is Day No" and "Days Left" — computed from Installation Commencement Date (falling back
 // to Start Date when that's not set — most projects never get it filled in, see plan.md v2-26) and
@@ -536,6 +575,7 @@ export async function saveDPR(){
     return;
   }
   const dprTodayProjectionRaw=document.getElementById('dpr-today-projection').value;
+  const dprNextWeekProjectionRaw=document.getElementById('dpr-next-week-projection').value;
   if(dprTodayProjectionRaw===''){
     if(err){ err.classList.remove('hidden'); document.getElementById('dpr-err-msg').textContent='Please enter Today Projection Qty (sq ft) before saving this DPR.'; err.scrollIntoView({behavior:'smooth',block:'center'}); }
     return;
@@ -582,6 +622,7 @@ export async function saveDPR(){
     actualMp:parseInt(document.getElementById('dpr-manpower').value)||0,
     manpower:parseInt(document.getElementById('dpr-manpower').value)||0,
     todayProjectionQty:parseInt(dprTodayProjectionRaw)||0,
+    nextWeekProjectionQty:dprNextWeekProjectionRaw===''?null:(parseInt(dprNextWeekProjectionRaw)||0),
     photos:state.dprPhotoUrls.length,
     photoUrls:state.dprPhotoUrls,
     reportPdfUrl:state.dprReportPdfUrl,
