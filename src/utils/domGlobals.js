@@ -26,6 +26,7 @@ import { renderTeamMgmt, togglePerm, openAddMember, openEditMember, updateRolePr
 import { renderVendorPortal } from '../sections/vendorPortal/vendorPortal.js';
 import { renderReports, openReport, closeReport } from '../sections/reports/reportsTab.js';
 import { sodEodFormChanged, sodEodSlotChanged, saveSodEodEntry, toggleSodEodDay, sodEodSearchChanged } from '../sections/reports/sodEodReport.js';
+import { cncFilterChanged, openCncListPopup, openCncRunDaysPopup, openCncOrderDetail, closeCncTopPopup, cncRunDaysTabChanged, cncListSearchChanged, cncListSortChanged, exportCncListCSV } from '../sections/reports/cncDashboardTab.js';
 import { updateNewVendorBadge, renderNewVendors, markVendorReviewed, markVendorApprovedByShashank } from '../sections/vendors/newVendorsTab.js';
 import { openVendorEdit, saveVendorEdit, closeVendorEdit } from '../sections/vendors/vendorEdit.js';
 
@@ -266,6 +267,15 @@ export function installDomGlobals(){
     renderReports,
     openReport,
     closeReport,
+    cncFilterChanged,
+    openCncListPopup,
+    openCncRunDaysPopup,
+    openCncOrderDetail,
+    closeCncTopPopup,
+    cncRunDaysTabChanged,
+    cncListSearchChanged,
+    cncListSortChanged,
+    exportCncListCSV,
     sodEodFormChanged,
     saveSodEodEntry,
     sodEodSlotChanged,

@@ -3565,3 +3565,117 @@ Separately: the upload to storage happens on file pick but the file only joins t
 **Status**: built + verified in TEST_MODE 2026-09-25 (an old plain-URL entry shows its file name without the timestamp; a new upload shows "1 file(s) uploaded — click Save Changes to attach it", is NOT in the project until Save; after Save + reopen both are listed; a name with < > & is escaped; the Finance tab lists them); committed and pushed; prod re-check pending. The 5 orphaned files are NOT linked (see notes).
 
 **Orphaned JMR files (read-only look, nothing linked)**: 5 files in `jmr-reports/` belong to no project. Only weak clues: the two 10 Sept 14:39 IST WhatsApp images sit within minutes of a "JMR updated — YTT life and Joy — Additional" event (possible match, not certain); the 22 Sept `jmr.jpeg` coincides with several "Project completed" events (no clear project); the 24 Sept image and today's 18:47 test PDF have no nearby activity. Not linked automatically — a wrong link would attach a document to the wrong project.
+
+### v2-51: CNC Order Tracking Dashboard (2026-09-28) — flow locked, build starting
+
+**Requested by**: management, via a build spec doc + a clickable reference design (Claude-artifact export). Shows the MD where every CNC order is
+stuck across the 7 FMS stages and how long each runs on the CNC machine (stages 5-6). Every card/button/bar/row opens a popup; every popup row
+opens the order detail popup.
+
+**Investigated before building**:
+- The 7 stages already exist verbatim as `CNC_STAGES` (`src/lib/constants.js:383`), and every CNC request already carries a `details.cncStages`
+  array of `{key,label,planned,actual}` — the stage-timeline data needs no schema change.
+- Every "Request details" and "Files" field in the spec matches `CNC_FIELDS` / the CNC upload groups exactly (checked against the LIVE New CNC
+  Request form, not just source, after the user pushed back — see below).
+- **Spec/reality gap found and resolved**: the spec's "Visit report" field group (Visit Remarks, Measurement Area, Installation Type, Section Size,
+  Framing Material, Grill Size & Thickness, Quantity, Rough Drawing Notes, Site Readiness, Potential Risk, Geo location, Visit Photos) is
+  `VISIT_FIELDS`, used only by Pre-Mockup/Pre-Main-Survey requests — CNC has never collected it (deliberate, v2-29: "CNC has no site-visit step").
+  Confirmed by opening the real running New CNC Request form in TEST_MODE and reading every field on it: exactly the 8 `CNC_FIELDS` + 2 upload
+  boxes, nothing else. In the reference design's own order-detail popup, every Visit report field showed an empty bracket placeholder
+  (`[Visit outcome]`, `[Area]`, …) — the reference author reused a generic template without CNC data to fill it. **Decision: the Visit report
+  section is dropped from CNC's order detail popup** (nothing to show).
+- Production has exactly 2 CNC requests today (PRE-0031, PRE-0032) and both are the test entries the spec says to exclude (client "abc", developer
+  "tyu- test "/"Test Developer", sales team "support", created_by "admin") — so the dashboard shows 0 real orders until real CNC requests exist.
+  The 5/3-hand-checked-order acceptance criteria will be verified against crafted TEST_MODE data first, re-checked once real orders exist.
+- "Email sales team" button in the order detail popup reuses `emailSalesPreviewUpdated` (v2-47 item 4), unchanged.
+- The app already has a "Reports" tab (admin-only, holds the v2-42 SOD/EOD tracker) with a list-of-reports -> open-one pattern
+  (`state.activeReport`, `openReport`/`closeReport`, `src/sections/reports/reportsTab.js`) — this dashboard is added as a second report there.
+- Export precedent: `exportProjectsCSV`/`exportRequestsCSV` (`requestsTab.js`) trigger a CSV Blob download — "Export to Excel" reuses that pattern
+  (CSV opens in Excel), not a real .xlsx library.
+
+**Decisions (user)**
+1. Lives inside the existing **Reports tab**, as a second report alongside SOD/EOD.
+2. **Admin only** (same gating as SOD/EOD today).
+3. **Dummy data**: delete the two test CNC requests (PRE-0031, PRE-0032) — not an `is_test` flag. NOT deleted yet; will be done as its own
+   production-write step with a fresh confirm right before it happens, not folded into a code commit.
+4. **Visit report section dropped** from the order detail popup (see gap above).
+
+**Build order (incremental, verified in TEST_MODE at each step before moving on — this is one cohesive dashboard, not independent items)**:
+1. Calculation layer (`src/lib/cncDashboard.js`) — current stage, gap, overdue/stuck, days stuck, due soon, missing-stage-date, CNC run days
+   (planned/actual/running-so-far/expected-finish/variance/overrunning), machine days in queue, delay-per-stage — pure functions over
+   `state.requests`, checked against hand-built cases before any UI.
+2. Report shell + filter bar + KPI cards (6), wired to the calc layer.
+3. Stage pipeline (7 buttons) + CNC machine group (stages 5-6, dark/orange) + CNC run days button.
+4. Stuck orders table + delay bar chart + missing stage dates list.
+5. Popups: order detail first (reuses the existing stage-timeline table style), then list popup (+ search/sort/Export to Excel), then CNC run
+   days popup (3 tabs: Running now / Completed runs / Waiting queue).
+6. Test-data exclusion wired in throughout (excluded from every count/list/chart even before the two rows are deleted).
+7. Mobile check (pipeline scrolls sideways, tables scroll inside their card) last, per the acceptance list.
+
+**Files (expected)**: new `src/lib/cncDashboard.js`, `src/sections/reports/cncDashboardTab.js`; changed `src/sections/reports/reportsTab.js`
+(second report entry), `src/utils/domGlobals.js` (new exports), `index.html` (report container) if needed.
+**Status**: locked, build starting.
+
+**v2-51 progress — step 1 (calculation layer) DONE (2026-09-28)**
+`src/lib/cncDashboard.js` — pure functions for every rule in the spec's Calculation Rules section (current stage, gap, overdue,
+late by, days stuck, due soon, missing stage dates, CNC run days planned/actual/running-so-far/expected-finish/variance/overrunning,
+machine days in queue, delay-per-stage, filters, KPI aggregation). Verified in TEST_MODE (VITE_TODAY_OVERRIDE=2026-09-28) against
+5 hand-built orders covering every rule (on-time/early/late gaps, overdue, due-soon, a missing-stage-date data error, running-on-CNC,
+waiting-for-CNC, fully-dispatched, run-day math, delay-chart averaging, all 6 filter fields) — 42/42 assertions passed. Not yet wired
+to any UI. Committed, not yet pushed (holding until the report shell exists so this doesn't sit as dead code on main for long).
+
+**v2-51 progress — steps 2-5 (report shell, filters, KPI cards, stage pipeline, CNC machine group, CNC run
+days button, stuck table, delay chart, missing-dates list, all 3 popup types) DONE (2026-09-28)**
+
+**Files**: `src/lib/cncDashboard.js` (calc layer, from step 1), `src/sections/reports/cncDashboardTab.js` (new,
+~350 lines — everything else), `src/sections/reports/reportsTab.js` (registered as a 2nd report),
+`src/utils/domGlobals.js` (9 new window exports), `src/lib/state.js` (`cncFilters`/`cncPopupStack`/
+`cncListSearch`/`cncListSort`/`cncRunDaysTab`), `src/styles/app.css` (mobile rules added to the existing
+`@media (max-width:640px)` block — `.cnc-kpi-row`, `.cnc-pipeline`, `#cnc-lower-grid`).
+
+**New pattern introduced**: a small stacking modal/overlay (backdrop + Esc-to-close-topmost + click-outside-
+to-close-topmost), local to `cncDashboardTab.js`. The rest of the app has no such component — every existing
+"panel" is a full-page section swap with no backdrop — but the spec explicitly requires popups layered on top
+of the dashboard and of each other ("order detail opens on top of the list popup"), which the panel system
+can't do. Kept scoped to this file rather than touched anywhere shared.
+
+**Scope decisions made while building** (not separately re-confirmed, noted here for the record):
+- Date range filter = 4 presets (This month / Last 7 days / Last 30 days / All time), not a full custom
+  range picker — matches the reference design's own default ("This month") and the spec's minimal description.
+- "Date range... every number/chart/list follows the filters" read literally — the Dispatched KPI's "in
+  selected period" is just the filtered set, not a special second filter on top.
+- Filter values (sales team/client/developer options) are derived from the CNC requests themselves, not a
+  separate lookup.
+- "Delay per stage" averages completed-orders' gaps AND currently-stuck-here orders' late-by together into
+  one pool per stage (the spec's "average of X ... plus Y" read as one combined average, not two numbers
+  added together).
+
+**Verified in TEST_MODE** (VITE_TODAY_OVERRIDE=2026-09-28), real browser, isolated small steps after an
+earlier flaky/overlapping test batch gave one false-looking reading (traced to test-harness timing, not
+app code — a clean single-click re-test confirmed the wiring is correct):
+- Report appears in the Reports list (admin), opens via `openReport('cnc-dashboard')`.
+- 5-order fixture (same shapes as the calc layer's hand-checked cases) + a 6th non-CNC request: KPI numbers,
+  stage-pipeline counts, stuck table (sorted by days stuck, descending) and the missing-stage-dates list all
+  matched hand-calculated values exactly, under both "This month" (correctly excluded 2 August-created
+  orders) and "All time" filters.
+- Every KPI card, every stage-pipeline button (incl. both CNC-machine-group stages), the CNC run days button,
+  a stuck-table row, a delay-chart bar and a missing-dates row each open a popup, verified individually.
+- List popup: search filters rows, column-header sort toggles asc/desc, Export to Excel triggers a real CSV
+  Blob download, and a row opens the order detail popup ON TOP (stack depth 2, confirmed).
+- CNC run days popup: header totals present, all 3 tabs (Running now / Completed runs / Waiting queue)
+  switch and their row numbers matched hand calculations for a running order.
+- Order detail popup: CNC run days strip, stage timeline (rows 5 & 6 visibly highlighted, and ONLY those
+  two), Request details, Files (real file names via `namedDocLink`), and the reused Email sales team button
+  (present only when a Preview PDF exists) — every section confirmed present with real data.
+- Esc closes only the topmost popup; a backdrop click closes only the topmost popup; both leave the popup(s)
+  underneath intact and visible.
+- A non-CNC request never appears anywhere on the dashboard or in its counts.
+- A manager login (non-admin) cannot see the Reports tab at all — the CNC dashboard inherits Reports'
+  existing admin-only gate with no extra code.
+
+**Not verified**: the mobile CSS (added to the existing responsive block, same pattern as `.gantt-table`)
+was not visually screenshotted at a narrow width — the screenshot tool was unreliable for full-page captures
+throughout this session. Re-check on a phone or narrow browser window once live.
+
+**Still to do**: delete the 2 test CNC requests (PRE-0031, PRE-0032) — its own production-write step with a
+fresh confirm, not folded into this commit. Prod verification of the whole dashboard once deployed.

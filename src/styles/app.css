@@ -211,6 +211,14 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helv
   .ms-row{flex-wrap:wrap}
   .ms-label{flex-basis:100%!important}
   .ms-date{width:calc(50% - 24px)!important}
+  /* v2-51 CNC dashboard: KPI row wraps to 2-up, the stage pipeline scrolls sideways as a row of
+     fixed-width cards (same pattern as .gantt-table above) instead of squeezing 7 stages into a
+     phone width, and the stuck-table/delay-chart pair stacks instead of sitting side by side. */
+  .cnc-kpi-row{grid-template-columns:repeat(2,1fr)!important}
+  .cnc-pipeline{display:flex!important;overflow-x:auto;padding-bottom:4px}
+  .cnc-pipeline>div{flex:0 0 150px}
+  .cnc-pipeline>div:nth-child(5){flex-basis:280px}
+  #cnc-lower-grid{grid-template-columns:1fr!important}
 }
 @media (max-width: 400px) {
   .metrics{grid-template-columns:repeat(2,1fr)}

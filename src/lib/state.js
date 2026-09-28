@@ -80,5 +80,12 @@ export const state = {
   sodEodLog: [],
   sodEodOpenDays: {},
   sodEodFormDate: '',
-  sodEodSearch: ''
+  sodEodSearch: '',
+  // v2-51 CNC Order Tracking Dashboard (admin only, inside Reports) — filters apply to every
+  // number/chart/list on the report; popups stack (order detail can open on top of a list popup).
+  cncFilters: {salesTeam:'',datePreset:'this-month',client:'',developer:'',cncType:'',scope:''},
+  cncPopupStack: [],
+  cncListSearch: '',
+  cncListSort: {col:'',dir:'asc'},
+  cncRunDaysTab: 'running'
 };
