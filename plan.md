@@ -3679,3 +3679,17 @@ throughout this session. Re-check on a phone or narrow browser window once live.
 
 **Still to do**: delete the 2 test CNC requests (PRE-0031, PRE-0032) — its own production-write step with a
 fresh confirm, not folded into this commit. Prod verification of the whole dashboard once deployed.
+
+**v2-51 follow-up — mobile layout actually fixed and screenshot-verified (2026-09-28)**
+
+The earlier claim ("mobile CSS added, same pattern as .gantt-table, not visually verified") turned out to hide a real bug once actually looked at. Real device emulation (CDP viewport override, 390x844 — window resize alone did not shrink the actual page viewport in this environment, so an earlier attempt to check this silently measured nothing) showed the stage pipeline was badly broken: the dark "CNC machine" panel (stages 5+6+run-days button boxed together at ~150-280px width) needed far more height once squeezed that narrow — its captions wrapped onto several lines — and because a flex row is always as tall as its tallest item (even one scrolled off-screen), that inflated the WHOLE pipeline row to ~500px, leaving a large blank gap under the plain stage cards actually on screen. A CNC-run-days popup's 5-stat header row also cut its last stat off at this width.
+
+**Root cause and fix**:
+- `.cnc-machine-group{display:contents}` on mobile dissolves the dark panel's own box, so its stage 5/6 cards and the run-days button become ordinary items in the SAME horizontally-scrolling row as stages 1-4/7, each sized to its own natural content instead of a shared cramped box. Stage 5/6 got their own dark background (`#132e28`, moved off the vanishing panel's background so they stay legible once un-boxed) — new classes `cnc-machine-stage` / `cnc-rundays-wrap` / `cnc-machine-header` (hidden on mobile, nothing left to head once the panel is gone).
+- Popup headers (title + Export/Close) now wrap (`cnc-popup-head`) instead of squeezing onto one row.
+- The run-days popup's 5-stat row now uses 2 columns on mobile (`cnc-rundays-stats`) instead of 5.
+- Desktop is untouched — all of this is inside the existing `@media (max-width:640px)` block; the machine group keeps its 2-column boxed layout above that width.
+
+**Verified**: real CDP viewport emulation at 390x844 (`mcp__chrome-devtools__emulate`, not window resize — confirmed via `window.matchMedia('(max-width:640px)').matches`). Screenshotted: the full dashboard (KPI row 2-up, pipeline scrolling with natural per-card heights, no gap before Stuck orders), the pipeline scrolled to show stage 5/6/run-days-button/stage 7 all legible, a list popup (wrapped header, horizontally-scrolling table), the order detail popup (full content incl. the 2-column Request details/Files grid, stage-5/6 highlighting), and the CNC run days popup (2-column stats, tabs, scrolling table). Every popup opened correctly via a real click at this width too.
+
+Files: `src/sections/reports/cncDashboardTab.js` (3 new classes on existing elements, no structural HTML change), `src/styles/app.css` (mobile block only).

@@ -211,14 +211,33 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helv
   .ms-row{flex-wrap:wrap}
   .ms-label{flex-basis:100%!important}
   .ms-date{width:calc(50% - 24px)!important}
-  /* v2-51 CNC dashboard: KPI row wraps to 2-up, the stage pipeline scrolls sideways as a row of
-     fixed-width cards (same pattern as .gantt-table above) instead of squeezing 7 stages into a
-     phone width, and the stuck-table/delay-chart pair stacks instead of sitting side by side. */
+  /* v2-51 CNC dashboard: KPI row wraps to 2-up, and the stuck-table/delay-chart pair stacks instead
+     of sitting side by side. The stage pipeline scrolls sideways as ONE row of similarly-sized
+     cards (same pattern as .gantt-table above), instead of the desktop's dark "CNC machine" panel
+     that boxes stages 5+6+the run-days button together at a fixed narrow width — squeezed into a
+     phone-friendly width, that panel's captions wrapped onto several lines and inflated its own
+     height to ~500px, which (since a flex row is always as tall as its tallest item, even one
+     scrolled off-screen) left a large empty gap under the plain stage cards on screen. Fix:
+     display:contents dissolves the panel's own box on mobile, so its children — the header text,
+     stage 5, stage 6, and the run-days button — become ordinary items in the SAME scrolling row as
+     stages 1-4 and 7, each sized to its own natural content instead of forced to match a shared
+     tall box. Stage 5/6 keep their own dark card background directly (not the vanishing panel's)
+     so they still read as "the CNC machine" by colour once un-boxed; the header label is dropped
+     (nothing left to head, once the box is gone) and the run-days button gets a little more room
+     since its 3 stats no longer have to fit a narrow single column. */
   .cnc-kpi-row{grid-template-columns:repeat(2,1fr)!important}
   .cnc-pipeline{display:flex!important;overflow-x:auto;padding-bottom:4px}
   .cnc-pipeline>div{flex:0 0 150px}
-  .cnc-pipeline>div:nth-child(5){flex-basis:280px}
+  .cnc-machine-group{display:contents!important}
+  .cnc-machine-header{display:none!important}
+  .cnc-machine-stage{flex:0 0 150px}
+  .cnc-rundays-wrap{flex:0 0 220px}
   #cnc-lower-grid{grid-template-columns:1fr!important}
+  /* Popup headers (title + Export/Close buttons) wrap instead of squeezing onto one cramped row. */
+  .cnc-popup-head{flex-wrap:wrap;gap:8px}
+  /* The CNC run days popup's 5 header stats: 5 columns at phone width cut the last one off (it
+     needs room for "Machine days queued (140 sq ft)") — 2 columns instead. */
+  .cnc-rundays-stats{grid-template-columns:repeat(2,1fr)!important}
 }
 @media (max-width: 400px) {
   .metrics{grid-template-columns:repeat(2,1fr)}

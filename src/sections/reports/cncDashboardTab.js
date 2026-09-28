@@ -120,7 +120,7 @@ function stageBtn(idx,requests,extraStyle,caption){
   const here=requests.filter(r=>currentStageIdx(r)===idx);
   const overdueHere=here.filter(isOverdue);
   const avgStuck=here.length?Math.round(here.reduce((a,r)=>a+daysStuck(r),0)/here.length*10)/10:0;
-  return '<div class="proj-card" style="cursor:pointer;text-align:left;margin-bottom:0;'+(extraStyle||'')+'" onclick="openCncListPopup(\''+esc(def.label)+'\',\''+here.length+' order(s) waiting on this stage\','+JSON.stringify(here.map(r=>r.id))+')">'+
+  return '<div class="proj-card'+(extraStyle?' cnc-machine-stage':'')+'" style="cursor:pointer;text-align:left;margin-bottom:0;'+(extraStyle||'')+'" onclick="openCncListPopup(\''+esc(def.label)+'\',\''+here.length+' order(s) waiting on this stage\','+JSON.stringify(here.map(r=>r.id))+')">'+
     '<div style="font-size:11px;color:'+(extraStyle?'rgba(255,255,255,.7)':'#888')+'">Stage '+(idx+1)+'</div>'+
     '<div style="font-size:13px;font-weight:700;margin:2px 0;'+(extraStyle?'color:#fff':'')+'">'+def.label+'</div>'+
     (caption?'<div style="font-size:11px;color:'+(extraStyle?'#ffb066':'#a05a00')+';margin-bottom:4px">'+caption+'</div>':'')+
@@ -142,13 +142,13 @@ function cncRunDaysButton(requests){
 function stagePipelineHTML(requests){
   const others=[0,1,2,3].map(i=>stageBtn(i,requests));
   return '<div style="font-size:11px;color:#888;margin:14px 0 6px">Each stage shows orders waiting, how many are overdue, and average days stuck. Click a stage to see its orders.</div>'+
-    '<div style="display:grid;grid-template-columns:repeat(4,1fr) 2fr 1fr;gap:8px;align-items:stretch" class="cnc-pipeline">'+
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr) 2fr 1fr;gap:8px" class="cnc-pipeline">'+
       others.join('')+
-      '<div style="background:#0f1f1c;border-radius:10px;padding:8px;display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
-        '<div style="grid-column:1/-1;font-size:11px;font-weight:700;color:#ffb066;text-align:center">CNC MACHINE</div>'+
-        stageBtn(PRODUCTION_STARTED_IDX,requests,'background:transparent;border:1px solid #2a4a42','waiting for CNC to start')+
-        stageBtn(PRODUCTION_COMPLETED_IDX,requests,'background:transparent;border:1px solid #2a4a42','running on CNC now')+
-        '<div style="grid-column:1/-1">'+cncRunDaysButton(requests)+'</div>'+
+      '<div class="cnc-machine-group" style="background:#0f1f1c;border-radius:10px;padding:8px;display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
+        '<div class="cnc-machine-header" style="grid-column:1/-1;font-size:11px;font-weight:700;color:#ffb066;text-align:center">CNC MACHINE</div>'+
+        stageBtn(PRODUCTION_STARTED_IDX,requests,'background:#132e28;border:1px solid #2a4a42','waiting for CNC to start')+
+        stageBtn(PRODUCTION_COMPLETED_IDX,requests,'background:#132e28;border:1px solid #2a4a42','running on CNC now')+
+        '<div class="cnc-rundays-wrap" style="grid-column:1/-1">'+cncRunDaysButton(requests)+'</div>'+
       '</div>'+
       stageBtn(6,requests)+
     '</div>';
@@ -254,7 +254,7 @@ function listPopupHTML(p){
   const val=(r,col)=>({num:r.requestNumber,client:r.details.clientName,stage:currentStageLabel(r),planned:(r.details.cncStages[currentStageIdx(r)]||{}).planned||'',stuck:daysStuck(r),status:statusOf(r).text,sales:r.details.salesName,dev:r.details.developerName,sqft:r.details.grillSizeSqFt||0}[col]);
   if(sort.col) rows=[...rows].sort((a,b)=>{ const av=val(a,sort.col),bv=val(b,sort.col); const c=av<bv?-1:av>bv?1:0; return sort.dir==='asc'?c:-c; });
   const overdueCount=rows.filter(isOverdue).length;
-  return '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">'+
+  return '<div class="cnc-popup-head" style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">'+
       '<div><div style="font-size:16px;font-weight:700">'+esc(p.title)+' — '+rows.length+' order(s)'+(overdueCount?', '+overdueCount+' overdue':'')+'</div>'+
       (p.subtitle?'<div style="font-size:12px;color:#888">'+esc(p.subtitle)+'</div>':'')+'</div>'+
       '<div style="display:flex;gap:6px"><button class="btn btn-outline btn-sm" onclick="exportCncListCSV()">↓ Export to Excel</button><button class="btn btn-outline btn-sm" onclick="closeCncTopPopup()">Close</button></div>'+
@@ -305,11 +305,11 @@ function runDaysPopupHTML(){
       sorted.map(r=>{const late=isOverdue(r); return '<tr style="cursor:pointer" onclick="openCncOrderDetail('+r.id+')"><td><b>'+esc(r.details.clientName)+'</b></td><td>'+fmtDate(r.details.cncStages[PRODUCTION_STARTED_IDX-1].actual)+'</td><td>'+fmtDate(plannedStart(r))+'</td><td>'+daysWaiting(r)+'d</td><td>'+plannedRunDays(r)+'d</td><td style="color:'+(late?COLOR_RED:'#444')+';font-weight:600">'+(late?'Start overdue '+lateByDays(r)+'d':'Scheduled')+'</td><td>'+esc(r.details.grillSizeSqFt||'—')+'</td></tr>';}).join('')+
     '</tbody></table>':'<div class="empty">No orders waiting for CNC.</div>';
   }
-  return '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+  return '<div class="cnc-popup-head" style="display:flex;justify-content:space-between;align-items:flex-start">'+
       '<div style="font-size:16px;font-weight:700">CNC run days</div>'+
       '<button class="btn btn-outline btn-sm" onclick="closeCncTopPopup()">Close</button>'+
     '</div>'+
-    '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:12px 0;text-align:center">'+
+    '<div class="cnc-rundays-stats" style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:12px 0;text-align:center">'+
       [['On CNC now',running.length],['Overrunning',overrunning.length],['Avg run days (actual/planned)',(avgActual==null?'—':avgActual)+' / '+(avgPlanned==null?'—':avgPlanned)],['Machine days used this month',machineDaysUsedThisMonth],['Machine days queued',queueDays+' ('+queueSqft+' sq ft)']]
         .map(([l,v])=>'<div style="background:#f5f5f3;border-radius:8px;padding:8px"><div style="font-size:16px;font-weight:700">'+v+'</div><div style="font-size:10px;color:#888">'+l+'</div></div>').join('')+
     '</div>'+
@@ -325,7 +325,7 @@ function orderDetailHTML(id){
   const d=r.details||{}; const stages=d.cncStages||[]; const st=statusOf(r);
   const docs=[['Documents',d.documentUrls],['AutoCAD file',d.autocadFileUrls],['Rough Doc',d.roughDrawingUrls],['Preview PDF',d.previewPdfUrls]];
   const reqLine=(label,val)=>'<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f5f5f3;font-size:12px"><span style="color:#888">'+label+'</span><span style="font-weight:600;text-align:right">'+esc(val||'—')+'</span></div>';
-  return '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+  return '<div class="cnc-popup-head" style="display:flex;justify-content:space-between;align-items:flex-start">'+
       '<div><div style="font-size:11px;color:#888">'+r.requestNumber+' · CNC · '+esc(d.scope||'Installation')+'</div>'+
         '<div style="font-size:18px;font-weight:700">'+esc(d.clientName)+'</div>'+
         '<div style="font-size:12px;color:'+st.color+';font-weight:600">'+esc(currentStageLabel(r))+' · '+st.text+'</div></div>'+
