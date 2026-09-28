@@ -3693,3 +3693,9 @@ The earlier claim ("mobile CSS added, same pattern as .gantt-table, not visually
 **Verified**: real CDP viewport emulation at 390x844 (`mcp__chrome-devtools__emulate`, not window resize — confirmed via `window.matchMedia('(max-width:640px)').matches`). Screenshotted: the full dashboard (KPI row 2-up, pipeline scrolling with natural per-card heights, no gap before Stuck orders), the pipeline scrolled to show stage 5/6/run-days-button/stage 7 all legible, a list popup (wrapped header, horizontally-scrolling table), the order detail popup (full content incl. the 2-column Request details/Files grid, stage-5/6 highlighting), and the CNC run days popup (2-column stats, tabs, scrolling table). Every popup opened correctly via a real click at this width too.
 
 Files: `src/sections/reports/cncDashboardTab.js` (3 new classes on existing elements, no structural HTML change), `src/styles/app.css` (mobile block only).
+
+**v2-51 — test CNC requests deleted from production (2026-09-28, user confirmed "yes delete them")**
+Re-confirmed the exact rows first (id 52 PRE-0031, id 53 PRE-0032 — both `request_type='cnc'`, both `client='abc'`, both never converted:
+`linked_project_id` null), backed up their full rows to a session-temporary file, then deleted inside a transaction with a rowcount check
+(would have rolled back if anything other than exactly 2 rows matched). Deleted, committed. Production now has 0 CNC requests — the
+dashboard will show all zeros until a real CNC request is raised. Nothing else in the database was touched.
