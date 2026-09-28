@@ -78,12 +78,7 @@ export function renderDPR(){
   function weeklySumsFor(projId,dateLike){
     const range=dprWeekRange(dateLike); if(!range) return null;
     const key=projId+'|'+range.start;
-    if(!weeklySumsByKey[key]){
-      const entries=state.dprLog.filter(e=>e.projId===projId&&isInWeekRange(e.date,range));
-      const committed=entries.reduce((s,e)=>s+(e.todayProjectionQty||0),0);
-      const actual=entries.reduce((s,e)=>s+(e.products||[]).reduce((s2,r)=>s2+(r.todayInstalled||0),0),0);
-      weeklySumsByKey[key]={committed,actual};
-    }
+    if(!weeklySumsByKey[key]) weeklySumsByKey[key]=dprWeeklySums(projId,dateLike);
     return weeklySumsByKey[key];
   }
   // Average working per day, per project — computed from all DPR history for that project,
@@ -433,6 +428,17 @@ function isInWeekRange(dateLike,range){
   const local=toLocalISODate(dateLike);
   return !!local&&local>=range.start&&local<=range.end;
 }
+// v2-52: Weekly Committed Qty / Weekly Actual Qty for one project's Mon-Sat week (the week
+// dateLike falls into) — pure sums of today_projection_qty / product todayInstalled across that
+// project's DPR history, so there's no separate stored total to keep in sync or reset. Shared by
+// the DPR card list (renderDPR) and the day-info line on the Add/Edit DPR form (renderDPRProducts).
+export function dprWeeklySums(projId,dateLike){
+  const range=dprWeekRange(dateLike); if(!range) return null;
+  const entries=state.dprLog.filter(e=>e.projId===projId&&isInWeekRange(e.date,range));
+  const committed=entries.reduce((s,e)=>s+(e.todayProjectionQty||0),0);
+  const actual=entries.reduce((s,e)=>s+(e.products||[]).reduce((s2,r)=>s2+(r.todayInstalled||0),0),0);
+  return {committed,actual};
+}
 // "Today is Day No" and "Days Left" — computed from Installation Commencement Date (falling back
 // to Start Date when that's not set — most projects never get it filled in, see plan.md v2-26) and
 // Days Available, exactly matching the uploaded DPR sheet's own formulas. Always computed live
@@ -502,9 +508,14 @@ export function renderDPRProducts(){
   // Admin/manager can still correct a wrongly-recorded historical cumulative total; every other
   // role gets a pure auto-computed, read-only value — see plan.md v2-26.
   const canEditCum=state.currentUser&&(state.currentUser.role==='admin'||state.currentUser.role==='manager');
+  // v2-52: "this week so far" — the same Weekly Committed/Actual Qty shown on saved DPR cards,
+  // surfaced here too so staff can see where the week stands before typing in today's numbers.
+  // Computed as of today (the DPR date field is always today's, never backdated).
+  const weekly=p?dprWeeklySums(p.id,new Date()):null;
   document.getElementById('dpr-day-info').innerHTML=p?
     'Today is Day No: <b>'+(dayNo!==null?dayNo:'—')+'</b> &nbsp;·&nbsp; Days left: <b>'+(daysLeft!==null?daysLeft:'—')+'</b> &nbsp;·&nbsp; Days available: <b>'+(daysAvailable||'—')+'</b>'
     +(dayNo===null?'<div style="color:#cc3333;margin-top:2px">Set "Date of installation commencement" (or "Start date") on the project to compute Day No / Days Left.</div>':'')
+    +(weekly?'<div style="margin-top:4px">This week so far (Mon–Sat): <b>Committed '+fmt(weekly.committed)+' sq ft</b> &nbsp;·&nbsp; <b>Actual '+fmt(weekly.actual)+' sq ft</b></div>':'')
     :'';
   if(!state.dprProducts.length){ el.innerHTML='<div style="font-size:12px;color:#888">No products defined for this project. Add products via the project edit form first.</div>'; return; }
   el.innerHTML='<div style="overflow-x:auto"><table class="team-table" style="font-size:11px;white-space:nowrap">'+
