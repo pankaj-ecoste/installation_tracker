@@ -1,6 +1,6 @@
 import { state } from '../lib/state.js';
 import { getSeenLotIds } from '../lib/seenLots.js';
-import { countUnseen } from '../lib/seenItems.js';
+import { countUnseen, getSeenKeys, markKeysSeen } from '../lib/seenItems.js';
 import { dprAttentionKeys, financeAttentionKeys, requestAttentionKeys, snagAttentionKeys } from '../lib/attentionKeys.js';
 import { supervisorWhatsApp } from '../lib/whatsapp.js';
 import { syncProject } from '../data/loadAllData.js';
@@ -20,29 +20,29 @@ export function computeAlerts(){
     if(p.status==='Completed'||p.status==='On Hold'||p.status==='CNC'||p.status==='Only Supply') return;
     if(p.committedDate&&new Date(p.committedDate)<TODAY){
       const d=daysDiff(p.committedDate,TODAY.toISOString().slice(0,10));
-      alerts.push({type:'overdue',sev:'red',proj:p,msg:'Committed date passed '+d+' day'+(d>1?'s':'')+' ago',detail:pct(p.installedQty,p.plannedQty)+'% installed · Committed: '+fmtDate(p.committedDate)});
+      alerts.push({type:'overdue',sev:'red',proj:p,key:'overdue:'+p.id+':'+d,msg:'Committed date passed '+d+' day'+(d>1?'s':'')+' ago',detail:pct(p.installedQty,p.plannedQty)+'% installed · Committed: '+fmtDate(p.committedDate)});
     } else if(p.committedDate){
       const d=daysDiff(TODAY.toISOString().slice(0,10),p.committedDate);
       if(d<=14&&pct(p.installedQty,p.plannedQty)<80)
-        alerts.push({type:'atrisk',sev:'amber',proj:p,msg:'Deadline in '+d+' days — only '+pct(p.installedQty,p.plannedQty)+'% done',detail:'Target: '+fmtDate(p.committedDate)});
+        alerts.push({type:'atrisk',sev:'amber',proj:p,key:'atrisk:'+p.id+':'+d,msg:'Deadline in '+d+' days — only '+pct(p.installedQty,p.plannedQty)+'% done',detail:'Target: '+fmtDate(p.committedDate)});
     }
     p.milestones.forEach(m=>{
       if(!m.actual&&m.planned&&new Date(m.planned)<TODAY){
         const d=daysDiff(m.planned,TODAY.toISOString().slice(0,10));
-        alerts.push({type:'milestone',sev:'red',proj:p,ms:m,msg:'Milestone stalled: "'+m.label+'"',detail:'Planned '+fmtDate(m.planned)+' — '+d+'d overdue.'});
+        alerts.push({type:'milestone',sev:'red',proj:p,ms:m,key:'milestone:'+p.id+':'+(m.key||m.label)+':'+d,msg:'Milestone stalled: "'+m.label+'"',detail:'Planned '+fmtDate(m.planned)+' — '+d+'d overdue.'});
       }
     });
     p.constraints.filter(c=>c.status==='open').forEach(c=>{
-      alerts.push({type:'constraint',sev:'amber',proj:p,c:c,msg:'Open constraint: "'+c.text+'"',detail:'Logged: '+c.date});
+      alerts.push({type:'constraint',sev:'amber',proj:p,c:c,key:'constraint:'+p.id+':'+c.text,msg:'Open constraint: "'+c.text+'"',detail:'Logged: '+c.date});
     });
     if(p.status==='In Progress'&&p.installedQty===0)
-      alerts.push({type:'noprogress',sev:'amber',proj:p,msg:'No installation recorded yet',detail:'Project is "In Progress" but 0 units installed.'});
+      alerts.push({type:'noprogress',sev:'amber',proj:p,key:'noprogress:'+p.id,msg:'No installation recorded yet',detail:'Project is "In Progress" but 0 units installed.'});
     if(needsRABill(p))
-      alerts.push({type:'rabill',sev:'amber',proj:p,msg:'RA Bill to be generated — WCC uploaded',detail:'WCC uploaded and qty updated. RA bill amount not yet entered.'});
+      alerts.push({type:'rabill',sev:'amber',proj:p,key:'rabill:'+p.id,msg:'RA Bill to be generated — WCC uploaded',detail:'WCC uploaded and qty updated. RA bill amount not yet entered.'});
     if(needsFinanceReview(p))
-      alerts.push({type:'financereview',sev:'amber',proj:p,msg:'JMR qty updated by installation team',detail:'JMR is now '+fmt(p.jmrQty)+'. Please review and update RA bill information under Finance.'});
-    (p.snags||[]).filter(s=>s.status!=='resolved').forEach(s=>{
-      alerts.push({type:'snag',sev:s.severity==='Critical'?'red':'amber',proj:p,msg:'Snag ('+s.severity+'): '+s.description,detail:(s.location||'—')+' · Raised: '+s.raisedDate});
+      alerts.push({type:'financereview',sev:'amber',proj:p,key:'financereview:'+p.id+':'+(p.jmrQty||0),msg:'JMR qty updated by installation team',detail:'JMR is now '+fmt(p.jmrQty)+'. Please review and update RA bill information under Finance.'});
+    (p.snags||[]).filter(s=>s.status!=='resolved').forEach((s,i)=>{
+      alerts.push({type:'snag',sev:s.severity==='Critical'?'red':'amber',proj:p,key:'snag:'+p.id+':'+i+':'+(s.description||'').slice(0,24),msg:'Snag ('+s.severity+'): '+s.description,detail:(s.location||'—')+' · Raised: '+s.raisedDate});
     });
     // Recently dispatched material, not yet marked arrived — highlighted so the assigned
     // supervisor knows to expect it and acknowledge on arrival.
@@ -50,7 +50,7 @@ export function computeAlerts(){
       const daysSinceDispatch=daysDiff(l.dispatchDate,TODAY.toISOString().slice(0,10));
       if(daysSinceDispatch>=0&&daysSinceDispatch<=7){
         const whenText=daysSinceDispatch===0?'today':daysSinceDispatch+' day(s) ago';
-        alerts.push({type:'dispatch',sev:daysSinceDispatch>=3?'amber':'red',proj:p,lot:l,msg:'Material dispatched — '+l.lotNo,detail:'Dispatched '+whenText+'. Expected: '+(l.expectedArrival?fmtDate(l.expectedArrival):'—')});
+        alerts.push({type:'dispatch',sev:daysSinceDispatch>=3?'amber':'red',proj:p,lot:l,key:'dispatch:'+p.id+':'+l.id+':'+daysSinceDispatch,msg:'Material dispatched — '+l.lotNo,detail:'Dispatched '+whenText+'. Expected: '+(l.expectedArrival?fmtDate(l.expectedArrival):'—')});
       }
     });
     // DPR not being filled while the project is still active — this is what keeps Admin,
@@ -61,17 +61,38 @@ export function computeAlerts(){
       const lastDpr=projDprs.length?projDprs.reduce((latest,d)=>(!latest||d.date>latest.date)?d:latest,null):null;
       const daysSinceLastDpr=lastDpr?daysDiff(lastDpr.date,TODAY.toISOString().slice(0,10)):null;
       if(!lastDpr){
-        alerts.push({type:'nodpr',sev:'amber',proj:p,msg:'No DPR ever submitted for this project',detail:'Project is "'+p.status+'" but no daily progress report has been logged yet.'});
+        alerts.push({type:'nodpr',sev:'amber',proj:p,key:'nodpr:'+p.id+':never',msg:'No DPR ever submitted for this project',detail:'Project is "'+p.status+'" but no daily progress report has been logged yet.'});
       } else if(daysSinceLastDpr>=2){
-        alerts.push({type:'nodpr',sev:daysSinceLastDpr>=5?'red':'amber',proj:p,msg:'DPR not submitted in '+daysSinceLastDpr+' days',detail:'Last DPR was on '+fmtDate(lastDpr.date)+'. Supervisor: '+(p.supervisor||'—')});
+        alerts.push({type:'nodpr',sev:daysSinceLastDpr>=5?'red':'amber',proj:p,key:'nodpr:'+p.id+':'+daysSinceLastDpr,msg:'DPR not submitted in '+daysSinceLastDpr+' days',detail:'Last DPR was on '+fmtDate(lastDpr.date)+'. Supervisor: '+(p.supervisor||'—')});
       }
     }
   });
   return alerts;
 }
 
+// A supervisor/vendor WhatsApp reminder was sent for this alert — dismiss it from the bell/
+// notifications panel until its underlying condition actually changes (each alert's `key`
+// above embeds the piece of state, e.g. day-count or JMR qty, that would make it count as a
+// fresh alert again — same convention as lib/attentionKeys.js). Per user, per browser, same
+// localStorage pattern as the other badged tabs (lib/seenItems.js) — no DB change.
+function dismissedAlertKeys(){
+  if(!state.currentUser) return new Set();
+  return getSeenKeys('bellNotified',state.currentUser.username);
+}
+export function activeAlerts(){
+  const dismissed=dismissedAlertKeys();
+  return computeAlerts().filter(a=>!dismissed.has(a.key));
+}
+export function dismissAlertNotification(key){
+  if(!state.currentUser||!key) return;
+  markKeysSeen('bellNotified',state.currentUser.username,[key]);
+  updateBell();
+  const el=document.getElementById('notif-body-inner');
+  if(el) el.innerHTML=buildNotifHTML();
+}
+
 export function updateBell(){
-  const a=computeAlerts();
+  const a=activeAlerts();
   const b=document.getElementById('bell-count');
   if(b){
     if(a.length>0){ b.classList.remove('hidden'); b.textContent=a.length; }
@@ -189,7 +210,7 @@ function alertViewButtonHTML(a){
 }
 
 export function buildNotifHTML(){
-  const alerts=computeAlerts();
+  const alerts=activeAlerts();
   const iconMap={overdue:'🚨',atrisk:'⚠️',milestone:'⏰',constraint:'🔴',rabill:'💰',noprogress:'📊',snag:'🔧',dispatch:'📦',nodpr:'📝',financereview:'⚠️'};
   const reqSectionHTML=buildRequestActivityHTML();
   if(!alerts.length){
@@ -203,8 +224,11 @@ export function buildNotifHTML(){
     const waNumber=supervisorWhatsApp(a.proj);
     const noSupervisor=!String(a.proj.supervisor||'').trim()||a.proj.supervisor==='—';
     // No usable number -> a greyed, non-clickable pill instead of a link (v2-45; it used to open wa.me/91XXXXXXXXXX).
+    // Sending the WhatsApp reminder is treated as "handled" — dismiss this alert from the bell/
+    // panel right away (see dismissAlertNotification above). Doesn't touch the href, so the
+    // wa.me tab still opens as normal; onclick just also fires alongside it.
     const waBtn=waNumber
-      ?'<a class="wa-btn" href="https://wa.me/'+waNumber+'?text='+waMsg+'" target="_blank">📲 WhatsApp '+a.proj.supervisor+'</a>'
+      ?'<a class="wa-btn" href="https://wa.me/'+waNumber+'?text='+waMsg+'" target="_blank" onclick="dismissAlertNotification(\''+a.key.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">📲 WhatsApp '+a.proj.supervisor+'</a>'
       :'<span class="wa-btn" style="background:#bbb;cursor:not-allowed" title="Add this person\'s WhatsApp no. in the Team tab">📲 '+(noSupervisor?'No supervisor assigned':'No WhatsApp number — '+a.proj.supervisor)+'</span>';
     return '<div class="alert-card">'+
       '<div class="alert-header">'+
@@ -295,7 +319,7 @@ export function goToDPRChecklist(projId){
 }
 
 export function copyDigest(){
-  const alerts=computeAlerts();
+  const alerts=activeAlerts();
   if(!alerts.length){ alert('No alerts to copy.'); return; }
   const text='ECOSTE ALERT DIGEST — '+new Date().toLocaleDateString('en-IN')+'\n\n'+
     alerts.map((a,i)=>(i+1)+'. ['+a.sev.toUpperCase()+'] '+a.proj.name+' — '+a.proj.tower+'\n   '+a.msg+'\n   '+a.detail).join('\n\n');

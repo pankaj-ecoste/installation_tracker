@@ -1,5 +1,5 @@
 import { canDo, fmt, visibleProjects } from '../lib/helpers.js';
-import { computeAlerts } from './alerts.js';
+import { activeAlerts } from './alerts.js';
 
 /* ══ METRICS ══ */
 export function renderMetrics(){
@@ -15,7 +15,7 @@ export function renderMetrics(){
   const tInst=vp.reduce((a,p)=>a+p.installedQty,0);
   const tBill=vp.reduce((a,p)=>a+p.raBillAmt,0), tPaid=vp.reduce((a,p)=>a+p.paymentCollected,0);
   const openC=vp.reduce((a,p)=>a+p.constraintsOpen,0);
-  const alerts=computeAlerts();
+  const alerts=activeAlerts();
   const showFin=canDo('viewFinance');
   document.getElementById('metrics-row').innerHTML=
     '<div class="metric"><div class="metric-label">Total projects</div><div class="metric-val">'+total+'</div><div class="metric-sub">'+done+' completed</div></div>'+

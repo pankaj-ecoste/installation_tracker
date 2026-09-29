@@ -9,7 +9,7 @@ import { toggleProjectDocs, suggestSnagSeverity, updateSnagSeverityHint, statusB
 import { projectToRow, rowToProject, dprToRow, rowToDpr, memberToRow, rowToMember, lotToRow, rowToLot, requestToRow, rowToRequest, financeRowToRow, rowToFinanceRow } from '../lib/mappers.js';
 import { makeMockClient } from '../lib/supabaseClient.js';
 import { pickFilesOrWarn, docLink, uploadFiles, uploadFilesWithNames, fileUploadRowHTML } from '../lib/uploads.js';
-import { computeAlerts, updateBell, setBadge, updateTabBadges, updateRequestsBadge, buildRequestActivityHTML, buildNotifHTML, quickSolve, goToProject, goToMaterialLot, goToFinanceProject, goToDPRForProject, goToDPRChecklist, goToRequestCard, copyDigest } from '../sections/alerts.js';
+import { computeAlerts, activeAlerts, dismissAlertNotification, updateBell, setBadge, updateTabBadges, updateRequestsBadge, buildRequestActivityHTML, buildNotifHTML, quickSolve, goToProject, goToMaterialLot, goToFinanceProject, goToDPRForProject, goToDPRChecklist, goToRequestCard, copyDigest } from '../sections/alerts.js';
 import { clientGanttHTML, renderClientPortal, sendClientMsg } from '../sections/clientPortal/clientPortal.js';
 import { renderDashboard } from '../sections/dashboard/dashboardTab.js';
 import { renderDPR, openAddDPR, openEditDPR, renderDPRForm, dprDayNo, dprDaysLeft, divFmt, renderDPRChecklist, toggleDPRChecklistItem, renderDPRProducts, updateDPRProductDerived, saveDPR } from '../sections/dpr/dprTab.js';
@@ -84,6 +84,8 @@ export function installDomGlobals(){
     uploadFilesWithNames,
     fileUploadRowHTML,
     computeAlerts,
+    activeAlerts,
+    dismissAlertNotification,
     updateBell,
     setBadge,
     updateTabBadges,
