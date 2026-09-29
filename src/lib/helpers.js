@@ -52,11 +52,12 @@ export function updateSnagSeverityHint(unitsFieldId,severityFieldId,installedQty
 
 // v2-54: CRM / Sale Order unique number, shown as a small badge next to the project name —
 // same visual pattern as the 🔑 access-code badge — wherever a project's name/header appears
-// (Projects, Dashboard, Gantt, Material, Finance). Empty when the project has none (e.g. never
-// came from a Main/Post-Main Order request).
+// (Projects, Dashboard, Gantt, Material, Finance). Shows "N/A" rather than disappearing when
+// unset, so it stays visible as a prompt to fill it in (via Edit Project) instead of looking
+// like the feature just isn't there.
 export function crmSoBadge(p){
-  if(!p||!p.crmSoNumber) return '';
-  return '<span style="font-size:10px;background:#f0f0f0;border:1px solid #ccc;border-radius:20px;padding:2px 7px;color:#555">🧾 SO: '+p.crmSoNumber+'</span>';
+  if(!p) return '';
+  return '<span style="font-size:10px;background:#f0f0f0;border:1px solid #ccc;border-radius:20px;padding:2px 7px;color:#555">🧾 SO: '+(p.crmSoNumber||'N/A')+'</span>';
 }
 
 export function statusBadge(s){
