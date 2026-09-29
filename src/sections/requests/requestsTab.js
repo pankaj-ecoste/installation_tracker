@@ -2,7 +2,7 @@ import { state } from '../../lib/state.js';
 import { db } from '../../lib/supabaseClient.js';
 import { logActivity } from '../../lib/activityLog.js';
 import { CNC_FIELDS, CNC_STAGES, CNC_TEAM_EMAIL, HARISH_EMAIL, MS_MAIN, MS_MAINORDER_STEPS, MS_MOCKUP_STEPS, MS_POSTMOCKUP_STEPS, MS_PREMAINSURVEY_STEPS, MS_PREMOCKUP, MS_SAMPLING, NEELAM_WA, POSTPO_DOC_CATEGORIES, POSTPO_FIELDS, PREPO_FIELDS, SURVEY_FIELDS, VISIT_FIELDS, computeCNCStages, getAdminEmail, getManagementCcEmails, milestoneKeyFor, notifyByGmail, reqFieldGroup, reqNumberPrefix, reqTypeLabel } from '../../lib/constants.js';
-import { canDo, daysDiff, fmtDate, visibleProjects } from '../../lib/helpers.js';
+import { canDo, crmSoBadge, daysDiff, fmtDate, visibleProjects } from '../../lib/helpers.js';
 import { markKeysSeen } from '../../lib/seenItems.js';
 import { requestAttentionKey, requestAttentionKeys } from '../../lib/attentionKeys.js';
 import { projectToRow, requestToRow, rowToProject, rowToRequest } from '../../lib/mappers.js';
@@ -723,6 +723,7 @@ export function renderRequestCard(r){
           (r.requestSubType?'<span class="badge bgr">'+r.requestSubType+'</span>':'')+
           '<span class="badge '+(isOnlySupply?'bt':'bgr')+'">'+scope+'</span>'+
           '<span class="badge '+(REQ_STATUS_COLOR[r.status]||'bgr')+'">'+r.status+'</span>'+
+          (group==='order'?crmSoBadge({crmSoNumber:d.crmSoNumber}):'')+
           tatBadge(r)+
           reviewWaitBadge(r)+
           (r.assignedSupervisor?'<span style="font-size:11px;color:#666">👤 '+r.assignedSupervisor+'</span>':'')+
