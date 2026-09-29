@@ -1,7 +1,7 @@
 import { state } from '../../lib/state.js';
 import { db } from '../../lib/supabaseClient.js';
 import { logActivity } from '../../lib/activityLog.js';
-import { canDo, fmt, fmtDate, visibleProjects } from '../../lib/helpers.js';
+import { canDo, crmSoBadge, fmt, fmtDate, visibleProjects } from '../../lib/helpers.js';
 import { lotToRow, rowToLot } from '../../lib/mappers.js';
 import { markLotsSeen } from '../../lib/seenLots.js';
 import { uploadFiles } from '../../lib/uploads.js';
@@ -67,7 +67,7 @@ export function renderMaterial(){
     html+='<div id="mat-proj-'+p.id+'" style="background:#fff;border:1px solid #e0e0e0;border-radius:10px;margin-bottom:16px;overflow:hidden">'
       // Project header
       +'<div style="background:#085041;padding:12px 16px;display:flex;justify-content:space-between;align-items:center">'
-        +'<div><div style="color:#fff;font-weight:700;font-size:14px">'+p.name+' — '+p.tower+'</div>'
+        +'<div><div style="color:#fff;font-weight:700;font-size:14px">'+p.name+' — '+p.tower+' '+crmSoBadge(p)+'</div>'
         +'<div style="color:rgba(255,255,255,.7);font-size:12px">'+p.city+'</div></div>'
         +(canDo('addLot')?'<button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.3)" onclick="openAddLotForProject('+p.id+')">+ Add lot</button>':'')
       +'</div>'

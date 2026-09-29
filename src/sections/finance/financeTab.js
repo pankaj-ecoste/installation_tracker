@@ -3,7 +3,7 @@ import { db } from '../../lib/supabaseClient.js';
 import { syncProject } from '../../data/loadAllData.js';
 import { logActivity } from '../../lib/activityLog.js';
 import { FINANCE_FIELDS } from '../../lib/constants.js';
-import { canDo, fmt, needsFinanceReview, needsRABill, visibleProjects } from '../../lib/helpers.js';
+import { canDo, crmSoBadge, fmt, needsFinanceReview, needsRABill, visibleProjects } from '../../lib/helpers.js';
 import { projectNeedsFinanceAction } from '../../lib/attentionKeys.js';
 import { financeRowToRow, rowToFinanceRow } from '../../lib/mappers.js';
 import { docLink, namedDocLink, pickFilesOrWarn, uploadFilesWithNames } from '../../lib/uploads.js';
@@ -152,7 +152,7 @@ export function renderFinance(){
     const totalPaid=rows.reduce((a,f)=>a+(f.paymentGiven||0),0);
     return '<div style="background:#fff;border:1px solid #e0e0e0;border-radius:10px;margin-bottom:16px;overflow:hidden">'+
       '<div style="background:#085041;padding:12px 16px;display:flex;justify-content:space-between;align-items:center">'+
-        '<div><div style="color:#fff;font-weight:700;font-size:14px">'+p.name+' — '+p.tower+'</div>'+
+        '<div><div style="color:#fff;font-weight:700;font-size:14px">'+p.name+' — '+p.tower+' '+crmSoBadge(p)+'</div>'+
         '<div style="color:rgba(255,255,255,.7);font-size:12px">Vendor contract value ₹'+fmt(totalContract)+' · Paid to vendor ₹'+fmt(totalPaid)+'</div></div>'+
         (canDo('addFinanceRow')?'<button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.3)" onclick="openAddFinanceRowForProject('+p.id+')">+ Add RA Bill</button>':'')+
         '<button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.3);margin-left:6px" onclick="openAddSnagForProject('+p.id+')">🔧 Add snag</button>'+

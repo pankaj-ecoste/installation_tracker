@@ -1,6 +1,6 @@
 import { state } from '../../lib/state.js';
 import { TODAY } from '../../lib/constants.js';
-import { daysDiff, fmt, fmtDate, pct, visibleProjects } from '../../lib/helpers.js';
+import { crmSoBadge, daysDiff, fmt, fmtDate, pct, visibleProjects } from '../../lib/helpers.js';
 
 /* ══ DASHBOARD ══ */
 export function renderDashboard(){
@@ -116,7 +116,7 @@ export function renderDashboard(){
           t.installed+=p.installedQty||0; t.planned+=p.plannedQty||0; t.jmr+=p.jmrQty||0; t.raBillAmt+=p.raBillAmt||0; t.collected+=p.paymentCollected||0; t.openConstraints+=p.constraintsOpen||0;
           t.unbilled+=Math.max(0,contractValue-released); t.released+=released;
         });
-        rows+='<tr style="background:#f5f5f3;font-weight:700"><td>'+grp.developer+' — '+projName+'</td><td>'+fmt(t.installed)+' / '+fmt(t.planned)+' ('+pct(t.installed,t.planned)+'%)</td><td>'+fmt(t.jmr)+'</td><td>'+fmt(t.raBillAmt)+'</td><td>'+fmt(t.collected)+'</td><td>'+fmt(t.unbilled)+'</td><td>'+fmt(t.released)+'</td><td style="color:'+(t.openConstraints>0?'#cc3333':'#1D9E75')+'">'+t.openConstraints+'</td><td></td></tr>';
+        rows+='<tr style="background:#f5f5f3;font-weight:700"><td>'+grp.developer+' — '+projName+' '+crmSoBadge(grp.towers[0])+'</td><td>'+fmt(t.installed)+' / '+fmt(t.planned)+' ('+pct(t.installed,t.planned)+'%)</td><td>'+fmt(t.jmr)+'</td><td>'+fmt(t.raBillAmt)+'</td><td>'+fmt(t.collected)+'</td><td>'+fmt(t.unbilled)+'</td><td>'+fmt(t.released)+'</td><td style="color:'+(t.openConstraints>0?'#cc3333':'#1D9E75')+'">'+t.openConstraints+'</td><td></td></tr>';
         grp.towers.forEach(p=>{
           const framing=frameInstalledToDate(p);
           const contractValue=state.financeLedger.filter(f=>f.projId===p.id).reduce((a,f)=>a+(f.contractValue||0),0);
@@ -131,7 +131,7 @@ export function renderDashboard(){
     '<div style="font-size:11px;color:#888;margin-bottom:8px">Required Performance Run Rate excludes Frame installed qty — it\'s calculated from the main product quantity only, since Frame goes in as its own separate step first.</div>'+
     '<div style="overflow-x:auto"><table class="team-table"><thead><tr><th>Vendor</th><th>Project</th><th>Planned date</th><th>Installed / Planned qty</th><th>Performance Run Rate (units/day)</th><th>Required Performance Run Rate (units/day)*</th><th>Performance Status</th><th>Achieved date</th></tr></thead><tbody>'+
     vendorRows.map(({p,runRate,requiredRunRate,daysRemaining,isOverdue,performanceStatus})=>
-      '<tr><td>'+p.vendor+'</td><td>'+p.name+' — '+p.tower+'</td>'+
+      '<tr><td>'+p.vendor+'</td><td>'+p.name+' — '+p.tower+' '+crmSoBadge(p)+'</td>'+
       '<td>'+(p.committedDate?fmtDate(p.committedDate):'—')+(isOverdue?' <span style="color:#cc3333;font-weight:600">(overdue)</span>':'')+'</td>'+
       '<td>'+fmt(p.installedQty)+' / '+fmt(p.plannedQty)+' ('+pct(p.installedQty,p.plannedQty)+'%)</td>'+
       '<td>'+(runRate!==null?fmt(runRate)+'/day':'—')+'</td>'+

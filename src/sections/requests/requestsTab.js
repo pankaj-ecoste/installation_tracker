@@ -951,7 +951,7 @@ export async function confirmConvertRequestToProject(){
     salesPersonName:d.salesName||r.createdBy||'—',
     salesPersonEmail:d.salesEmail||'',
     framingMaterial:d.framingMaterial||'', sectionSize:d.sectionSize||'',
-    sourceRequestType:reqTypeLabel(r.requestType)
+    sourceRequestType:reqTypeLabel(r.requestType), crmSoNumber:d.crmSoNumber||''
   };
   // Create the project immediately on click — no separate "Save" step to forget or lose via back button.
   // No client-supplied id — projects.id is a real Postgres identity column, so letting the

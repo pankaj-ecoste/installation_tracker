@@ -162,7 +162,7 @@ export function openAddProject(){
   state.editingId=null; state.pendingConstraints=[];
   state.formMilestones=[]; state.formVendors=[{name:'',role:''}]; state.formProducts=[{name:'',qty:''}]; state.formTowers=[{name:''}];
   document.getElementById('proj-panel-title').textContent='Add new project';
-  ['f-name','f-dev','f-city','f-state-inp','f-code','f-commit-date','f-start-date','f-drive','f-po-qty','f-so-qty'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  ['f-name','f-dev','f-city','f-state-inp','f-code','f-crm-so','f-commit-date','f-start-date','f-drive','f-po-qty','f-so-qty'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
   document.getElementById('f-tower-count').value='1';
   document.getElementById('f-tower-count').disabled=false;
   document.getElementById('f-status-sel').value='Not Started';
@@ -201,6 +201,7 @@ export async function openEditProject(id){
   document.getElementById('f-city').value=p.city;
   document.getElementById('f-state-inp').value=p.state;
   document.getElementById('f-code').value=p.accessCode;
+  document.getElementById('f-crm-so').value=p.crmSoNumber||'';
   document.getElementById('f-status-sel').value=p.status;
   document.getElementById('f-po-qty').value=p.poQty||0;
   document.getElementById('f-so-qty').value=p.soQty||0;
@@ -256,6 +257,7 @@ export async function saveProject(){
     materialFirstLotDate:document.getElementById('f-material-first-lot').value,
     installCommencementDate:document.getElementById('f-install-commencement').value,
     driveLink:document.getElementById('f-drive').value.trim(),
+    crmSoNumber:document.getElementById('f-crm-so').value.trim(),
     status:document.getElementById('f-status-sel').value,
     plannedQty:totalPlanned,
     poQty:parseInt(document.getElementById('f-po-qty').value)||0,

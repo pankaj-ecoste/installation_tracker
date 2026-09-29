@@ -1,7 +1,7 @@
 import { state } from '../../lib/state.js';
 import { syncProject } from '../../data/loadAllData.js';
 import { CHECKLIST_DEFS, TODAY, checklistDoneItems, checklistTotalItems } from '../../lib/constants.js';
-import { canDo, fillCls, fmt, fmtDate, needsRABill, pct, statusBadge, visibleProjects } from '../../lib/helpers.js';
+import { canDo, crmSoBadge, fillCls, fmt, fmtDate, needsRABill, pct, statusBadge, visibleProjects } from '../../lib/helpers.js';
 import { projectHasOpenSnag } from '../../lib/attentionKeys.js';
 import { docLink, pickFilesOrWarn, uploadFilesWithNames } from '../../lib/uploads.js';
 import { updateBell } from '../alerts.js';
@@ -134,6 +134,7 @@ export function renderCard(p){
           '<span style="font-size:11px;color:#666">👤 '+p.supervisor+'</span>'+
           '<span style="font-size:11px;color:#666">🏢 Vendor ('+(p.vendor&&p.vendor!=='—'?p.vendor:'Not assigned yet')+')</span>'+
           '<span style="font-size:10px;background:#f0f0f0;border:1px solid #ccc;border-radius:20px;padding:2px 7px;color:#555">🔑 '+p.accessCode+'</span>'+
+          crmSoBadge(p)+
         '</div>'+
       '</div>'+
       '<div class="proj-actions" onclick="event.stopPropagation()">'+

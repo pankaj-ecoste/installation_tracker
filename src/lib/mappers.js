@@ -26,7 +26,8 @@ export function projectToRow(p){
     handover_checklist:p.handoverChecklist||null, handover_checklist_completed_at:p.handoverChecklistCompletedAt||null, handover_checklist_reviewed:p.handoverChecklistReviewed||false,
     work_policy_checklist:p.workPolicyChecklist||null, work_policy_checklist_completed_at:p.workPolicyChecklistCompletedAt||null, work_policy_checklist_reviewed:p.workPolicyChecklistReviewed||false,
     po_date:p.poDate||null, days_available:p.daysAvailable||null, material_first_lot_date:p.materialFirstLotDate||null, install_commencement_date:p.installCommencementDate||null,
-    wcc_docs:p.wccDocs||[], ra_bill_docs:p.raBillDocs||[], project_docs:p.projectDocs||[], premockup_checklist:p.premockupChecklist||null
+    wcc_docs:p.wccDocs||[], ra_bill_docs:p.raBillDocs||[], project_docs:p.projectDocs||[], premockup_checklist:p.premockupChecklist||null,
+    crm_so_number:p.crmSoNumber||''
   };
 }
 export function rowToProject(r){
@@ -50,7 +51,8 @@ export function rowToProject(r){
     handoverChecklist:r.handover_checklist||null, handoverChecklistCompletedAt:r.handover_checklist_completed_at||'', handoverChecklistReviewed:r.handover_checklist_reviewed||false,
     workPolicyChecklist:r.work_policy_checklist||null, workPolicyChecklistCompletedAt:r.work_policy_checklist_completed_at||'', workPolicyChecklistReviewed:r.work_policy_checklist_reviewed||false,
     poDate:r.po_date||'', daysAvailable:r.days_available||0, materialFirstLotDate:r.material_first_lot_date||'', installCommencementDate:r.install_commencement_date||'',
-    wccDocs:r.wcc_docs||[], raBillDocs:r.ra_bill_docs||[], projectDocs:r.project_docs||[], premockupChecklist:r.premockup_checklist||null
+    wccDocs:r.wcc_docs||[], raBillDocs:r.ra_bill_docs||[], projectDocs:r.project_docs||[], premockupChecklist:r.premockup_checklist||null,
+    crmSoNumber:r.crm_so_number||''
   };
 }
 

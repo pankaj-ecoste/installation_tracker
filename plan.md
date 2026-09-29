@@ -3734,3 +3734,23 @@ Team ask: after every deploy, staff had to manually reload the tab to get the up
 **Verified**: `npm run build` confirmed `dist/version.json` is emitted correctly. Full round-trip tested via `npm run preview` in a real browser (Claude in Chrome): bumped `dist/version.json` by hand to simulate a new deploy → banner appeared with the exact copy above → clicked "Refresh now" → page reloaded → rebuilt so the embedded version matched → banner correctly disappeared on the next load. Committed (67ba089) and pushed to origin/main; confirmed live on production afterward (`curl` against `installation-tracker-five.vercel.app/version.json` returned a fresh `Last-Modified`, and the deployed JS bundle contains the `update-available-banner` code).
 
 Files: `vite.config.js`, `src/lib/versionCheck.js` (new), `src/main.js`.
+
+### v2-54: CRM / Sale Order unique number visible across Project, Dashboard, Requests, Gantt, Material, Finance (2026-09-29)
+
+Team ask: the "CRM / Sale Order unique number" collected on Main Order / Post-Main Order requests (`POSTPO_FIELDS.crmSoNumber` in `src/lib/constants.js`, required on that form) should also show up wherever that project appears elsewhere in the app — not just on the original Request.
+
+**Gap found**: this field only ever lived in a request's free-form `details` JSON. `confirmConvertRequestToProject()` (`src/sections/requests/requestsTab.js`) built the new project object field-by-field and never copied `crmSoNumber` across — so once a request became a project, the number was effectively lost to every other module.
+
+**Locked with the user** (asked data-model + display-style questions, both answered with the recommended option):
+- Stored as a real column on `projects` (`crm_so_number`), not looked up live from the linked request — so it survives even for a project whose originating request is old/edited, and can be corrected directly on the project.
+- Shown as a small badge next to the project name, same visual pattern as the existing 🔑 access-code pill — not a new dedicated column/section per module.
+
+**Changes**:
+- `supabase/migrations/0024_project_crm_so_number.sql` — nullable `crm_so_number` text column on `projects`.
+- `src/lib/mappers.js` — `crmSoNumber` added to `projectToRow`/`rowToProject`.
+- `src/lib/helpers.js` — new shared `crmSoBadge(p)` helper (returns `''` when the project has none, e.g. never came from a Main/Post-Main Order request).
+- `src/sections/requests/requestsTab.js` — `confirmConvertRequestToProject()` now copies `crmSoNumber` from the request's details onto the new project, so it auto-fills for Main Order / Post-Main Order conversions.
+- `index.html` + `src/sections/projects/addEditProject.js` — new "CRM / Sale Order unique number" field on the Add/Edit Project form (editable, not required — covers projects never created from a request), wired into reset/load/save.
+- Badge wired into every module the team asked for: `projectCards.js` (project card meta row), `dashboardTab.js` (project-wise breakdown row + vendor productivity row), `ganttTab.js` (project name line), `materialTab.js` and `financeTab.js` (project header bar).
+
+**Verified**: migration applied to production (`node scripts/apply-migrations.mjs`, additive nullable column, 1 pending migration applied cleanly). `npm run build` succeeded. Full round-trip verified in a real browser against a **TEST_MODE** build (in-memory data, no production writes) via Claude in Chrome/JS console: logged in as admin, opened Edit on an existing project, set the new field, saved, then confirmed the `SO: <number>` badge rendered correctly after switching to each of Projects, Dashboard, Gantt, Material, and Finance tabs in turn — all 5 confirmed present in the rendered DOM. No console errors. Not yet committed/pushed — holding for final go-ahead since this touches the DB schema and 10 files.

@@ -1,5 +1,5 @@
 import { TODAY } from '../../lib/constants.js';
-import { fmtDate, pct, visibleProjects } from '../../lib/helpers.js';
+import { crmSoBadge, fmtDate, pct, visibleProjects } from '../../lib/helpers.js';
 
 /* ══ GANTT ══ */
 export function renderGantt(){
@@ -32,7 +32,7 @@ export function renderGantt(){
       '</tr>';
     }).join(''):'<tr><td colspan="4" style="color:#888;padding:8px 0">No milestones added yet.</td></tr>';
     return '<div class="proj-card" style="cursor:default;margin-bottom:10px">'+
-      '<div class="proj-name">'+(p.name||'Untitled')+' — '+(p.tower||'')+'</div>'+
+      '<div class="proj-name">'+(p.name||'Untitled')+' — '+(p.tower||'')+' '+crmSoBadge(p)+'</div>'+
       '<div class="proj-sub">'+(p.supervisor&&p.supervisor!=='—'?'👤 '+p.supervisor+' · ':'')+pct(p.installedQty,p.plannedQty)+'% installed'+(p.salesPersonName?' · 👤 Sales: '+p.salesPersonName:'')+'</div>'+
       '<div style="margin-top:8px"><div style="display:flex;justify-content:space-between;font-size:11px;color:#666;margin-bottom:3px"><span>Milestones completed</span><span>'+doneCount+' / '+milestones.length+' ('+msPct+'%)</span></div>'+
         '<div style="height:10px;background:#f0f0f0;border-radius:5px;overflow:hidden"><div style="height:100%;width:'+msPct+'%;background:#1D9E75"></div></div></div>'+
