@@ -5,8 +5,10 @@ import { loadAllData } from './data/loadAllData.js';
 import { showTeamDashboard, restoreTeamSession } from './auth/teamAuth.js';
 import { restoreClientSession } from './auth/clientAuth.js';
 import { restoreVendorSession } from './auth/vendorAuth.js';
+import { initVersionCheck } from './lib/versionCheck.js';
 
 installDomGlobals();
+initVersionCheck();
 
 /* ══ INIT ══ */
 (async function init(){
