@@ -191,17 +191,18 @@ export function renderRequestFields(){
       ? '⚠ Sampling requests have lighter requirements — the visit report fields below are optional for Sampling.'
       : '⚠ <b>Required to mark this visit done:</b> Visit remarks, Measurement — area, and at least 1 photo. Fill these in and Save before clicking "Mark visit done." <span style="opacity:.8">(Geo location is optional for now.)</span>';
     visitCard.classList.remove('hidden');
-    document.getElementById('req-visit-fields-list').innerHTML=VISIT_FIELDS.map(f=>fieldRowHTML(f,state.reqVisitDetails,'reqv')).join('');
+    document.getElementById('req-visit-fields-list').innerHTML=VISIT_FIELDS.map(f=>fieldRowHTML(f,{...state.reqDetails,...state.reqVisitDetails},'reqv')).join('');
     // Visit photos (up to 10), per the doc
     document.getElementById('req-visit-photo-upload').innerHTML=fileUploadRowHTML('req-visit-photos','Visit photos *',10);
     document.getElementById('req-visit-photos').onchange=async function(){
       const files=pickFilesOrWarn(this,10); if(!files) return;
       document.getElementById('req-visit-photos-list').textContent='Uploading '+files.length+' file(s)...';
       const urls=await uploadFiles(files,'visit-reports');
-      state.reqVisitDetails.visitPhotoUrls=[...(state.reqVisitDetails.visitPhotoUrls||[]),...urls];
+      state.reqVisitDetails.visitPhotoUrls=[...(state.reqVisitDetails.visitPhotoUrls||state.reqDetails.visitPhotoUrls||[]),...urls];
       document.getElementById('req-visit-photos-list').textContent=state.reqVisitDetails.visitPhotoUrls.length+' photo(s) uploaded.';
     };
-    document.getElementById('req-geo-result').textContent=state.reqVisitDetails.geoLocation?('📍 Captured: '+state.reqVisitDetails.geoLocation):'';
+    const shownGeo=state.reqVisitDetails.geoLocation||state.reqDetails.geoLocation;
+    document.getElementById('req-geo-result').textContent=shownGeo?('📍 Captured: '+shownGeo):'';
   } else {
     visitCard.classList.add('hidden');
   }
@@ -228,7 +229,10 @@ export function openAddRequest(){
 export function openEditRequest(id){
   const r=state.requests.find(x=>x.id===id); if(!r) return;
   state.editingRequestId=id;
-  state.reqDetails={...r.details}; state.reqVisitDetails={...r.details}; // visit fields stored in same details blob
+  // Visit fields live in the same details blob, but reqVisitDetails must start EMPTY and collect only
+  // what the user edits in the visit section: saveRequest merges it OVER reqDetails, so a full copy
+  // here silently reverted every edit made to a main field (plan.md v2-57).
+  state.reqDetails={...r.details}; state.reqVisitDetails={};
   // Legacy requests saved before v2-36 have no details.scope yet — default to Installation so a
   // simple resave doesn't newly block on a field that didn't exist when they were created.
   if(!state.reqDetails.scope) state.reqDetails.scope='Installation';

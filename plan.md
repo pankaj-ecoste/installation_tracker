@@ -3784,3 +3784,16 @@ Files: `src/sections/alerts.js` (per-alert `key`, `activeAlerts()`, `dismissAler
 **Permanent fix** — migration `0025_atomic_request_conversion.sql` (applied to prod): (1) `projects_access_code_key` unique constraint (verified no duplicates first); (2) `convert_request_to_project(p_request_id, p_project jsonb)` — SECURITY INVOKER so existing RLS still decides who may convert; locks the request, reuses an existing project with the same access code if there is one (heals half-converted requests), otherwise inserts the project from the jsonb, then marks the request converted — all one transaction. Frontend (`requestsTab.js`): `confirmConvertRequestToProject` calls the RPC instead of two writes; the "already exists" branch of `convertRequestToProject` now heals via the RPC and opens the project instead of an alert; shared tail in new `finishConversion()`. `supabaseClient.js`: TEST_MODE mock gained a matching `rpc`. No screens/steps/fields changed for staff.
 
 **Verified**: RPC tested on prod inside a rolled-back transaction (normal insert + repeat-call heal, no duplicate). Browser (TEST_MODE, Claude in Chrome): normal conversion → request Converted, project created with 6 milestones, Edit Project opened; orphan case → no alert, request healed and linked. Prod click-through of the real button not yet done.
+
+
+### v2-57: Request edits to main fields were silently discarded (2026-09-30)
+
+**Report**: site supervisors (and Durgendra when tested as himself) said the Edit Request form "remains as initial" — changes didn't stick.
+
+**Root cause** (present since the first commit, 2026-08-07, affects every role): `openEditRequest` set `state.reqVisitDetails={...r.details}` — a full copy of the whole details blob — while `saveRequest` merges `{...reqDetails,...reqVisitDetails,scope}`, so the stale full copy overwrote every edit made to a main field (Work Order Number, Remarks, Customer Mobile, city, newly uploaded documents…). Save looked successful; reopening showed the old values. Only visit-section fields and visit photos stuck because they write into `reqVisitDetails`. Not an RLS/auth issue (simulated Durgendra's JWT in a rolled-back transaction: update allowed) and not validation (all 32 requests pass the required-field checks).
+
+**Fix** (`requestsTab.js` only, no DB/migration/backfill — the lost edits were never saved): `openEditRequest` starts `reqVisitDetails` as `{}` so it holds only what the user edits in the visit section; the visit section renders from `{...reqDetails,...reqVisitDetails}` so it still shows saved values; visit photos append to the saved list (`reqVisitDetails.visitPhotoUrls||reqDetails.visitPhotoUrls`) and the geo line falls back to the saved value. Add-request flow and all other screens untouched.
+
+**Verified** (TEST_MODE, Claude in Chrome): old code → main-field edit reverts to original after save+reopen (bug reproduced); new code → main edits (remarks, city) and visit edits (visit remarks, area) both persist after reopen. Prod not yet click-tested.
+
+**Logged separately, not fixed**: request-form save errors render at the very bottom of the form, off-screen when scrolled; non-"Remember me" team tokens expire after 12h, after which saves fail with only that hidden message.
