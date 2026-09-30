@@ -910,7 +910,16 @@ export function convertRequestToProject(id){
   // hidden for these; this guard covers any other path that might reach this function.
   if(((r.details||{}).scope||'Installation')==='Only Supply'){ alert('This is an Only Supply request — it stays in the Requests module and cannot be converted into a project.'); return; }
   const accessCode=r.requestNumber.replace(/[^A-Za-z0-9]/g,'').toUpperCase();
-  if(state.projects.find(p=>p.accessCode===accessCode)){ alert('A project with access code "'+accessCode+'" already exists — this request may already be converted.'); return; }
+  if(state.projects.find(p=>p.accessCode===accessCode)){
+    // The project exists but this request was never marked converted (its second write was lost —
+    // plan.md v2-56). Repair the link in one DB call instead of dead-ending on an alert.
+    (async()=>{
+      const {data,error}=await db.rpc('convert_request_to_project',{p_request_id:id,p_project:{}});
+      if(error||!data){ console.error('Heal conversion failed',error); alert('A project with access code "'+accessCode+'" already exists, but this request could not be linked to it. Please tell admin.'); return; }
+      finishConversion(r,data,false);
+    })();
+    return;
+  }
   convertRequestToProject._targetId=id;
   document.getElementById('convert-ms-planned').value=r.plannedVisitDate||new Date().toISOString().slice(0,10);
   document.getElementById('convert-ms-actual').value=r.actualVisitDate||'';
@@ -957,14 +966,20 @@ export async function confirmConvertRequestToProject(){
   // Create the project immediately on click — no separate "Save" step to forget or lose via back button.
   // No client-supplied id — projects.id is a real Postgres identity column, so letting the
   // database assign it atomically avoids two concurrent submissions colliding (see plan.md v2-4).
-  const {data:inserted,error}=await db.from('projects').insert(projectToRow(newProj)).select().single();
-  if(error){ console.error('Supabase insert failed',error); document.getElementById('convert-error').classList.remove('hidden'); document.getElementById('convert-err-msg').textContent='Could not create the project — check console.'; return; }
-  const createdProject=rowToProject(inserted);
-  state.projects.push(createdProject);
-  await updateRequestFields(id,{status:'Converted to Project', linkedProjectId:createdProject.id, convertedAt:new Date().toISOString()});
+  // One DB transaction: inserts the project AND marks this request Converted, so a lost second write
+  // can no longer leave a project with an unconverted request (plan.md v2-56).
+  const {data:inserted,error}=await db.rpc('convert_request_to_project',{p_request_id:id,p_project:projectToRow(newProj)});
+  if(error||!inserted){ console.error('Supabase convert failed',error); document.getElementById('convert-error').classList.remove('hidden'); document.getElementById('convert-err-msg').textContent='Could not create the project — check console.'; return; }
+  finishConversion(r,inserted,true);
+}
+function finishConversion(r,insertedRow,closeConvertPanel){
+  const createdProject=rowToProject(insertedRow);
+  if(!state.projects.find(p=>p.id===createdProject.id)) state.projects.push(createdProject);
+  const idx=state.requests.findIndex(x=>x.id===r.id);
+  if(idx>=0) state.requests[idx]={...state.requests[idx],status:'Converted to Project',linkedProjectId:createdProject.id,convertedAt:new Date().toISOString()};
   logActivity('Project converted', r.requestNumber+' → '+createdProject.name+' — '+createdProject.tower);
-  renderMetrics(); renderProjects(); updateBell();
-  closePanel('panel-convert-request');
+  renderRequests(); renderMetrics(); renderProjects(); updateBell();
+  if(closeConvertPanel) closePanel('panel-convert-request');
   showSection('team'); setTab('projects');
   openEditProject(createdProject.id);
 }

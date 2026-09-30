@@ -93,7 +93,21 @@ export function makeMockClient(seedProjects, seedDpr, seedTeam, seedLots){
       getPublicUrl(path){ return {data:{publicUrl:'about:blank#test-file/'+path}}; }
     };}
   };
-  return {from, auth, storage};
+  // Mirrors the convert_request_to_project Postgres function (migration 0025) for TEST_MODE only.
+  async function rpc(name,args){
+    if(name!=='convert_request_to_project') return {data:null,error:{message:'Unknown rpc (test mode): '+name}};
+    const req=tables.requests.find(r=>r.id===args.p_request_id);
+    if(!req) return {data:null,error:{message:'Request not found (test mode)'}};
+    const code=String(req.request_number||'').replace(/[^A-Za-z0-9]/g,'').toUpperCase();
+    let proj=tables.projects.find(p=>p.access_code===code);
+    if(!proj){
+      proj={...args.p_project,access_code:code,id:(tables.projects.length?Math.max(...tables.projects.map(p=>p.id||0)):0)+1};
+      tables.projects.push(proj);
+    }
+    Object.assign(req,{status:'Converted to Project',linked_project_id:proj.id,converted_at:req.converted_at||new Date().toISOString()});
+    return {data:proj,error:null};
+  }
+  return {from, auth, storage, rpc};
 }
 
 export let db = TEST_MODE
