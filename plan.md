@@ -3797,3 +3797,48 @@ Files: `src/sections/alerts.js` (per-alert `key`, `activeAlerts()`, `dismissAler
 **Verified** (TEST_MODE, Claude in Chrome): old code → main-field edit reverts to original after save+reopen (bug reproduced); new code → main edits (remarks, city) and visit edits (visit remarks, area) both persist after reopen. Prod not yet click-tested.
 
 **Logged separately, not fixed**: request-form save errors render at the very bottom of the form, off-screen when scrolled; non-"Remember me" team tokens expire after 12h, after which saves fail with only that hidden message.
+
+### v2-58: Weekly "Installation Scoring Report" in Reports (2026-10-01) — flow discussed & locked, NOT built yet
+Management ask (sheet shared as `WhatsApp Image 2026-09-30 at 6.49.59 PM.jpeg`): a weekly report inside the admin-only **Reports** module
+that tracks what each manager's team promised vs. delivered. Layout: title "INSTALLATION SCORING REPORT — <Month> Week N (<dd Mon – dd Mon yyyy>)",
+columns **Name | Target | Day 1 … Day 6 (Mon–Sat) | Total %**, one row per manager: **Shashank, Aditya** (DPR-based) and **Neelam** (SOD/EOD-based).
+The numbers in the shared sheet (56/60/73 etc.) were sample data only. Generated for every week (week picker). Sunday/holidays are off.
+
+**General rule (all rows):** a day with no data shows blank and is left out of Target and %. No holiday calendar is needed.
+**Week naming:** weeks are Mon–Sat; a week belongs to the month its **Saturday** falls in (21–26 Sep → "September Week 4").
+
+**Rows 1–2 — Shashank & Aditya (from `dpr_log`)**
+- Team: Shashank → Durgendra, Ravi, Karan, Faizan. Aditya → Subham, Mahesh. A supervisor may have several projects; everything is summed
+  across all of a manager's supervisors and all their projects.
+- **Day N** = sum of every product's `todayInstalled` on that date, over all DPRs filed by the manager's supervisors (actual installed qty).
+- **Target** = sum over the manager's projects of that week's **locked weekly projection** (`next_week_projection_qty`, one value per project).
+- **Total %** = sum(Day 1..6) ÷ Target × 100. Blank if the Target is missing ("no projection filed"). Not capped at 100.
+- Daily `today_projection_qty` is not shown in the cells (only used by v2-52 cards).
+
+**Row 3 — Neelam (from `sod_eod_log`, In Progress group only)**
+- **Day N** = "get / total": that day's In Progress score / In Progress max (2 × `total_in_progress` stamped on the day's rows — the max is frozen per day, so
+  a project completing mid-week lowers the total only from that day on).
+- **Target** = cumulative: running sum of each logged day's In Progress total (grows as the week goes on). **Total %** = sum(gets) ÷ sum(totals) × 100, weekly final only.
+- No negatives possible (v2-46). Days with no entries blank. Days with no group split (19/20 Sept) blank.
+
+**Weekly projection lock (DPR form change)** — makes the Target a single, unchangeable promise per project per week:
+- Once any DPR gives a project a `next_week_projection_qty`, that field is **read-only for that project until the next Saturday**; on Saturday it unlocks.
+- Value filed Mon–Fri counts for the **current** week; filed **Saturday** counts for the **next** week (Saturday is both the unlock day and the day next week's number is entered).
+- **Admin can override** a locked value (mistake fix); record who/when. Older weeks have no locked values → "no projection filed", no backfill.
+- Enforce in the DB (trigger), not just the form — same lesson as the other client-supplied-value bugs.
+
+**Still to confirm / decide at build time**
+1. ~~Where the manager → supervisor mapping lives~~ **LOCKED (user, 2026-10-01): set by the admin.** A `manager` column on `team_members`, editable by admin in the Team tab; DPRs are matched by the `dpr_log.supervisor` name — check name matching against real rows first.
+2. Total % over 100% shown as-is (assumed yes).
+3. Exact lock-window edge cases once the trigger is written (Sat vs Sun, edits to an old DPR).
+
+**Build notes (2026-10-01) — deviations from the plan above, decided while building because this is a live app:**
+- The manager mapping is NOT a column on `team_members` (that table is read by every login via `loadAllData()` and has a column-level grant list; a new column there risks the live login path). Instead a new admin-only table `report_team_map` (migration 0026, seeded Durgendra/Ravi/Karan/Faizan → Shashank, Shubham/Mahesh → Aditya) plus a "Who reports to whom" panel inside the report itself — still set by the admin, not in the Team tab.
+- Projection lock is enforced in the DPR form + save rule only (shared `standingProjection()` in `src/lib/installationScoring.js`), NOT by a DB trigger: `dpr_log.date` is free text ("01 Sept 2026") and a faulty trigger on `dpr_log` would block every DPR save. Possible later hardening.
+- A projection of **0 counts as not filed** (supervisors often type 0 — 5 of the first 9 filings), so it never locks the week or sets the Target.
+- The report's Target cell for Neelam shows cumulative **get / total**; Total % = get ÷ total × 100.
+- Standing projection = latest filed non-zero value per project for the target week; admin override = a newer filing. Attributed to the manager of whoever filed it; supervisors with DPRs that week but no manager are listed in a warning under the table.
+- Files: `supabase/migrations/0026_report_team_map.sql`, `src/lib/installationScoring.js` (pure rules), `src/sections/reports/installationScoringReport.js` (screen), `reportsTab.js` (registry line), `domGlobals.js` (3 handlers), `sodEodReport.js` (`daySummary` now exported, no behaviour change), `dprTab.js` (lock + hint + save rule).
+- Verified in a TEST_MODE browser: title/week buttons (21–26 Sep → "September Week 4"), both manager rows against hand calculations, Neelam's row (Not Started excluded, legacy day blank, cumulative target), lock (non-admin disabled + value shown, clears on a project with no lock, admin can override and the report uses the newer value, non-admin save stores blank). Pure rules also run against real production DPRs (read-only).
+
+**Status:** built, verified in TEST_MODE — migration 0026 NOT yet applied to prod, nothing committed yet. Files likely: `src/sections/reports/reportsTab.js` (registry), new `src/sections/reports/installationScoringReport.js`, `src/sections/dpr/dprTab.js` (lock), `src/lib/mappers.js`, a new migration for the mapping + lock trigger.

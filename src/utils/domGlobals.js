@@ -25,6 +25,7 @@ import { fieldRowHTML, captureDPRArrivalGeoLocation, captureGeoLocation, reqFiel
 import { renderTeamMgmt, togglePerm, openAddMember, openEditMember, updateRolePreview, saveMember, toggleMemberStatus, deleteMember } from '../sections/team/teamMgmtTab.js';
 import { renderVendorPortal } from '../sections/vendorPortal/vendorPortal.js';
 import { renderReports, openReport, closeReport } from '../sections/reports/reportsTab.js';
+import { scoringWeekShift, scoringWeekThis, scoringSetManager } from '../sections/reports/installationScoringReport.js';
 import { sodEodFormChanged, sodEodSlotChanged, saveSodEodEntry, toggleSodEodDay, sodEodSearchChanged } from '../sections/reports/sodEodReport.js';
 import { cncFilterChanged, openCncListPopup, openCncRunDaysPopup, openCncOrderDetail, closeCncTopPopup, cncRunDaysTabChanged, cncListSearchChanged, cncListSortChanged, exportCncListCSV } from '../sections/reports/cncDashboardTab.js';
 import { updateNewVendorBadge, renderNewVendors, markVendorReviewed, markVendorApprovedByShashank } from '../sections/vendors/newVendorsTab.js';
@@ -279,6 +280,9 @@ export function installDomGlobals(){
     cncListSortChanged,
     exportCncListCSV,
     sodEodFormChanged,
+    scoringWeekShift,
+    scoringWeekThis,
+    scoringSetManager,
     saveSodEodEntry,
     sodEodSlotChanged,
     toggleSodEodDay,

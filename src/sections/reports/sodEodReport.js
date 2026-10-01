@@ -70,7 +70,7 @@ function todayGroupOf(name){
 //   Today: live project set (see todayGroupOf for which group each project is in), so it always equals the top card.
 //   Earlier days: the group counts the database froze when the day's rows were saved (total_in_progress /
 //   total_not_started), so a later status change never rewrites history.
-function daySummary(day){
+export function daySummary(day){
   const rows=state.sodEodLog.filter(r=>r.log_date===day);
   const score=rows.reduce((a,r)=>a+rowScore(r),0);
   if(day===todayStr()){

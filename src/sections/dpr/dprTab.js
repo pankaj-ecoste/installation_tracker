@@ -6,6 +6,7 @@ import { CHECKLIST_DEFS, blankChecklistData, checklistDoneItems, checklistTotalI
 import { daysDiff, fmt, fmtDate, visibleProjects } from '../../lib/helpers.js';
 import { projectHasChecklistAwaitingReview } from '../../lib/attentionKeys.js';
 import { dprToRow, lotToRow, rowToDpr } from '../../lib/mappers.js';
+import { projectionWeekFor, standingProjection, toYmd } from '../../lib/installationScoring.js';
 import { pickFilesOrWarn, uploadFiles, uploadFilesWithNames } from '../../lib/uploads.js';
 import { updateBell } from '../alerts.js';
 import { renderMaterial } from '../material/materialTab.js';
@@ -219,7 +220,37 @@ export function openEditDPR(id){
     document.getElementById('dpr-photos-list').textContent=state.dprPhotoUrls.length?state.dprPhotoUrls.length+' photo(s) already attached (upload more to add, existing ones are kept).':'';
     state.dprReportPdfUrl=d.reportPdfUrl||'';
     document.getElementById('dpr-report-pdf-list').textContent=state.dprReportPdfUrl?'✓ Already attached (choose a new file to replace).':'';
+    applyProjectionLock();
   },50);
+}
+
+// v2-58 WEEKLY PROJECTION LOCK. Once a project has a "Next week projection" for a week, that figure is locked until
+// the following Saturday so the promise management scores against cannot drift. Admin can still override. The rule
+// itself (which week a filing belongs to, which value stands) lives in lib/installationScoring.js and is shared with
+// the Installation Scoring Report. A blank or 0 never locks anything.
+function projectionLockState(){
+  const projId=parseInt(document.getElementById('dpr-proj')?.value);
+  const filed=toYmd(document.getElementById('dpr-date')?.value);
+  const standing=(projId&&filed)?standingProjection(state.dprLog,projId,projectionWeekFor(filed)):null;
+  return {standing,locked:!!standing,isAdmin:!!state.currentUser&&state.currentUser.role==='admin'};
+}
+function applyProjectionLock(){
+  const input=document.getElementById('dpr-next-week-projection'); if(!input) return;
+  const hint=document.getElementById('dpr-nwp-hint');
+  const {standing,locked,isAdmin}=projectionLockState();
+  if(!locked){
+    // only clear what this function filled in itself — never what the supervisor typed
+    if(input.dataset.lockFilled){ input.value=''; delete input.dataset.lockFilled; }
+    input.disabled=false; if(hint) hint.innerHTML=''; return;
+  }
+  const info=fmt(standing.value)+' sq ft, set by '+(standing.supervisor||'—')+' on '+standing.date;
+  if(isAdmin){
+    input.disabled=false;
+    if(hint) hint.innerHTML='<span style="color:#7a4f00">🔒 Already set for this week: '+info+'. As admin you can change it by entering a new value.</span>';
+    return;
+  }
+  input.value=standing.value; input.dataset.lockFilled='1'; input.disabled=true;
+  if(hint) hint.innerHTML='<span style="color:#7a4f00">🔒 Locked for this week: '+info+'. It unlocks on Saturday — ask an admin if it needs correcting.</span>';
 }
 
 export function renderDPRForm(selectedProjId){
@@ -269,7 +300,7 @@ export function renderDPRForm(selectedProjId){
       '</div>'+
       '<div class="form-row" style="margin-top:10px">'+
         '<div class="form-group"><label class="form-label">Today projection qty (sq ft) *</label><input class="form-input" type="number" id="dpr-today-projection" min="0" placeholder="e.g. 500"></div>'+
-        '<div class="form-group"><label class="form-label">Next week projection qty (sq ft)</label><input class="form-input" type="number" id="dpr-next-week-projection" min="0" placeholder="Optional — e.g. 3000"></div>'+
+        '<div class="form-group"><label class="form-label">Next week projection qty (sq ft)</label><input class="form-input" type="number" id="dpr-next-week-projection" min="0" placeholder="Optional — e.g. 3000"><div id="dpr-nwp-hint" style="font-size:11px;margin-top:4px"></div></div>'+
       '</div>'+
       '<div class="form-row" style="margin-top:10px">'+
         '<div class="form-group"><label class="form-label">Photos (up to 10 files)</label><input type="file" id="dpr-photos" multiple accept="image/*" style="font-size:12px"><div id="dpr-photos-list" style="font-size:11px;color:#1D9E75;margin-top:4px"></div></div>'+
@@ -337,6 +368,7 @@ export function renderDPRForm(selectedProjId){
     '</div>';
 
   renderDPRProducts();
+  applyProjectionLock();
   CHECKLIST_DEFS.filter(def=>isChecklistActive(def,proj)).forEach(def=>renderDPRChecklist(def.key));
   state.dprPendingConstraints=[];
   renderConstraintList('dpr-constraints-list',state.dprPendingConstraints,'removeDPRConstraint');
@@ -620,6 +652,14 @@ export async function saveDPR(){
     const balancePct=r.totalQty>0?Math.round((balanceQty/r.totalQty)*100):0;
     return {...r,balanceQty,balancePct};
   });
+  // Locked week (see projectionLockState): a non-admin never writes the figure again — the entry that already holds
+  // it keeps it, every other DPR for that project saves it blank so the one standing value is never duplicated.
+  let nextWeekQty=dprNextWeekProjectionRaw===''?null:(parseInt(dprNextWeekProjectionRaw)||0);
+  const projLock=projectionLockState();
+  if(projLock.locked&&!projLock.isAdmin){
+    const existing=state.editingDprId?state.dprLog.find(x=>x.id===state.editingDprId):null;
+    nextWeekQty=existing&&existing.nextWeekProjectionQty!=null?existing.nextWeekProjectionQty:null; // an edit keeps what the entry already held
+  }
   const newDpr={
     projId,
     project:p?(p.name+' — '+p.tower):'Unknown',
@@ -633,7 +673,7 @@ export async function saveDPR(){
     actualMp:parseInt(document.getElementById('dpr-manpower').value)||0,
     manpower:parseInt(document.getElementById('dpr-manpower').value)||0,
     todayProjectionQty:parseInt(dprTodayProjectionRaw)||0,
-    nextWeekProjectionQty:dprNextWeekProjectionRaw===''?null:(parseInt(dprNextWeekProjectionRaw)||0),
+    nextWeekProjectionQty:nextWeekQty,
     photos:state.dprPhotoUrls.length,
     photoUrls:state.dprPhotoUrls,
     reportPdfUrl:state.dprReportPdfUrl,
