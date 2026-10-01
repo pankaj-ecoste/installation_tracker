@@ -3841,4 +3841,10 @@ The numbers in the shared sheet (56/60/73 etc.) were sample data only. Generated
 - Files: `supabase/migrations/0026_report_team_map.sql`, `src/lib/installationScoring.js` (pure rules), `src/sections/reports/installationScoringReport.js` (screen), `reportsTab.js` (registry line), `domGlobals.js` (3 handlers), `sodEodReport.js` (`daySummary` now exported, no behaviour change), `dprTab.js` (lock + hint + save rule).
 - Verified in a TEST_MODE browser: title/week buttons (21–26 Sep → "September Week 4"), both manager rows against hand calculations, Neelam's row (Not Started excluded, legacy day blank, cumulative target), lock (non-admin disabled + value shown, clears on a project with no lock, admin can override and the report uses the newer value, non-admin save stores blank). Pure rules also run against real production DPRs (read-only).
 
-**Status:** built, verified in TEST_MODE — migration 0026 NOT yet applied to prod, nothing committed yet. Files likely: `src/sections/reports/reportsTab.js` (registry), new `src/sections/reports/installationScoringReport.js`, `src/sections/dpr/dprTab.js` (lock), `src/lib/mappers.js`, a new migration for the mapping + lock trigger.
+**Follow-up (2026-10-01, after the user compared the live numbers):** a DPR lists one line per product and framing items (MS pipe) repeat the main
+product's area, so summing the lines double-counted it (Icon 989+989, Bhattcorp 718+718 → Aditya's Thursday showed 3,414 instead of 1,707). Decided with the
+user: **a DPR counts as its LARGEST single product line** (option b), not the sum. Mid-week projections stay counted for the **current** week (user confirmed).
+The existing DPR cards / project installed-qty rollup still sum all lines — a pre-existing behaviour, deliberately not touched; logged here as an adjacent finding.
+Verified against production DPRs (read-only): Aditya Thu 1,707; Shashank 878 / 100 / 580 / 176 for Mon–Thu.
+
+**Status:** built, verified, migration 0026 applied to prod, committed and pushed (78125a0 + follow-up). Prod admin-path check by the user pending. Files likely: `src/sections/reports/reportsTab.js` (registry), new `src/sections/reports/installationScoringReport.js`, `src/sections/dpr/dprTab.js` (lock), `src/lib/mappers.js`, a new migration for the mapping + lock trigger.

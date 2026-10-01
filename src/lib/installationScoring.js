@@ -81,7 +81,9 @@ export function managerOfSupervisor(supervisorText,teamMembers,teamMap){
   return (teamMap||{})[m?String(m.username).toLowerCase():s]||null;
 }
 
-const installedOn=d=>(d.products||[]).reduce((a,r)=>a+(Number(r.todayInstalled)||0),0);
+// A DPR lists one line per product, and framing items (e.g. an MS pipe) repeat the same area as the main product — adding
+// the lines double-counts it (Icon 989 + 989, Bhattcorp 718 + 718). So a DPR counts as its LARGEST single product line.
+const installedOn=d=>(d.products||[]).reduce((a,r)=>Math.max(a,Number(r.todayInstalled)||0),0);
 
 // One manager's DPR-based row for a Mon–Sat week.
 //   days[i]  = sq ft installed that day by the manager's whole team (null when the team filed no DPR that day)
