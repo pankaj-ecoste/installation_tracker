@@ -65,7 +65,7 @@ function draw(){
     const r=dprRow(m.key,weekStart,state.dprLog,members,teamMap);
     return '<tr style="background:#e2efda">'+
       '<td style="'+TD+'font-weight:600;text-align:left">'+esc(m.label)+'</td>'+
-      '<td style="'+TD+'">'+(r.target==null?'<span style="color:#999;font-size:11px">no projection filed</span>':num(r.target))+'</td>'+
+      '<td style="'+TD+'">'+(r.target==null?'':num(r.target))+'</td>'+
       r.days.map(v=>'<td style="'+TD+'">'+(v==null?'':num(v))+'</td>').join('')+
       '<td style="'+TD+'font-weight:700">'+pct(r.pct)+'</td></tr>';
   });
@@ -102,7 +102,7 @@ function draw(){
         '<tr>'+dayHead+'</tr>'+
       '</thead><tbody>'+rows.join('')+'</tbody></table></div>'+
     '<div style="font-size:11px;color:#777;margin-top:8px;line-height:1.5">'+
-      'Shashank &amp; Aditya: sq ft installed per day by their whole team (from DPRs); Target = the weekly projection locked for each project that week; Total % = installed ÷ Target. '+
+      'Shashank &amp; Aditya: sq ft installed per day by their whole team (from DPRs); Target = the team weekly committed qty (sum of the daily today-projection figures, Monday up to the latest day); Total % = installed ÷ Target. '+
       'Neelam: SOD/EOD In Progress score / maximum, cumulative through the week. Days with no entries stay blank and are left out.'+
     '</div>'+
     (unassigned.length?'<div style="font-size:12px;color:#a06a00;background:#fff8e6;border-radius:6px;padding:8px 10px;margin-top:10px">⚠ DPRs this week from supervisors not assigned to a manager (not counted in any row): <b>'+unassigned.map(esc).join(', ')+'</b>. Assign them below.</div>':'')+

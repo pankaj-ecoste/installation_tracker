@@ -3847,4 +3847,14 @@ user: **a DPR counts as its LARGEST single product line** (option b), not the su
 The existing DPR cards / project installed-qty rollup still sum all lines — a pre-existing behaviour, deliberately not touched; logged here as an adjacent finding.
 Verified against production DPRs (read-only): Aditya Thu 1,707; Shashank 878 / 100 / 580 / 176 for Mon–Thu.
 
-**Status:** built, verified, migration 0026 applied to prod, committed and pushed (78125a0 + follow-up). Prod admin-path check by the user pending. Files likely: `src/sections/reports/reportsTab.js` (registry), new `src/sections/reports/installationScoringReport.js`, `src/sections/dpr/dprTab.js` (lock), `src/lib/mappers.js`, a new migration for the mapping + lock trigger.
+**Follow-up 2 (2026-10-01, team feedback — SUPERSEDES the Target rule and the projection lock above):** the team said the Target must be the
+**Weekly Committed Qty (Mon–Sat)** shown on the DPR cards (screenshot `Screenshot 2026-10-01 181803.png`), not the next-week projection. Decided with the user:
+- **Target (Shashank, Aditya)** = sum of every `today_projection_qty` the manager's team filed from Monday up to the latest day — grows through the week, like Neelam's
+  cumulative row. Total % = installed ÷ Target (blank when the Target is 0 or nothing is filed). Installed still = largest product line per DPR.
+- **The weekly projection lock was REMOVED** from the DPR form (`dprTab.js` restored to its pre-v2-58 state, i.e. exactly as at 880f9f8); its only purpose was to fix the old
+  Target. `Next week projection` stays an optional note on the form and is no longer used by any report. The unused lock helpers were deleted from `installationScoring.js`.
+- "no projection filed" text is gone (the Target is simply blank before any DPR).
+- Live-data check (read-only), week 28 Sep–3 Oct so far: Shashank installed 1,734 / committed 1,949 = 88.97%; Aditya 1,707 / 150 = 1,138% (his two big Thursday entries were whole projects entered in one DPR — a data issue).
+- Lesson: ask where the Target figure comes from *on the existing screen* before designing a new rule — the figure already existed on the DPR card (v2-52).
+
+**Status:** built, verified, migration 0026 applied to prod; committed and pushed (78125a0, 4543868, and this follow-up). Prod admin-path check by the user pending. Files likely: `src/sections/reports/reportsTab.js` (registry), new `src/sections/reports/installationScoringReport.js`, `src/sections/dpr/dprTab.js` (lock), `src/lib/mappers.js`, a new migration for the mapping + lock trigger.

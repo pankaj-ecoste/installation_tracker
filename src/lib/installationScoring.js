@@ -48,30 +48,6 @@ export function weekTitle(monday){
   return 'INSTALLATION SCORING REPORT — '+monthName+' Week '+n+' ('+short(mon)+' – '+short(sat)+' '+sat.getFullYear()+')';
 }
 
-// WEEKLY PROJECTION LOCK. A "next week projection" belongs to the week it is FOR:
-//   filed Mon–Fri  → the current week;   filed Saturday (or Sunday) → the week that starts the following Monday.
-// So a value filed on Saturday 26 Sep or Monday 28 Sep is for the week of 28 Sep, and from Saturday 3 Oct the
-// next one can be entered. Returns the Monday of the week the projection is for.
-export function projectionWeekFor(filedYmd){
-  const day=partsOf(filedYmd).getDay();
-  if(day===6) return addDays(filedYmd,2);
-  if(day===0) return addDays(filedYmd,1);
-  return mondayOf(filedYmd);
-}
-
-// The projection that currently stands for one project in one target week: the LATEST filed non-blank value
-// (an admin override is simply a newer filing). A blank or 0 does not count as filed — supervisors often type 0 just to
-// move on, and that must not lock the week at 0. `excludeId` skips a DPR that is being edited right now.
-export function standingProjection(dprLog,projId,targetMonday,excludeId){
-  let best=null;
-  (dprLog||[]).forEach(d=>{
-    if(d.projId!==projId||d.id===excludeId||!(Number(d.nextWeekProjectionQty)>0)) return;
-    const filed=toYmd(d.date); if(!filed||projectionWeekFor(filed)!==targetMonday) return;
-    if(!best||filed>best.filed||(filed===best.filed&&(d.id||0)>(best.id||0))) best={filed,id:d.id,value:Number(d.nextWeekProjectionQty)||0,supervisor:d.supervisor,date:d.date};
-  });
-  return best;
-}
-
 // Which report row a DPR's supervisor rolls up into. dpr_log.supervisor is free text — sometimes the username
 // ("durgendra"), sometimes the display name ("Shubham Salvi"), in any case — so match either, then look the
 // username up in the admin-set map ({username: managerKey}). null = not assigned to a manager.
@@ -87,22 +63,17 @@ const installedOn=d=>(d.products||[]).reduce((a,r)=>Math.max(a,Number(r.todayIns
 
 // One manager's DPR-based row for a Mon–Sat week.
 //   days[i]  = sq ft installed that day by the manager's whole team (null when the team filed no DPR that day)
-//   target   = sum over projects of the standing projection for this week (null when nothing was filed)
-//   pct      = sum(days) ÷ target × 100 (null when there is no target or no installed figure yet)
+//   target   = Weekly Committed Qty: the sum of every "today projection qty" the team filed from Monday up to the latest
+//              day, so it grows through the week (same figure as the DPR cards' Weekly Committed Qty; null before any DPR)
+//   pct      = sum(days) ÷ target × 100 (null when the target is 0 or nothing has been filed yet)
 export function dprRow(managerKey,monday,dprLog,teamMembers,teamMap){
   const days=weekDays(monday);
   const mine=(dprLog||[]).filter(d=>managerOfSupervisor(d.supervisor,teamMembers,teamMap)===managerKey);
-  const cells=days.map(day=>{
-    const rows=mine.filter(d=>toYmd(d.date)===day);
-    return rows.length?rows.reduce((a,d)=>a+installedOn(d),0):null;
-  });
-  // one standing value per project, attributed to the manager of whoever filed it
-  const byProj={};
-  (dprLog||[]).forEach(d=>{ if(Number(d.nextWeekProjectionQty)>0&&!(d.projId in byProj)) byProj[d.projId]=standingProjection(dprLog,d.projId,monday); });
-  let target=null;
-  Object.values(byProj).forEach(b=>{ if(b&&managerOfSupervisor(b.supervisor,teamMembers,teamMap)===managerKey) target=(target||0)+b.value; });
+  const inWeek=day=>mine.filter(d=>toYmd(d.date)===day);
+  const cells=days.map(day=>{ const rows=inWeek(day); return rows.length?rows.reduce((a,d)=>a+installedOn(d),0):null; });
   const sum=cells.reduce((a,v)=>a+(v||0),0);
   const any=cells.some(v=>v!==null);
+  const target=any?days.reduce((a,day)=>a+inWeek(day).reduce((b,d)=>b+(Number(d.todayProjectionQty)||0),0),0):null;
   return {days:cells,target,sum,pct:(target&&any)?sum/target*100:null};
 }
 
