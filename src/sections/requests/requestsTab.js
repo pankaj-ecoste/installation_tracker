@@ -995,7 +995,7 @@ export function exportProjectsCSV(){
   const header=['Access Code','Project Name','Tower/Block','Developer','City','State','Status','Supervisor','Planned Qty (sqft)','Installed Qty (sqft)','JMR Qty','PO Qty','SO Qty','Start Date','Committed Date','Days Available','Installation Commencement Date'];
   // v2-59: latest constraint / snag / stalled milestone / comment / uploaded files per project.
   // Constraint + snag prefer the latest OPEN item, falling back to the latest overall.
-  header.push('Latest Constraint','Latest Snag Point','Latest Stalled Milestone','Feedback and Notes','Uploaded Files');
+  header.push('Vendor','Latest Constraint','Latest Snag Point','Latest Stalled Milestone','Feedback and Notes','Uploaded Files');
   const latestOpen=(list,isOpen)=>{ const l=list||[]; for(let i=l.length-1;i>=0;i--) if(isOpen(l[i])) return l[i]; return l[l.length-1]; };
   const today=new Date().toISOString().slice(0,10);
   const extra=p=>{
@@ -1003,7 +1003,9 @@ export function exportProjectsCSV(){
     const s=latestOpen(p.snags,x=>x.status==='open');
     const stalled=(p.milestones||[]).filter(m=>!m.actual&&m.planned&&m.planned<today).sort((a,b)=>a.planned<b.planned?-1:1)[0];
     const cm=(p.comments||[])[(p.comments||[]).length-1];
+    const vn=p.vendor&&p.vendor!=='—'?p.vendor:(p.vendors||[]).map(v=>v.name).filter(Boolean).join(', ');
     return [
+      vn,
       c?c.text+' ('+c.status+(c.date?', '+c.date:'')+')':'',
       s?[s.description,s.location,s.severity,s.status].filter(Boolean).join(' · ')+(s.raisedDate?' ('+s.raisedDate+')':''):'',
       stalled?stalled.label+' (planned '+stalled.planned+', '+daysDiff(stalled.planned,today)+'d overdue)':'',

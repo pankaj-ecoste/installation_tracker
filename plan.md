@@ -3864,3 +3864,4 @@ Frontend-only (`exportProjectsCSV` in `src/sections/requests/requestsTab.js`); n
 Added: Latest Constraint, Latest Snag Point (latest **open** item, else latest overall), Latest Stalled Milestone (most overdue; same rule as Alerts), Feedback and Notes (latest comment), Uploaded Files (`projectDocs` as `name: URL` joined by ` | `).
 Import ignores the extra headers. Decided with user: "go with your recommendations".
 **Status:** built (vite build passes), committed & pushed; browser export check NOT yet done — prod-unverified.
+**Follow-up (2026-10-05):** added a **Vendor** column (card's `p.vendor`, falling back to `p.vendors[].name`) before Latest Constraint. Frontend-only; same file. Prod-unverified.
