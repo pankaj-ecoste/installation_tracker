@@ -3858,3 +3858,9 @@ Verified against production DPRs (read-only): Aditya Thu 1,707; Shashank 878 / 1
 - Lesson: ask where the Target figure comes from *on the existing screen* before designing a new rule — the figure already existed on the DPR card (v2-52).
 
 **Status:** built, verified, migration 0026 applied to prod; committed and pushed (78125a0, 4543868, and this follow-up). Prod admin-path check by the user pending. Files likely: `src/sections/reports/reportsTab.js` (registry), new `src/sections/reports/installationScoringReport.js`, `src/sections/dpr/dprTab.js` (lock), `src/lib/mappers.js`, a new migration for the mapping + lock trigger.
+
+### v2-59: All Projects export — 5 extra columns (2026-10-05)
+Frontend-only (`exportProjectsCSV` in `src/sections/requests/requestsTab.js`); no server/DB change — all data already on the project row.
+Added: Latest Constraint, Latest Snag Point (latest **open** item, else latest overall), Latest Stalled Milestone (most overdue; same rule as Alerts), Feedback and Notes (latest comment), Uploaded Files (`projectDocs` as `name: URL` joined by ` | `).
+Import ignores the extra headers. Decided with user: "go with your recommendations".
+**Status:** built (vite build passes), committed & pushed; browser export check NOT yet done — prod-unverified.

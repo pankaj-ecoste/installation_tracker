@@ -993,7 +993,26 @@ export function exportProjectsCSV(){
   if(!vp.length){ alert('No projects to export.'); return; }
   const cols=['accessCode','name','tower','developer','city','state','status','supervisor','plannedQty','installedQty','jmrQty','poQty','soQty','startDate','committedDate','daysAvailable','installCommencementDate'];
   const header=['Access Code','Project Name','Tower/Block','Developer','City','State','Status','Supervisor','Planned Qty (sqft)','Installed Qty (sqft)','JMR Qty','PO Qty','SO Qty','Start Date','Committed Date','Days Available','Installation Commencement Date'];
-  const rows=[header.join(',')].concat(vp.map(p=>cols.map(c=>'"'+String(p[c]||'').replace(/"/g,'""')+'"').join(',')));
+  // v2-59: latest constraint / snag / stalled milestone / comment / uploaded files per project.
+  // Constraint + snag prefer the latest OPEN item, falling back to the latest overall.
+  header.push('Latest Constraint','Latest Snag Point','Latest Stalled Milestone','Feedback and Notes','Uploaded Files');
+  const latestOpen=(list,isOpen)=>{ const l=list||[]; for(let i=l.length-1;i>=0;i--) if(isOpen(l[i])) return l[i]; return l[l.length-1]; };
+  const today=new Date().toISOString().slice(0,10);
+  const extra=p=>{
+    const c=latestOpen(p.constraints,x=>x.status==='open');
+    const s=latestOpen(p.snags,x=>x.status==='open');
+    const stalled=(p.milestones||[]).filter(m=>!m.actual&&m.planned&&m.planned<today).sort((a,b)=>a.planned<b.planned?-1:1)[0];
+    const cm=(p.comments||[])[(p.comments||[]).length-1];
+    return [
+      c?c.text+' ('+c.status+(c.date?', '+c.date:'')+')':'',
+      s?[s.description,s.location,s.severity,s.status].filter(Boolean).join(' · ')+(s.raisedDate?' ('+s.raisedDate+')':''):'',
+      stalled?stalled.label+' (planned '+stalled.planned+', '+daysDiff(stalled.planned,today)+'d overdue)':'',
+      cm?(cm.author?cm.author+': ':'')+cm.text+(cm.time?' ('+cm.time+')':''):'',
+      (p.projectDocs||[]).map((d,i)=>{ const o=d&&typeof d==='object'; return (o&&d.name?d.name+': ':'')+(o?d.url:d); }).join(' | ')
+    ];
+  };
+  const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const rows=[header.join(',')].concat(vp.map(p=>cols.map(c=>q(p[c]||'')).concat(extra(p).map(q)).join(',')));
   const blob=new Blob([rows.join('\n')],{type:'text/csv'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob); a.download='projects_export.csv'; a.click();
