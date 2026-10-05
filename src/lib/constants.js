@@ -260,9 +260,12 @@ export function notifyJMRUpload(p, urls){
 }
 
 export const INDIA_STATES=['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Delhi','Jammu and Kashmir','Ladakh','Chandigarh','Puducherry'];
+// v2-60: product the request is for — mandatory on every request type.
+export const REQUEST_FOR_OPTIONS=['Grille 3.0','Lamora','Promax','Duracap'];
 export const PREPO_FIELDS = [
   {key:'salesName',label:'Sales team name',required:true},
   {key:'salesEmail',label:'Sales team email',required:true},
+  {key:'requestFor',label:'Request For',type:'select',options:REQUEST_FOR_OPTIONS,required:true},
   {key:'developerName',label:'Developer name',required:true},
   {key:'contactPerson',label:'Client representative name',required:true},
   {key:'mobile',label:'Client representative number',type:'phone',required:true},
@@ -278,6 +281,7 @@ export const PREPO_FIELDS = [
 export const POSTPO_FIELDS = [
   {key:'salesName',label:'Sales team name',required:true},
   {key:'salesEmail',label:'Sales team email',required:true},
+  {key:'requestFor',label:'Request For',type:'select',options:REQUEST_FOR_OPTIONS,required:true},
   {key:'crmSoNumber',label:'CRM / Sale order unique number',required:true},
   {key:'developerName',label:'Developer name',required:true},
   {key:'contactPerson',label:'Client representative name',required:true},
@@ -328,6 +332,7 @@ export function reqTypeLabel(type){ return REQUEST_TYPE_LABELS[type]||type||'—
 export const SURVEY_FIELDS = [
   {key:'salesName',label:'Sales team name',required:true},
   {key:'salesEmail',label:'Sales team email',required:true},
+  {key:'requestFor',label:'Request For',type:'select',options:REQUEST_FOR_OPTIONS,required:true},
   {key:'developerName',label:'Developer name',required:true},
   {key:'contactPerson',label:'Client representative name',required:true},
   {key:'mobile',label:'Client representative number',type:'phone',required:true},
@@ -360,6 +365,7 @@ export const POSTPO_DOC_CATEGORIES=[
 export const CNC_FIELDS = [
   {key:'salesName',label:'Sales team name',required:true},
   {key:'salesEmail',label:'Sales team email',required:true},
+  {key:'requestFor',label:'Request For',type:'select',options:REQUEST_FOR_OPTIONS,required:true},
   {key:'clientName',label:'Client name',required:true},
   // v2-47: Fresh / Revise, mandatory, no default.
   {key:'cncRequestType',label:'Type of CNC Request',type:'select',options:['Fresh','Revise'],required:true},

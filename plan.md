@@ -3865,3 +3865,8 @@ Added: Latest Constraint, Latest Snag Point (latest **open** item, else latest o
 Import ignores the extra headers. Decided with user: "go with your recommendations".
 **Status:** built (vite build passes), committed & pushed; browser export check NOT yet done — prod-unverified.
 **Follow-up (2026-10-05):** added a **Vendor** column (card's `p.vendor`, falling back to `p.vendors[].name`) before Latest Constraint. Frontend-only; same file. Prod-unverified.
+
+### v2-60: Mandatory "Request For" dropdown on all request types (2026-10-05)
+Frontend-only (`src/lib/constants.js`): `REQUEST_FOR_OPTIONS` = Grille 3.0, Lamora (spelling as typed by user — confirm vs "Lumora"), Promax, Duracap; field `requestFor` (required select) added after Sales team email in PREPO/POSTPO/SURVEY/CNC field sets. Stored in `requests.details` jsonb — no DB change.
+Caveat: old requests have no value; if the edit form re-validates required fields they'd need it set first (not checked).
+**Status:** built, committed & pushed; browser check NOT done — prod-unverified.
