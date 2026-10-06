@@ -3870,3 +3870,14 @@ Import ignores the extra headers. Decided with user: "go with your recommendatio
 Frontend-only (`src/lib/constants.js`): `REQUEST_FOR_OPTIONS` = Grille 3.0, Lamora (spelling as typed by user — confirm vs "Lumora"), Promax, Duracap; field `requestFor` (required select) added after Sales team email in PREPO/POSTPO/SURVEY/CNC field sets. Stored in `requests.details` jsonb — no DB change.
 Caveat: old requests have no value; if the edit form re-validates required fields they'd need it set first (not checked).
 **Status:** built, committed & pushed; browser check NOT done — prod-unverified.
+
+### v2-58 follow-up 3: "Next Week Projection" column in the Installation Scoring Report (2026-10-06)
+Team ask (screenshot `Screenshot 2026-10-06 165003.png`, the DPR card showing Weekly Committed Qty and Next week projection): split the **Target** column for Shashank and Aditya
+into **Weekly Committed** (the existing Target, unchanged) and **Next Week Projection** (team sum of the next-week projection). Everything else in the report stays as it was.
+- **Next Week Projection** = sum over the manager's team of each project's next-week figure filed **during that report's Mon–Sat week**; a project filed on more than one day counts once
+  (its latest filing); blank/0 = not filed; blank cell when nothing is filed. It is shown beside the Target and is **not** used in Total % (still installed ÷ Weekly Committed).
+- Neelam's row: her single get / total cell spans both Target columns. No DB change, no migration, DPR form untouched.
+- Files: `src/lib/installationScoring.js` (`dprRow` returns `nextWeek`), `src/sections/reports/installationScoringReport.js` (two-column Target header, colspan on Neelam's cell, footnote).
+- Verified: live production DPRs (read-only) — week 28 Sep: Shashank 1,923 / Aditya 600 (the five projections filed that week); week 5 Oct: none filed yet → blank. A synthetic same-project double filing counts once. TEST_MODE browser: header/rows/colspan render correctly.
+- Data caveat: only 5 projects had a next-week projection filed in the week of 28 Sep, so the column is understated until supervisors fill it in routinely.
+- **Status:** built and verified, not yet committed.

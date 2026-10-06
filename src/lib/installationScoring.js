@@ -65,6 +65,7 @@ const installedOn=d=>(d.products||[]).reduce((a,r)=>Math.max(a,Number(r.todayIns
 //   days[i]  = sq ft installed that day by the manager's whole team (null when the team filed no DPR that day)
 //   target   = Weekly Committed Qty: the sum of every "today projection qty" the team filed from Monday up to the latest
 //              day, so it grows through the week (same figure as the DPR cards' Weekly Committed Qty; null before any DPR)
+//   nextWeek = sum of the team's "next week projection" (see below) — shown beside the target, not used in the %
 //   pct      = sum(days) ÷ target × 100 (null when the target is 0 or nothing has been filed yet)
 export function dprRow(managerKey,monday,dprLog,teamMembers,teamMap){
   const days=weekDays(monday);
@@ -74,7 +75,18 @@ export function dprRow(managerKey,monday,dprLog,teamMembers,teamMap){
   const sum=cells.reduce((a,v)=>a+(v||0),0);
   const any=cells.some(v=>v!==null);
   const target=any?days.reduce((a,day)=>a+inWeek(day).reduce((b,d)=>b+(Number(d.todayProjectionQty)||0),0),0):null;
-  return {days:cells,target,sum,pct:(target&&any)?sum/target*100:null};
+  // Next week projection: the team's figure for each project filed during this Mon–Sat week. A project can be filed on
+  // more than one day, so only its LATEST filing counts (never added twice); blank / 0 means not filed. null = none filed.
+  const latest={};
+  mine.forEach(d=>{
+    const y=toYmd(d.date); const v=Number(d.nextWeekProjectionQty);
+    if(!days.includes(y)||!(v>0)) return;
+    const cur=latest[d.projId];
+    if(!cur||y>cur.y||(y===cur.y&&(d.id||0)>(cur.id||0))) latest[d.projId]={y,id:d.id,v};
+  });
+  const filed=Object.values(latest);
+  const nextWeek=filed.length?filed.reduce((a,x)=>a+x.v,0):null;
+  return {days:cells,target,nextWeek,sum,pct:(target&&any)?sum/target*100:null};
 }
 
 // Supervisors who filed a DPR that week but are not assigned to any manager (so their numbers are in no row).
