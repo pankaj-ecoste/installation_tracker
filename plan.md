@@ -3881,3 +3881,4 @@ into **Weekly Committed** (the existing Target, unchanged) and **Next Week Proje
 - Verified: live production DPRs (read-only) — week 28 Sep: Shashank 1,923 / Aditya 600 (the five projections filed that week); week 5 Oct: none filed yet → blank. A synthetic same-project double filing counts once. TEST_MODE browser: header/rows/colspan render correctly.
 - Data caveat: only 5 projects had a next-week projection filed in the week of 28 Sep, so the column is understated until supervisors fill it in routinely.
 - **Status:** built and verified, not yet committed.
+**Follow-up 2 (2026-10-06):** added **SO Number** column (`p.crmSoNumber`, blank if none) before Vendor in the project export. Frontend-only; distinct from existing "SO Qty". Prod-unverified.
