@@ -2,22 +2,26 @@ import { state } from '../../lib/state.js';
 import { db } from '../../lib/supabaseClient.js';
 import { TODAY } from '../../lib/config.js';
 
-/* ══ SOD / EOD FOLLOW-UP TRACKER (admin only — see plan.md v2-42 and v2-46) ══
+/* ══ SOD / EOD FOLLOW-UP TRACKER (admin only — see plan.md v2-42, v2-46, v2-61) ══
    One row per project per day (DB unique on log_date + project_name). Both SOD and EOD are required.
    Options: Call / Email / WhatsApp = +1 each; "Other" (free text, required) = 0. No Not Done, no negatives —
    a row scores 0, 1 or 2. Remarks are always optional. A saved entry is locked: no edit, no delete
    (DB policies allow only select + insert, see migration 0019).
-   Score is reported separately for In Progress and Not Started projects (plus the combined total). The score
-   column and the per-row group / per-day project counts are DB-owned (generated column + insert trigger,
-   migration 0022); slotPts() below only mirrors the score as a fallback for rows that don't carry one yet
-   (the TEST_MODE mock has no generated columns or triggers). */
+   Score is reported separately for each of 4 project groups (plus the combined total): In Progress, Not Started,
+   On Hold, Completed (v2-61 — CNC / Only Supply stay excluded). The score column and the per-row group / per-day
+   project counts are DB-owned (generated column + insert trigger, migrations 0022/0027); slotPts() below only
+   mirrors the score as a fallback for rows that don't carry one yet (the TEST_MODE mock has no generated columns
+   or triggers). */
 const OPTIONS=['Call','Email','WhatsApp','Other'];
 const SCORING_OPTIONS=['Call','Email','WhatsApp'];
 const TABLE='sod_eod_log';
-const GROUPS=['In Progress','Not Started'];
+// Priority order when a project's towers span more than one group: the earlier entry wins.
+const GROUPS=['In Progress','Not Started','On Hold','Completed'];
 // Maximum points per project for each group (1 per slot, 2 slots). One number per group so management can change
 // a group's weight later without touching the rest of the code.
-const MAX_PER_PROJECT={'In Progress':2,'Not Started':2};
+const MAX_PER_PROJECT={'In Progress':2,'Not Started':2,'On Hold':2,'Completed':2};
+// DB column that freezes each group's project count for a given day (see migrations 0020/0027).
+const TOTAL_COL={'In Progress':'total_in_progress','Not Started':'total_not_started','On Hold':'total_on_hold','Completed':'total_completed'};
 
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const pad=n=>String(n).padStart(2,'0');
@@ -37,15 +41,13 @@ const slotText=(v,other)=>v==='Other'?'Other: '+(other||''):v;
 const scoreColor=n=>n>0?'#1D9E75':'#a06a00';
 const optionsHTML=()=>'<option value="">— select —</option>'+OPTIONS.map(o=>'<option value="'+o+'">'+(o==='Other'?'Other (type below)':o)+'</option>').join('');
 
-// A project (grouped by name, towers together) is "In Progress" if any tower is In Progress, otherwise "Not Started"
-// while any tower is Not Started. Null = not counted any more (all towers Completed / On Hold / CNC / Only Supply).
+// A project (grouped by name, towers together) takes the first group from GROUPS (priority order) that any of its
+// towers is in. Null = not counted (every tower is CNC / Only Supply — the two statuses still excluded, v2-61).
 function liveGroup(name){
   const towers=state.projects.filter(p=>p.name===name);
-  if(towers.some(p=>p.status==='In Progress')) return 'In Progress';
-  if(towers.some(p=>p.status==='Not Started')) return 'Not Started';
-  return null;
+  return GROUPS.find(g=>towers.some(p=>p.status===g))||null;
 }
-// One project per project *name* (towers grouped, same as the dashboard's "Total projects" tile).
+// One project per project *name* (towers grouped). Covers all 4 groups (v2-61) — CNC / Only Supply excluded.
 function countedProjectNames(){
   return [...new Set(state.projects.map(p=>p.name))]
     .filter(n=>liveGroup(n)!==null)
@@ -84,15 +86,15 @@ export function daySummary(day){
     split.forEach(s=>{ s.max=s.count*MAX_PER_PROJECT[s.group]; });
     return {rows,score,max:split.reduce((a,s)=>a+s.max,0),split,total:names.length,names};
   }
-  const snapped=rows.length>0&&rows.every(r=>r.project_group&&r.total_in_progress!=null&&r.total_not_started!=null);
+  // "Snapped" if every row that day carries a group and at least its own group's frozen total (older rows, logged
+  // before On Hold/Completed existed, only ever carry In Progress/Not Started — that's still enough to split them).
+  const snapped=rows.length>0&&rows.every(r=>r.project_group&&r[TOTAL_COL[r.project_group]]!=null);
   if(snapped){
-    const counts={'In Progress':Math.max(...rows.map(r=>Number(r.total_in_progress))),'Not Started':Math.max(...rows.map(r=>Number(r.total_not_started)))};
-    const split=GROUPS.map(g=>({
-      group:g,
-      count:counts[g],
-      max:counts[g]*MAX_PER_PROJECT[g],
-      score:rows.filter(r=>r.project_group===g).reduce((a,r)=>a+rowScore(r),0)
-    }));
+    const split=GROUPS.map(g=>{
+      const colRows=rows.filter(r=>r[TOTAL_COL[g]]!=null);
+      const count=colRows.length?Math.max(...colRows.map(r=>Number(r[TOTAL_COL[g]]))):0;
+      return {group:g,count,max:count*MAX_PER_PROJECT[g],score:rows.filter(r=>r.project_group===g).reduce((a,r)=>a+rowScore(r),0)};
+    }).filter(s=>s.count>0||s.score>0); // hide a group with nothing to show (e.g. On Hold/Completed on an old day)
     return {rows,score,max:split.reduce((a,s)=>a+s.max,0),split};
   }
   const snaps=rows.filter(r=>r.total_projects!=null).map(r=>Number(r.total_projects));
@@ -100,7 +102,13 @@ export function daySummary(day){
 }
 const findRow=(date,project)=>state.sodEodLog.find(r=>r.log_date===date&&r.project_name===project);
 
-const groupPillStyle=g=>g==='In Progress'?'background:#fff3cd;color:#7a4f00':'background:#e8e8e8;color:#444';
+const GROUP_PILL_STYLE={
+  'In Progress':'background:#fff3cd;color:#7a4f00',
+  'Not Started':'background:#e8e8e8;color:#444',
+  'On Hold':'background:#d0e8f7;color:#0a3d6b',
+  'Completed':'background:#d4edda;color:#1a5e2a'
+};
+const groupPillStyle=g=>GROUP_PILL_STYLE[g]||GROUP_PILL_STYLE['Not Started'];
 
 export async function renderSodEodReport(el){
   state.sodEodFormDate=state.sodEodFormDate||todayStr();
@@ -157,17 +165,15 @@ function renderScoreCard(){
   const loggedNames=s.rows.map(r=>r.project_name);
   const pending=s.names.filter(n=>!loggedNames.includes(n)).sort((a,b)=>a.localeCompare(b));
   const other=s.rows.reduce((a,r)=>a+otherSlots(r),0);
-  const [ip,ns]=s.split;
   const tile=(label,val,sub,color)=>'<div class="metric"><div class="metric-label">'+label+'</div><div class="metric-val"'+(color?' style="color:'+color+'"':'')+'>'+val+'</div><div class="metric-sub">'+sub+'</div></div>';
   box.innerHTML=
     '<div class="section-hdr" style="margin-top:0">📊 Today\'s Completion Score <span style="font-size:11px;font-weight:400;color:#888">'+fmtDay(today)+'</span></div>'+
     '<div class="metrics">'+
-      tile('Total Projects',s.total,'In Progress '+ip.count+' · Not Started '+ns.count)+
+      tile('Total Projects',s.total,s.split.map(g=>g.group+' '+g.count).join(' · '))+
       tile('Not Logged Yet',pending.length,'projects, 0 pts',pending.length>0?'#a06a00':'#1D9E75')+
       tile('Other Today',other,'free text, 0 pts')+
-      tile('In Progress',ip.score+' / '+ip.max,'max '+MAX_PER_PROJECT['In Progress']+' per project',scoreColor(ip.score))+
-      tile('Not Started',ns.score+' / '+ns.max,'max '+MAX_PER_PROJECT['Not Started']+' per project',scoreColor(ns.score))+
-      tile('Total Score',s.score+' / '+s.max,'both groups',scoreColor(s.score))+
+      s.split.map(g=>tile(g.group,g.score+' / '+g.max,'max '+MAX_PER_PROJECT[g.group]+' per project',scoreColor(g.score))).join('')+
+      tile('Total Score',s.score+' / '+s.max,'all groups',scoreColor(s.score))+
     '</div>'+
     (pending.length?'<div style="font-size:12px;color:#888;margin:-4px 0 14px">Not logged yet: '+pending.map(esc).join(', ')+'</div>':'');
 }

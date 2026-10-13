@@ -3882,3 +3882,39 @@ into **Weekly Committed** (the existing Target, unchanged) and **Next Week Proje
 - Data caveat: only 5 projects had a next-week projection filed in the week of 28 Sep, so the column is understated until supervisors fill it in routinely.
 - **Status:** built and verified, not yet committed.
 **Follow-up 2 (2026-10-06):** added **SO Number** column (`p.crmSoNumber`, blank if none) before Vendor in the project export. Frontend-only; distinct from existing "SO Qty". Prod-unverified.
+
+### v2-61: SOD/EOD tracker — On Hold and Completed projects counted too (2026-10-13)
+
+**Request** (management, via the user, screenshot `Screenshot 2026-10-13 131258.png`): the tracker currently only
+counts Not Started / In Progress projects. Management wants On Hold and Completed projects counted "in the same
+way" — same 2-points-per-project scoring, same SOD/EOD logging, their own score shown like In Progress / Not Started.
+
+**Design** (simple extension of v2-46's group split, not a new mechanism)
+- `GROUPS` becomes 4: In Progress, Not Started, On Hold, Completed (CNC / Only Supply remain excluded — not asked for).
+- A project's group priority when its towers differ: In Progress > Not Started > On Hold > Completed (unchanged priority
+  for the first two; On Hold/Completed only apply when no tower is In Progress or Not Started).
+- Same 2-points-per-project cap for all 4 groups (`MAX_PER_PROJECT` already per-group, just add the two entries).
+- Top card gains On Hold and Completed tiles next to In Progress / Not Started. Day-folder header gains the same two
+  pills, shown only when that day actually has projects/rows in that group (keeps old-day headers uncluttered, since
+  On Hold/Completed weren't loggable before today).
+- Migration `0027_sod_eod_on_hold_completed.sql`: adds `total_on_hold`, `total_completed` (nullable smallint, like
+  `total_in_progress`/`total_not_started`), widens the `project_group` check constraint, and updates the insert
+  trigger to compute all 4 group counts and pick the row's group by the same priority. No backfill of past rows —
+  On Hold/Completed couldn't be logged before this ships, so there's nothing to backfill; older days simply show no
+  pill for those two groups (count 0).
+- Project dropdown (`countedProjectNames`) now includes On Hold and Completed projects automatically once `liveGroup`
+  recognizes them.
+
+**Consequence flagged to the user**: every Completed project (there can be many, accumulating forever) becomes a
+project that "needs" a daily SOD/EOD entry, same as an active one — this will likely make "Not Logged Yet" very long.
+Built as asked; told the user afterward so they can scope it down (e.g. only recently-completed) if that's not intended.
+
+**Verified** (TEST_MODE real browser): project dropdown includes On Hold/Completed projects, still excludes CNC/Only
+Supply; top card shows all 4 group tiles + total (e.g. IP 2/2, NS 2/4, On Hold 1/2, Completed 2/4, Total 7/12 for 1
+Other-scored On Hold row); day-folder header matches; an old-style day stamped with only total_in_progress/total_not_started
+(pre-v2-61 shape) still renders correctly with no On Hold/Completed pill clutter; a fully-legacy unsplit day still shows
+combined-only. Migration 0027 run against REAL prod data in a rolled-back transaction: applies cleanly, leaves all 195
+existing rows untouched (on_hold/completed stay null on old rows); an insert for a real On Hold project stamps
+project_group='On Hold', total_on_hold=5, total_completed=27 (matches prod's live split: IP 12 · NS 16 · On Hold 5 ·
+Completed 27); same for a Completed project. Prod unchanged by the test.
+**Status**: Migration 0027 applied to prod (verified: total_on_hold/total_completed columns added, all pre-existing rows left untouched, constraint widened to 4 groups). Committed and pushed to main.
