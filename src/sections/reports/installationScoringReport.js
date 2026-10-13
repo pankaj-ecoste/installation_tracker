@@ -68,7 +68,8 @@ function draw(){
       '<td style="'+TD+'">'+(r.target==null?'':num(r.target))+'</td>'+
       '<td style="'+TD+'">'+(r.nextWeek==null?'':num(r.nextWeek))+'</td>'+
       r.days.map(v=>'<td style="'+TD+'">'+(v==null?'':num(v))+'</td>').join('')+
-      '<td style="'+TD+'font-weight:700">'+pct(r.pct)+'</td></tr>';
+      '<td style="'+TD+'font-weight:700">'+pct(r.pct)+'</td>'+
+      '<td style="'+TD+'font-weight:700">'+(r.days.some(v=>v!==null)?num(r.sum):'')+'</td></tr>';
   });
 
   const dayScore=day=>{
@@ -81,7 +82,8 @@ function draw(){
     '<td style="'+TD+'font-weight:600;text-align:left">Neelam</td>'+
     '<td colspan="2" style="'+TD+'">'+(n.total>0?n.get+' / '+n.total:'')+'</td>'+
     n.days.map(c=>'<td style="'+TD+'">'+(c?c.get+' / '+c.total:'')+'</td>').join('')+
-    '<td style="'+TD+'font-weight:700">'+pct(n.pct)+'</td></tr>');
+    '<td style="'+TD+'font-weight:700">'+pct(n.pct)+'</td>'+
+    '<td style="'+TD+'font-weight:700">'+(n.days.some(c=>c)?n.get:'')+'</td></tr>');
 
   const unassigned=unassignedSupervisors(weekStart,state.dprLog,members,teamMap);
   const supervisors=members.filter(m=>m.role==='supervisor'&&m.active);
@@ -98,13 +100,13 @@ function draw(){
     '</div>'+
     '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:640px;font-size:13px;background:#fff">'+
       '<thead>'+
-        '<tr><th colspan="'+(days.length+4)+'" style="'+TH+'font-size:14px;text-align:left;background:#fff">'+esc(weekTitle(weekStart))+'</th></tr>'+
-        '<tr><th rowspan="2" style="'+TH+'">Name</th><th colspan="2" style="'+TH+'font-size:15px">Target</th><th colspan="'+days.length+'" style="'+TH+'font-size:15px">Achievement</th><th rowspan="2" style="'+TH+'">Total %</th></tr>'+
+        '<tr><th colspan="'+(days.length+5)+'" style="'+TH+'font-size:14px;text-align:left;background:#fff">'+esc(weekTitle(weekStart))+'</th></tr>'+
+        '<tr><th rowspan="2" style="'+TH+'">Name</th><th colspan="2" style="'+TH+'font-size:15px">Target</th><th colspan="'+days.length+'" style="'+TH+'font-size:15px">Achievement</th><th rowspan="2" style="'+TH+'">Total %</th><th rowspan="2" style="'+TH+'">Total Achieved</th></tr>'+
         '<tr><th style="'+TH+'">Weekly Committed</th><th style="'+TH+'">Next Week Projection</th>'+dayHead+'</tr>'+
       '</thead><tbody>'+rows.join('')+'</tbody></table></div>'+
     '<div style="font-size:11px;color:#777;margin-top:8px;line-height:1.5">'+
       'Shashank &amp; Aditya: sq ft installed per day by their whole team (from DPRs); Target = the team weekly committed qty (sum of the daily today-projection figures, Monday up to the latest day); Total % = installed ÷ Weekly Committed. Next Week Projection = the team total of the next-week figures filed that week (latest per project). '+
-      'Neelam: SOD/EOD In Progress score / maximum, cumulative through the week. Days with no entries stay blank and are left out.'+
+      'Neelam: SOD/EOD In Progress score / maximum, cumulative through the week. Total Achieved = the sum of Day 1 to Day 6 (sq ft installed; for Neelam, points scored). Days with no entries stay blank and are left out.'+
     '</div>'+
     (unassigned.length?'<div style="font-size:12px;color:#a06a00;background:#fff8e6;border-radius:6px;padding:8px 10px;margin-top:10px">⚠ DPRs this week from supervisors not assigned to a manager (not counted in any row): <b>'+unassigned.map(esc).join(', ')+'</b>. Assign them below.</div>':'')+
     '<details style="margin-top:14px"'+(mapError||unassigned.length?' open':'')+'>'+

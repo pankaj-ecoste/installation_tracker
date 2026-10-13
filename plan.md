@@ -3918,3 +3918,10 @@ existing rows untouched (on_hold/completed stay null on old rows); an insert for
 project_group='On Hold', total_on_hold=5, total_completed=27 (matches prod's live split: IP 12 · NS 16 · On Hold 5 ·
 Completed 27); same for a Completed project. Prod unchanged by the test.
 **Status**: Migration 0027 applied to prod (verified: total_on_hold/total_completed columns added, all pre-existing rows left untouched, constraint widened to 4 groups). Committed and pushed to main.
+
+### v2-58 follow-up 4: "Total Achieved" column at the end of the Installation Scoring Report (2026-10-13)
+Team ask (screenshot `Screenshot 2026-10-13 145659.png`): one more column at the end giving the total of what each row achieved — the sum of all days.
+- New last column **Total Achieved** (after Total %): Shashank / Aditya = sum of Day 1–6 installed sq ft; Neelam = sum of her daily points scored (the "get" half of get / total). Blank when the row has no entries that week.
+- Display only: no calculation rule, DB or DPR change. File: `src/sections/reports/installationScoringReport.js` only (header/row cells, title colspan, footnote line).
+- Verified in a TEST_MODE browser: every row spans the same 11 columns and Total Achieved equals the sum of the day cells in each row.
+- **Status:** built and verified, not yet committed.
