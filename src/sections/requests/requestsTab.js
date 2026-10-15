@@ -15,6 +15,7 @@ import { renderMetrics } from '../metrics.js';
 import { closePanel, openPanel, setTab, showSection } from '../navigation.js';
 import { openEditProject } from '../projects/addEditProject.js';
 import { renderProjects } from '../projects/projectCards.js';
+import { dprWeeklySums } from '../dpr/dprTab.js';
 
 /* ══ REQUESTS ══ */
 export function fieldRowHTML(f, valObj, idPrefix){
@@ -995,10 +996,17 @@ export function exportProjectsCSV(){
   const header=['Access Code','Project Name','Tower/Block','Developer','City','State','Status','Supervisor','Planned Qty (sqft)','Installed Qty (sqft)','JMR Qty','PO Qty','SO Qty','Start Date','Committed Date','Days Available','Installation Commencement Date'];
   // v2-59: latest constraint / snag / stalled milestone / comment / uploaded files per project.
   // Constraint + snag prefer the latest OPEN item, falling back to the latest overall.
-  header.push('SO Number','Vendor','Latest Constraint','Latest Snag Point','Latest Stalled Milestone','Feedback and Notes','Uploaded Files');
+  header.push('SO Number','Vendor','Latest Constraint','Latest Snag Point','Latest Stalled Milestone','Feedback and Notes','Uploaded Files','Request Type','DPR Date','Today Projection','Weekly Projection','Remarks','Next Day Action','Action Taken','Escalations','Internal Hindrance');
   const latestOpen=(list,isOpen)=>{ const l=list||[]; for(let i=l.length-1;i>=0;i--) if(isOpen(l[i])) return l[i]; return l[l.length-1]; };
   const today=new Date().toISOString().slice(0,10);
+  // v2-61: DPR columns come from each project's LATEST DPR (newest date, then highest id); blank if none.
+  // Request Type = the type the project was converted from; manual/imported projects fall back to their Order Type.
+  const ORDER_TYPE_LABELS={'pre-mockup':'Pre-Mockup','mockup':'Mockup','post-mockup':'Post-Mockup','pre-main':'Pre-Main Order Survey','main':'Main Order','post-main':'Post-Main Order','sampling':'Sampling Survey'};
+  const dprTime=d=>{ const t=new Date(d.date).getTime(); return isNaN(t)?0:t; };
+  const latestDprByProj={};
+  state.dprLog.forEach(d=>{ const b=latestDprByProj[d.projId]; if(!b||dprTime(d)>dprTime(b)||(dprTime(d)===dprTime(b)&&d.id>b.id)) latestDprByProj[d.projId]=d; });
   const extra=p=>{
+    const d=latestDprByProj[p.id];
     const c=latestOpen(p.constraints,x=>x.status==='open');
     const s=latestOpen(p.snags,x=>x.status==='open');
     const stalled=(p.milestones||[]).filter(m=>!m.actual&&m.planned&&m.planned<today).sort((a,b)=>a.planned<b.planned?-1:1)[0];
@@ -1011,7 +1019,16 @@ export function exportProjectsCSV(){
       s?[s.description,s.location,s.severity,s.status].filter(Boolean).join(' · ')+(s.raisedDate?' ('+s.raisedDate+')':''):'',
       stalled?stalled.label+' (planned '+stalled.planned+', '+daysDiff(stalled.planned,today)+'d overdue)':'',
       cm?(cm.author?cm.author+': ':'')+cm.text+(cm.time?' ('+cm.time+')':''):'',
-      (p.projectDocs||[]).map((d,i)=>{ const o=d&&typeof d==='object'; return (o&&d.name?d.name+': ':'')+(o?d.url:d); }).join(' | ')
+      (p.projectDocs||[]).map((x,i)=>{ const o=x&&typeof x==='object'; return (o&&x.name?x.name+': ':'')+(o?x.url:x); }).join(' | '),
+      p.sourceRequestType||ORDER_TYPE_LABELS[p.orderType]||'',
+      d?d.date:'',
+      d?d.todayProjectionQty:'',
+      d?dprWeeklySums(p.id,d.date).committed:'',
+      d?d.remarks:'',
+      d&&d.next!=='—'?d.next:'',
+      d?d.actionTaken:'',
+      d?d.escalations:'',
+      d?d.internalHindrance:''
     ];
   };
   const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';

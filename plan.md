@@ -3940,3 +3940,11 @@ Discussed before building (user asked specifically not to just land changes on a
 - Verified in a TEST_MODE browser (admin login): Day 7 "Sun" column renders with the correct date and the week title's end date is now the Sunday; picking a month in the jump picker rebuilds only the week dropdown (report stays on the original week); picking a week from it jumps the report to that exact week (checked jumping to September Week 3, then back to "This Week"); Previous/Next/This Week still work from a jumped-to week; DPR tab shows "Mon–Sun" everywhere and no stray "Mon–Sat" text remains on the page.
 **Status**: built, TEST_MODE-verified, committed and pushed to main (e3a2107).
 - **Status:** built and verified, not yet committed.
+
+### v2-61: Project export — Request Type + latest-DPR columns (2026-10-15)
+Frontend-only (`exportProjectsCSV`, `src/sections/requests/requestsTab.js`; imports `dprWeeklySums` from dprTab.js). No server/DB change.
+Added 9 columns: Request Type, DPR Date, Today Projection, Weekly Projection, Remarks, Next Day Action, Action Taken, Escalations, Internal Hindrance.
+- DPR columns = project's **latest DPR** (newest date, then highest id); blank if none. Weekly Projection = Weekly Committed Qty (Mon–Sun sum of today projections, same as DPR cards).
+- "Notes section" interpreted as Action Taken + Escalations (user: go with recommendations).
+- Request Type = `sourceRequestType`, falling back to a label mapped from `orderType`; blank if neither. Blank-count in prod NOT checked (Supabase CLI not logged in).
+**Status:** built, verified in a local TEST_MODE browser run (latest-DPR pick, weekly sum, CSV escaping); committed & pushed; prod-unverified.
