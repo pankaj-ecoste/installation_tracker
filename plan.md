@@ -3938,5 +3938,5 @@ Discussed before building (user asked specifically not to just land changes on a
   - `src/utils/domGlobals.js`: exposed `scoringMonthPicked`, `scoringWeekPicked`.
 - No DB migration: both reports are 100%-computed from existing `dpr_log`/`sod_eod_log` data, nothing is written.
 - Verified in a TEST_MODE browser (admin login): Day 7 "Sun" column renders with the correct date and the week title's end date is now the Sunday; picking a month in the jump picker rebuilds only the week dropdown (report stays on the original week); picking a week from it jumps the report to that exact week (checked jumping to September Week 3, then back to "This Week"); Previous/Next/This Week still work from a jumped-to week; DPR tab shows "Mon–Sun" everywhere and no stray "Mon–Sat" text remains on the page.
-**Status**: built and TEST_MODE-verified; not yet committed or pushed — waiting for the user's go-ahead.
+**Status**: built, TEST_MODE-verified, committed and pushed to main (e3a2107).
 - **Status:** built and verified, not yet committed.
