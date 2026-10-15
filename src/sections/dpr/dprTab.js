@@ -71,9 +71,9 @@ export function renderDPR(){
   const el=document.getElementById('dpr-list');
   if(!visible.length){ el.innerHTML='<div class="empty">'+(dateFilter||search?'No DPRs found matching your search/filter.':'No DPRs found for your projects.')+'</div>'; return; }
   // v2-52: Weekly Committed Qty / Weekly Actual Qty — pure sums of figures already collected
-  // per day (today_projection_qty, and each product's todayInstalled), grouped into Mon-Sat
-  // weeks. Cached per "projId|weekStart" key so each project/week's history is only summed once
-  // even though every DPR card in that week calls this.
+  // per day (today_projection_qty, and each product's todayInstalled), grouped into Mon-Sun
+  // weeks (v2-62: Sunday included). Cached per "projId|weekStart" key so each project/week's
+  // history is only summed once even though every DPR card in that week calls this.
   const weeklySumsByKey={};
   function weeklySumsFor(projId,dateLike){
     const range=dprWeekRange(dateLike); if(!range) return null;
@@ -150,7 +150,7 @@ export function renderDPR(){
       ${d.remarks?`<div style="font-size:12px;margin-bottom:4px"><span style="color:#666;font-weight:500">Remarks: </span>${d.remarks}</div>`:''}
       ${d.next&&d.next!=='—'?`<div style="font-size:12px;margin-bottom:4px"><span style="color:#666;font-weight:500">Next day plan: </span>${d.next}</div>`:''}
       ${d.todayProjectionQty!=null?`<div style="font-size:12px;margin-bottom:4px"><span style="color:#666;font-weight:500">Today's projection: </span>${fmt(d.todayProjectionQty)} sq ft</div>`:''}
-      ${weekly?`<div style="font-size:12px;margin-bottom:4px"><span style="color:#666;font-weight:500">Weekly Committed Qty (Mon–Sat): </span>${fmt(weekly.committed)} sq ft &nbsp;·&nbsp; <span style="color:#666;font-weight:500">Weekly Actual Qty: </span>${fmt(weekly.actual)} sq ft</div>`:''}
+      ${weekly?`<div style="font-size:12px;margin-bottom:4px"><span style="color:#666;font-weight:500">Weekly Committed Qty (Mon–Sun): </span>${fmt(weekly.committed)} sq ft &nbsp;·&nbsp; <span style="color:#666;font-weight:500">Weekly Actual Qty: </span>${fmt(weekly.actual)} sq ft</div>`:''}
       ${d.nextWeekProjectionQty!=null?`<div style="font-size:12px;margin-bottom:4px"><span style="color:#666;font-weight:500">Next week projection: </span>${fmt(d.nextWeekProjectionQty)} sq ft</div>`:''}
       ${d.photoUrls&&d.photoUrls.length?`<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">${d.photoUrls.map(u=>`<img src="${u}" style="width:48px;height:48px;object-fit:cover;border-radius:4px;border:1px solid #e0e0e0">`).join('')}</div>`:''}
       ${d.reportPdfUrl?`<div style="margin-top:6px"><a href="${d.reportPdfUrl}" target="_blank" style="font-size:12px;color:#1D9E75">📄 Daily report PDF</a></div>`:''}
@@ -410,25 +410,24 @@ function toLocalISODate(dateLike){
   const d=new Date(dateLike); if(isNaN(d)) return null;
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
-// v2-52: the Monday-Saturday week (as local "YYYY-MM-DD" start/end strings) that a given DPR
-// date falls into — used to group daily entries into weeks for Weekly Committed/Actual Qty.
-// Built off local date parts (via toLocalISODate), same reasoning as that function: never derive
-// this from toISOString(), which would shift the date in IST. A Sunday date rolls forward into
-// the week that just ended (days since Monday = 6) rather than starting a new one, since Sunday
-// isn't a working day this project tracks DPRs for.
+// v2-52 (widened to Mon-Sun in v2-62, see plan.md): the Monday-Sunday week (as local "YYYY-MM-DD"
+// start/end strings) that a given DPR date falls into — used to group daily entries into weeks for
+// Weekly Committed/Actual Qty. Built off local date parts (via toLocalISODate), same reasoning as
+// that function: never derive this from toISOString(), which would shift the date in IST. A Sunday
+// date's own Monday is 6 days earlier — it belongs to the week it ends, not a new one.
 function dprWeekRange(dateLike){
   const d=new Date(dateLike); if(isNaN(d)) return null;
   const day=d.getDay();
   const diffToMonday=day===0?-6:1-day;
   const monday=new Date(d.getFullYear(),d.getMonth(),d.getDate()+diffToMonday);
-  const saturday=new Date(monday.getFullYear(),monday.getMonth(),monday.getDate()+5);
-  return {start:toLocalISODate(monday), end:toLocalISODate(saturday)};
+  const sunday=new Date(monday.getFullYear(),monday.getMonth(),monday.getDate()+6);
+  return {start:toLocalISODate(monday), end:toLocalISODate(sunday)};
 }
 function isInWeekRange(dateLike,range){
   const local=toLocalISODate(dateLike);
   return !!local&&local>=range.start&&local<=range.end;
 }
-// v2-52: Weekly Committed Qty / Weekly Actual Qty for one project's Mon-Sat week (the week
+// v2-52: Weekly Committed Qty / Weekly Actual Qty for one project's Mon-Sun week (v2-62; the week
 // dateLike falls into) — pure sums of today_projection_qty / product todayInstalled across that
 // project's DPR history, so there's no separate stored total to keep in sync or reset. Shared by
 // the DPR card list (renderDPR) and the day-info line on the Add/Edit DPR form (renderDPRProducts).
@@ -515,7 +514,7 @@ export function renderDPRProducts(){
   document.getElementById('dpr-day-info').innerHTML=p?
     'Today is Day No: <b>'+(dayNo!==null?dayNo:'—')+'</b> &nbsp;·&nbsp; Days left: <b>'+(daysLeft!==null?daysLeft:'—')+'</b> &nbsp;·&nbsp; Days available: <b>'+(daysAvailable||'—')+'</b>'
     +(dayNo===null?'<div style="color:#cc3333;margin-top:2px">Set "Date of installation commencement" (or "Start date") on the project to compute Day No / Days Left.</div>':'')
-    +(weekly?'<div style="margin-top:4px">This week so far (Mon–Sat): <b>Committed '+fmt(weekly.committed)+' sq ft</b> &nbsp;·&nbsp; <b>Actual '+fmt(weekly.actual)+' sq ft</b></div>':'')
+    +(weekly?'<div style="margin-top:4px">This week so far (Mon–Sun): <b>Committed '+fmt(weekly.committed)+' sq ft</b> &nbsp;·&nbsp; <b>Actual '+fmt(weekly.actual)+' sq ft</b></div>':'')
     :'';
   if(!state.dprProducts.length){ el.innerHTML='<div style="font-size:12px;color:#888">No products defined for this project. Add products via the project edit form first.</div>'; return; }
   el.innerHTML='<div style="overflow-x:auto"><table class="team-table" style="font-size:11px;white-space:nowrap">'+

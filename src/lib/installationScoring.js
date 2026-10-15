@@ -1,8 +1,9 @@
 /* ══ INSTALLATION SCORING REPORT — pure rules (plan.md v2-58) ══
    No DOM, no database, no `state` import: every function takes the data it needs, so the rules can be tested on
    their own and the DPR form can share the exact same "weekly projection lock" rule as the report.
-   Weeks are Monday–Saturday; Sunday is off. All dates are plain local "YYYY-MM-DD" strings built from date PARTS —
-   never toISOString(), which shifts a day in IST (see the DPR date gotcha in plan.md). */
+   Weeks are Monday–Sunday (v2-62: Sunday added — previously Mon–Sat only, see plan.md). All dates are plain local
+   "YYYY-MM-DD" strings built from date PARTS — never toISOString(), which shifts a day in IST (see the DPR date
+   gotcha in plan.md). */
 
 export const MANAGERS=[
   {key:'shashank',label:'Shashank'},
@@ -31,21 +32,43 @@ export function toYmd(dateLike){
 const partsOf=ymd=>{ const [y,m,d]=ymd.split('-').map(Number); return new Date(y,m-1,d); };
 export const addDays=(ymd,n)=>{ const d=partsOf(ymd); return ymdOf(new Date(d.getFullYear(),d.getMonth(),d.getDate()+n)); };
 
-// Monday of the week a date belongs to. A Sunday belongs to the week that just ended (same as the DPR weekly sums).
+// Monday of the week a date belongs to (Mon..Sun, so a Sunday's own Monday is 6 days earlier — the week it ends).
 export function mondayOf(ymd){
   const d=partsOf(ymd); const day=d.getDay();
   return addDays(ymd,day===0?-6:1-day);
 }
-export const weekDays=monday=>[0,1,2,3,4,5].map(i=>addDays(monday,i)); // Mon..Sat
+export const weekDays=monday=>[0,1,2,3,4,5,6].map(i=>addDays(monday,i)); // Mon..Sun
 
-// "September Week 4 (21 Sep – 26 Sep 2026)": a week belongs to the month its SATURDAY falls in, and its number is
-// which Saturday of that month it is (21–26 Sep: Saturdays are 5, 12, 19, 26 → Week 4).
+const shortDate=d=>d.getDate()+' '+MONTH_NAMES[d.getMonth()].slice(0,3); // fixed English names — locale output varies ("Sept")
+
+// A week still belongs to the month its SATURDAY falls in, and its number is which Saturday of that month it is
+// (21–26 Sep: Saturdays are 5, 12, 19, 26 → Week 4) — unchanged by adding Sunday as a displayed/counted day (v2-62).
+function weekMonthAndNumber(monday){
+  const sat=partsOf(addDays(monday,5));
+  return {monthName:MONTH_NAMES[sat.getMonth()],n:Math.ceil(sat.getDate()/7)};
+}
+// "September Week 4 (21 Sep – 27 Sep 2026)": the displayed/visible range now runs through Sunday.
 export function weekTitle(monday){
-  const sat=partsOf(addDays(monday,5)); const mon=partsOf(monday);
-  const monthName=MONTH_NAMES[sat.getMonth()];
-  const n=Math.ceil(sat.getDate()/7);
-  const short=d=>d.getDate()+' '+MONTH_NAMES[d.getMonth()].slice(0,3); // fixed English names — locale output varies ("Sept")
-  return 'INSTALLATION SCORING REPORT — '+monthName+' Week '+n+' ('+short(mon)+' – '+short(sat)+' '+sat.getFullYear()+')';
+  const {monthName,n}=weekMonthAndNumber(monday);
+  const mon=partsOf(monday); const sun=partsOf(addDays(monday,6));
+  return 'INSTALLATION SCORING REPORT — '+monthName+' Week '+n+' ('+shortDate(mon)+' – '+shortDate(sun)+' '+sun.getFullYear()+')';
+}
+// Short label for the month→week picker, e.g. "Week 4 (21 Sep – 27 Sep)" — no report title, no year (redundant once
+// a month is already chosen).
+export function weekPickerLabel(monday){
+  const {n}=weekMonthAndNumber(monday);
+  const mon=partsOf(monday); const sun=partsOf(addDays(monday,6));
+  return 'Week '+n+' ('+shortDate(mon)+' – '+shortDate(sun)+')';
+}
+// Every week (as its Monday) whose Saturday falls in the given month — same bucketing rule as weekTitle, so picking
+// "September" lists exactly the weeks titled "September Week N".
+export function weeksInMonth(year,monthIndex){
+  const weeks=[]; const lastDay=new Date(year,monthIndex+1,0).getDate();
+  for(let day=1;day<=lastDay;day++){
+    const d=new Date(year,monthIndex,day);
+    if(d.getDay()===6) weeks.push(addDays(ymdOf(d),-5)); // Saturday → that week's Monday
+  }
+  return weeks;
 }
 
 // Which report row a DPR's supervisor rolls up into. dpr_log.supervisor is free text — sometimes the username
