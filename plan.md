@@ -3948,3 +3948,19 @@ Added 9 columns: Request Type, DPR Date, Today Projection, Weekly Projection, Re
 - "Notes section" interpreted as Action Taken + Escalations (user: go with recommendations).
 - Request Type = `sourceRequestType`, falling back to a label mapped from `orderType`; blank if neither. Blank-count in prod NOT checked (Supabase CLI not logged in).
 **Status:** built, verified in a local TEST_MODE browser run (latest-DPR pick, weekly sum, CSV escaping); committed & pushed; prod-unverified.
+
+### v2-63: Without-frame Main Order projects drop the 3 framing milestones (2026-10-16)
+Team ask (screenshot `Screenshot 2026-10-16 125653.png`): when the request's Installation type is **Without frame**, the project's milestones must not include "Framing material mobilized", "Framing work started", "Framing work completed" — for new AND existing projects.
+Findings (discussed before building):
+- Installation type is the mandatory dropdown on the 4 "order"-group request types (mockup, post-mockup, main-order, post-main-order), stored as `requests.request_sub_type`. Only the Main Order template (`MS_MAINORDER_STEPS`) contains the 3 framing steps, so the rule only matters for **main-order**.
+- The value was never copied onto the project; `convertRequestToProject` always used the full template. Update Progress / Edit Project just render the stored `projects.milestones`, so no change is needed there.
+- Prod (read-only, 2026-10-16): 2 main-order Without-frame projects (ids 100, 101), both still have the 3 steps and **none has any date entered** — nothing is lost by removing them.
+- Editing a request after conversion is allowed at any status and previously never touched the linked project. **Decided: sync, not lock.**
+Plan:
+1. `constants.js`: shared `FRAMING_MILESTONES` + helpers to strip/restore the 3 steps (restore puts them back at their template position, blank dates).
+2. Conversion: main-order + Without frame → template without the 3 steps.
+3. Edit request (main-order, already converted): With→Without removes the 3 steps from the linked project (confirm first if any has a date); Without→With restores them blank. Framing material/Section size cleared on Without.
+4. Migration 0028: one-time backfill for existing Without-frame main-order projects (matched through `requests.linked_project_id`; manual projects without a request are left alone).
+**Built (uncommitted):** `constants.js` helpers (`FRAMING_MILESTONES`, `isWithoutFrame`, `stripFramingMilestones`, `restoreFramingMilestones`), conversion + edit-sync in `requestsTab.js`, migration `0028_without_frame_drop_framing_milestones.sql`. Build passes; helpers unit-checked (strip 19→16, restore returns exact template order). **Pending:** apply 0028 to prod (needs fresh confirm), browser check of convert + edit-sync paths.
+**Applied to prod 2026-10-16:** 0028 ran; projects 100 and 101 now have 16 milestones/0 framing; the 7 With-frame main-order projects untouched (19 each). **Verified in a TEST_MODE browser:** convert Without→16 steps, With→19; edit With→Without with a dated step shows the confirm (cancel changes nothing, accept strips + clears framing fields, persisted); Without→With restores the 3 steps blank in exact template order; Update Progress for a Without project shows no framing rows.
+**Status:** shipped (committed & pushed); real-prod UI check by the team pending.

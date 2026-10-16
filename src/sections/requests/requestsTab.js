@@ -1,7 +1,7 @@
 import { state } from '../../lib/state.js';
 import { db } from '../../lib/supabaseClient.js';
 import { logActivity } from '../../lib/activityLog.js';
-import { CNC_FIELDS, CNC_STAGES, CNC_TEAM_EMAIL, HARISH_EMAIL, MS_MAIN, MS_MAINORDER_STEPS, MS_MOCKUP_STEPS, MS_POSTMOCKUP_STEPS, MS_PREMAINSURVEY_STEPS, MS_PREMOCKUP, MS_SAMPLING, NEELAM_WA, POSTPO_DOC_CATEGORIES, POSTPO_FIELDS, PREPO_FIELDS, SURVEY_FIELDS, VISIT_FIELDS, computeCNCStages, getAdminEmail, getManagementCcEmails, milestoneKeyFor, notifyByGmail, reqFieldGroup, reqNumberPrefix, reqTypeLabel } from '../../lib/constants.js';
+import { CNC_FIELDS, CNC_STAGES, CNC_TEAM_EMAIL, HARISH_EMAIL, isWithoutFrame, restoreFramingMilestones, stripFramingMilestones, MS_MAIN, MS_MAINORDER_STEPS, MS_MOCKUP_STEPS, MS_POSTMOCKUP_STEPS, MS_PREMAINSURVEY_STEPS, MS_PREMOCKUP, MS_SAMPLING, NEELAM_WA, POSTPO_DOC_CATEGORIES, POSTPO_FIELDS, PREPO_FIELDS, SURVEY_FIELDS, VISIT_FIELDS, computeCNCStages, getAdminEmail, getManagementCcEmails, milestoneKeyFor, notifyByGmail, reqFieldGroup, reqNumberPrefix, reqTypeLabel } from '../../lib/constants.js';
 import { canDo, crmSoBadge, daysDiff, fmtDate, visibleProjects } from '../../lib/helpers.js';
 import { markKeysSeen } from '../../lib/seenItems.js';
 import { requestAttentionKey, requestAttentionKeys } from '../../lib/attentionKeys.js';
@@ -288,9 +288,35 @@ export async function saveRequest(){
   }
   // Sample PO upload is optional for Sampling Survey requests — not blocking save.
 
+  // v2-63: Without frame carries no framing data — drop stale values that are hidden from the form but would still be saved.
+  if(isWithoutFrame(type,subType)){ mergedDetails.framingMaterial=''; mergedDetails.sectionSize=''; }
   if(state.editingRequestId){
     const idx=state.requests.findIndex(r=>r.id===state.editingRequestId);
-    const updated={...state.requests[idx], requestSubType:group==='order'?subType:'', details:mergedDetails};
+    const before=state.requests[idx];
+    // v2-63: keep an already-converted Main Order project in step with its request's Installation type.
+    // Without frame -> strip the 3 framing milestones (idempotent, so a retry after a failed save heals);
+    // Without -> With -> put them back blank. Runs before the request write so a failed project write aborts the save.
+    const linkedProj=type==='main-order'&&before.linkedProjectId?state.projects.find(p=>p.id===before.linkedProjectId):null;
+    let projSync=null;
+    if(linkedProj){
+      const cur=linkedProj.milestones||[];
+      if(isWithoutFrame(type,subType)){
+        const next=stripFramingMilestones(cur);
+        if(next.length!==cur.length){
+          const withDates=cur.filter(m=>!next.includes(m)&&(m.planned||m.actual));
+          if(withDates.length&&!confirm('Switching to "Without frame" removes these milestones from the project, including their dates:\n\n'+withDates.map(m=>'• '+m.label+' (planned '+(m.planned||'—')+', actual '+(m.actual||'—')+')').join('\n')+'\n\nContinue?')) return;
+        }
+        projSync={milestones:next,framingMaterial:'',sectionSize:''};
+      } else if(before.requestSubType==='Without frame'){
+        projSync={milestones:restoreFramingMilestones(cur),framingMaterial:mergedDetails.framingMaterial||'',sectionSize:mergedDetails.sectionSize||''};
+      }
+    }
+    if(projSync){
+      const {error:perr}=await db.from('projects').update({milestones:projSync.milestones,framing_material:projSync.framingMaterial,section_size:projSync.sectionSize}).eq('id',linkedProj.id);
+      if(perr){ console.error('Supabase project sync failed',perr); err.classList.remove('hidden'); document.getElementById('req-err-msg').textContent='Could not update the linked project — check console. Request not saved.'; return; }
+      Object.assign(linkedProj,{milestones:projSync.milestones,framingMaterial:projSync.framingMaterial,sectionSize:projSync.sectionSize});
+    }
+    const updated={...before, requestSubType:group==='order'?subType:'', details:mergedDetails};
     const {error}=await db.from('requests').update(requestToRow(updated)).eq('id',state.editingRequestId);
     if(error){ console.error('Supabase update failed',error); err.classList.remove('hidden'); document.getElementById('req-err-msg').textContent='Could not save — check console.'; return; }
     state.requests[idx]=updated;
@@ -952,7 +978,9 @@ export async function confirmConvertRequestToProject(){
   // actual order comes in.
   const orderTypeMap={'pre-mockup':'pre-mockup','mockup':'mockup','post-mockup':'post-mockup','main-order':'main','post-main-order':'post-main','sampling-survey':'sampling'};
   const orderTypeForProject=orderTypeMap[r.requestType]||'';
-  const template=r.requestType==='pre-mockup'?MS_PREMOCKUP:r.requestType==='mockup'?MS_MOCKUP_STEPS:isSampling?MS_SAMPLING:r.requestType==='post-mockup'?MS_POSTMOCKUP_STEPS:r.requestType==='pre-main-survey'?MS_PREMAINSURVEY_STEPS:r.requestType==='main-order'?MS_MAINORDER_STEPS:MS_MAIN;
+  const baseTemplate=r.requestType==='pre-mockup'?MS_PREMOCKUP:r.requestType==='mockup'?MS_MOCKUP_STEPS:isSampling?MS_SAMPLING:r.requestType==='post-mockup'?MS_POSTMOCKUP_STEPS:r.requestType==='pre-main-survey'?MS_PREMAINSURVEY_STEPS:r.requestType==='main-order'?MS_MAINORDER_STEPS:MS_MAIN;
+  // v2-63: Without-frame Main Order projects never get the 3 framing milestones.
+  const template=isWithoutFrame(r.requestType,r.requestSubType)?stripFramingMilestones(baseTemplate):baseTemplate;
   const milestones=template.map((label,i)=>i===0?{label,planned:plannedDate,actual:actualDate,gap,key:milestoneKeyFor(label)}:{label,planned:'',actual:'',gap:null,key:milestoneKeyFor(label)});
   const newProj={
     accessCode, createdBy:r.createdBy||(state.currentUser?state.currentUser.username:'admin'),

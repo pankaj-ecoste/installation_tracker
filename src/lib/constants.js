@@ -219,6 +219,23 @@ export const MS_MAINORDER_STEPS = [
   'Final RA bill generated',
   'Payment received from customer and project closed'
 ];
+// v2-63: the 3 Main Order steps that only apply to "With frame" projects. A request whose
+// Installation type is "Without frame" must never carry them (see plan.md v2-63).
+export const FRAMING_MILESTONES = ['Framing material mobilized','Framing work started','Framing work completed'];
+export function isWithoutFrame(requestType, subType){ return requestType==='main-order'&&subType==='Without frame'; }
+export function stripFramingMilestones(list){ return list.filter(m=>!FRAMING_MILESTONES.includes(typeof m==='string'?m:m.label)); }
+// Puts any missing framing step back at its template position (after the nearest preceding
+// template step that is present), with blank dates. Steps already there are left untouched.
+export function restoreFramingMilestones(milestones){
+  const out=[...milestones];
+  MS_MAINORDER_STEPS.forEach((label,i)=>{
+    if(!FRAMING_MILESTONES.includes(label)||out.some(m=>m.label===label)) return;
+    let at=0;
+    for(let j=i-1;j>=0;j--){ const k=out.findIndex(m=>m.label===MS_MAINORDER_STEPS[j]); if(k>=0){ at=k+1; break; } }
+    out.splice(at,0,{label,planned:'',actual:'',gap:null,key:null});
+  });
+  return out;
+}
 
 /* ══ REQUESTS MODULE (Pre-PO / Post-PO intake, per sales workflow doc) ══ */
 // WhatsApp numbers for the two people who get notified on every new/updated request.
