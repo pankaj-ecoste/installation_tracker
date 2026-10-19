@@ -3964,3 +3964,54 @@ Plan:
 **Built (uncommitted):** `constants.js` helpers (`FRAMING_MILESTONES`, `isWithoutFrame`, `stripFramingMilestones`, `restoreFramingMilestones`), conversion + edit-sync in `requestsTab.js`, migration `0028_without_frame_drop_framing_milestones.sql`. Build passes; helpers unit-checked (strip 19→16, restore returns exact template order). **Pending:** apply 0028 to prod (needs fresh confirm), browser check of convert + edit-sync paths.
 **Applied to prod 2026-10-16:** 0028 ran; projects 100 and 101 now have 16 milestones/0 framing; the 7 With-frame main-order projects untouched (19 each). **Verified in a TEST_MODE browser:** convert Without→16 steps, With→19; edit With→Without with a dated step shows the confirm (cancel changes nothing, accept strips + clears framing fields, persisted); Without→With restores the 3 steps blank in exact template order; Update Progress for a Without project shows no framing rows.
 **Status:** shipped (committed & pushed); real-prod UI check by the team pending.
+
+### v2-64: Visit Planner module — weekly site-visit plan (2026-10-19) — SPEC LOCKED, NOT BUILT
+Management ask: new **Visit Planner** tab, directly after the DPR Log tab. Design screenshots (4) shared by the user: admin list view, submitted plan card, staff plan form, status dropdown. Every decision below was discussed one by one and locked on 2026-10-19. **No development has started; wait for the user's go-ahead.**
+
+**Who / access**
+- Tab visible to **Admin + Supervisors only** (hidden for every other role).
+- Supervisor fills his **own** plan (name locked in the form) and sees only his own plans. Admin can fill/edit a plan for **any** supervisor.
+- Employee dropdown = active users with the supervisor role in the Team tab; searchable by typing, select-from-list only (no free text), so spelling stays consistent.
+
+**Plan form** (Plan Details + Visits table, as in the screenshot)
+- Fields: Employee Name*, Location (Base City), Week Starting (Monday), then 7 rows Mon–Sun.
+- **Base City:** searchable list of all Indian cities, select-only, picked each week, pre-filled with the supervisor's previous week's city (changeable).
+- **Every day Mon–Sun is mandatory** (cannot save with a blank day). A day with no site visit uses the Site dropdown options **Weekly Off / Leave / Office-Other**; Reason optional for these; they are not counted as visits in the stats.
+- **Site dropdown:** only projects where he is the assigned supervisor, **active only** (Completed and On Hold hidden). Exact status names to be confirmed against the code at build time.
+- **"New site" checkbox:** the picker becomes a free-text box; the visit shows a **New site** tag to admin; stays plain text, not linked to any project.
+- **Reason / Task:** dropdown + "Other" (free text box). List: New site visit, Execution of work, Rectification of work, Final WCC, Sample approval, Measurement / JMR, Client meeting, Other. List is fixed in v1.
+- **+ Same Day:** extra visit on the same date/row group, **max 4 visits per day**, same project twice in a day allowed. Delete button per visit row.
+
+**Date rules (supersedes the user's first-message example)**
+- **Next week opens on Saturday** (normal flow: plan the coming Mon–Sun on Saturday).
+- **Current week is always open**, but only **today and future days** can be planned. Clicking a past day shows "You can't plan a past day".
+- **Previous weeks locked.** Admin can still fill past days.
+- **One plan per supervisor per week**, enforced in the DB (unique constraint). A second attempt is blocked with "Plan for this week already submitted. Contact admin to change it."
+- **After saving, only admin can edit** (Edit Plan). The supervisor cannot change a saved plan.
+
+**Admin view**
+- Filters: Week (date picker + Prev/Next), Supervisor (All/one), Visit Status (All/…). The Status filter shows only plans containing a visit with that status; the summary cards follow the same filters.
+- 5 summary cards: **Plans Submitted (x/y supervisors)**, **Visits Planned**, **Done**, **Missed**, **Not Updated**.
+- **Not Updated** = visits whose date has passed and are still *Planned*.
+- One card per plan: "Visit plan — week of …", Employee name, Location, table Date / Day / Site location (+ New site tag) / Reason / Status; footer "x of y visits done"; buttons **Edit Plan, Email Plan, Delete**. Same-day visits shown under the same date.
+
+**Status follow-up**
+- Statuses: **Planned, Done, Missed, Rescheduled**. Default Planned.
+- **Admin only** sets status (supervisor sees it read-only).
+- **Missed and Rescheduled require a mandatory remark**, shown on the card.
+- Status can be set **only on/after the visit date** (future visits stay Planned). Exception: Rescheduled may be set earlier.
+
+**Email Plan (v1; WhatsApp NOT in v1)**
+- Prefilled email (subject + plan table in body). Recipients looked up **by name in the Team tab's email field** (warn instead of sending if a name/email is missing):
+  - Plan of **Shubham, Mahesh, Aditya** → To: Aditya, Neelam; Cc: Shalini, Sashi (Aditya in both places is intentional).
+  - Plan of **every other supervisor** → To: Shashank, Neelam; Cc: Shalini, Sashi.
+
+**Notifications:** admin **bell notification** on each new plan submitted. No reminders, no not-submitted list in v1.
+**Out of v1:** WhatsApp share, Excel/CSV export, DPR cross-check (**standalone from DPR**), reminders.
+
+**Build notes to verify before coding (not yet done)**
+- New tables (plans + visits) with RLS; unique (supervisor, week_start); DB-side enforcement of the date rules where practical (see the "client-computed values should be DB-owned" lesson); any new migration must be applied to prod only after a fresh confirm.
+- Date handling: use local date parts, never `toISOString()` (IST shift gotcha).
+- Confirm project statuses + supervisor-link field, Team tab role names, and how the existing bell/notification and CNC email (To/Cc) code works so this reuses them.
+- Production scope discipline: touch only files needed for this module.
+**Status:** spec locked in plan.md; awaiting user go-ahead to build.
