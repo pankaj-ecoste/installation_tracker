@@ -87,5 +87,11 @@ export const state = {
   cncPopupStack: [],
   cncListSearch: '',
   cncListSort: {col:'',dir:'asc'},
-  cncRunDaysTab: 'running'
+  cncRunDaysTab: 'running',
+  // v2-64 Visit Planner — plans are fetched after login (admin: all, supervisor: own), never in loadAllData().
+  visitPlans: [],
+  visitPlansLoaded: false,
+  vpFilters: {week: '', supervisorId: '', status: ''},
+  vpDraft: null,
+  vpStatusPending: null
 };

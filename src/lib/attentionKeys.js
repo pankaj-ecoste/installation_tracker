@@ -73,8 +73,16 @@ export function vendorAttentionKeys(){
     .map(v => v.user_id + ':' + (v.reviewed_by_admin ? 'awaiting' : 'pending'));
 }
 
+// Visit Planner (v2-64): admin only — each submitted plan is "new" until the admin opens the tab.
+export function visitPlanAttentionKeys(){
+  const u = state.currentUser;
+  if(!u || u.role !== 'admin') return [];
+  return (state.visitPlans || []).map(p => 'vp:' + p.id);
+}
+
 // tab name (as passed to setTab) -> [seen-store module, keys function]
 export const TAB_ATTENTION = {
+  visitplanner: ['visitplanner', visitPlanAttentionKeys],
   projects:   ['projects', snagAttentionKeys],
   dpr:        ['dpr', dprAttentionKeys],
   finance:    ['finance', financeAttentionKeys],

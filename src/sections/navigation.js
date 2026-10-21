@@ -13,6 +13,7 @@ import { renderMaterial } from './material/materialTab.js';
 import { renderReports } from './reports/reportsTab.js';
 import { renderRequests } from './requests/requestsTab.js';
 import { renderTeamMgmt } from './team/teamMgmtTab.js';
+import { canUseVisitPlanner, renderVisitPlanner, updateVisitPlannerBadge } from './visitPlanner/visitPlannerTab.js';
 import { renderNewVendors, updateNewVendorBadge } from './vendors/newVendorsTab.js';
 
 /* ══ SECTION MANAGEMENT ══ */
@@ -76,8 +77,9 @@ export function setTab(t){
   if(t==='dashboard'&&!canDo('viewFinance')) t='projects';
   if(t==='newvendors'&&(!state.currentUser||!['admin','finance'].includes(state.currentUser.role))) t='projects';
   if(t==='reports'&&(!state.currentUser||state.currentUser.role!=='admin')) t='projects';
+  if(t==='visitplanner'&&!canUseVisitPlanner()) t='projects';
   state.activeTab=t;
-  ['projects','requests','gantt','pipeline','dpr','material','team','finance','dashboard','newvendors','reports'].forEach(x=>{
+  ['projects','requests','gantt','pipeline','dpr','material','team','finance','dashboard','newvendors','reports','visitplanner'].forEach(x=>{
     const tab=document.getElementById('tab-'+x); if(tab) tab.classList.toggle('active',x===t);
     const view=document.getElementById('tab-'+x+'-view'); if(view) view.classList.toggle('hidden',x!==t);
   });
@@ -91,6 +93,7 @@ export function setTab(t){
   if(t==='dashboard') renderDashboard();
   if(t==='newvendors') renderNewVendors();
   if(t==='reports'){ state.activeReport=null; renderReports(); }
+  if(t==='visitplanner') renderVisitPlanner();
   // v2-48: opening All Projects / DPR Log / Finance / New Vendors marks everything currently counted
   // on that tab's badge as seen, so the number clears (a new item, or one whose state changed, brings
   // it back). Done here — an explicit tab click or link — and NOT in the render functions, because
@@ -99,6 +102,7 @@ export function setTab(t){
   if(attention&&state.currentUser){
     markKeysSeen(attention[0],state.currentUser.username,attention[1]());
     updateBell();
+    updateVisitPlannerBadge();
     updateNewVendorBadge(); // the New Vendors badge has its own updater (not part of updateBell)
   }
 }

@@ -6,6 +6,7 @@ import { renderMetrics } from '../sections/metrics.js';
 import { setTab, showClientSection, showSection } from '../sections/navigation.js';
 import { renderProjects } from '../sections/projects/projectCards.js';
 import { updateNewVendorBadge } from '../sections/vendors/newVendorsTab.js';
+import { canUseVisitPlanner, loadVisitPlans, updateVisitPlannerBadge } from '../sections/visitPlanner/visitPlannerTab.js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY, TEST_MODE } from '../lib/config.js';
 import { setTeamAuthToken } from '../lib/supabaseClient.js';
 import { saveTeamSession, loadTeamSession, clearTeamSession } from '../lib/rememberMe.js';
@@ -95,6 +96,12 @@ export function showTeamDashboard(){
   const reportsTab=document.getElementById('tab-reports');
   if(reportsTab) reportsTab.style.display=(state.currentUser&&state.currentUser.role==='admin')?'':'none';
   updateNewVendorBadge();
+  // Visit Planner (v2-64) — admin + supervisors only. Plans are read per user by the database (RLS), so they are
+  // fetched here after login (never in loadAllData()); for admin that also drives the new-plan bell/badge.
+  const vpTab=document.getElementById('tab-visitplanner');
+  if(vpTab) vpTab.style.display=canUseVisitPlanner()?'':'none';
+  state.visitPlans=[]; state.visitPlansLoaded=false; state.vpFilters={week:'',supervisorId:'',status:''};
+  if(canUseVisitPlanner()) loadVisitPlans().then(()=>updateVisitPlannerBadge());
   // Material tab — Admin/Dispatch Head can manage; Supervisor gets view-only access
   // (right to view, not edit — the addLot permission still blocks adding/editing lots).
   const matTab=document.getElementById('tab-material');
