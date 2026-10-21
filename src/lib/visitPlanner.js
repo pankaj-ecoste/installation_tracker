@@ -103,11 +103,11 @@ export const statusAllowedOn=(status,visitDate,today)=>!(status==='Done'||status
 
 /* ── Email Plan recipients (plan.md v2-64) ──
    Plans of Shubham / Mahesh / Aditya -> To Aditya + Neelam; every other supervisor -> To Shashank + Neelam;
-   Cc Shalini + Shashi (Shashi Rawat) always. People are looked up BY NAME in the Team tab so an email change there is picked up. */
+   Cc Admin (the Admin-role team member) + Shashi (Shashi Rawat) always. People are looked up BY NAME in the Team tab so an email change there is picked up. */
 const GROUP_A=['shubham','mahesh','aditya'];
 // Alternate spellings tried in the Team tab, and the full name shown in the "missing" warning so it says exactly what to add.
 const RECIPIENT_SPELLINGS={shashi:['shashi','sashi']};
-const RECIPIENT_LABELS={neelam:'Neelam Rawat',aditya:'Aditya',shashank:'Shashank Soni',shalini:'Shalini Gupta',shashi:'Shashi Rawat'};
+const RECIPIENT_LABELS={neelam:'Neelam Rawat',aditya:'Aditya',shashank:'Shashank Soni',admin:'Admin (team member with the Admin role)',shashi:'Shashi Rawat'};
 const wordsOf=s=>String(s||'').toLowerCase().split(/[^a-z]+/).filter(Boolean);
 export function findTeamMember(key,members){
   return members.find(m=>m.active&&(String(m.username||'').toLowerCase()===key||wordsOf(m.name).includes(key)))||null;
@@ -117,12 +117,14 @@ export function planEmailRecipients(plan,members){
   const supWords=[...wordsOf(plan.supervisor_name),...(sup?[String(sup.username||'').toLowerCase()]:[])];
   const groupA=GROUP_A.some(k=>supWords.includes(k));
   const toKeys=groupA?['aditya','neelam']:['shashank','neelam'];
-  const ccKeys=['shalini','shashi'];
+  const ccKeys=['admin','shashi'];
   const resolve=keys=>{
     const emails=[],missing=[];
     keys.forEach(k=>{
       // try every known spelling of the person (Sashi/Shashi was the original mismatch)
-      const m=(RECIPIENT_SPELLINGS[k]||[k]).map(s=>findTeamMember(s,members)).find(Boolean);
+      const m=k==='admin'
+        ?(members.find(x=>x.active&&x.role==='admin'&&String(x.email||'').trim())||members.find(x=>x.active&&x.role==='admin'))
+        :(RECIPIENT_SPELLINGS[k]||[k]).map(s=>findTeamMember(s,members)).find(Boolean);
       if(m&&String(m.email||'').trim()) emails.push(m.email.trim()); else missing.push(RECIPIENT_LABELS[k]||k);
     });
     return {emails:[...new Set(emails)],missing};
@@ -132,18 +134,21 @@ export function planEmailRecipients(plan,members){
 }
 export function planEmailContent(plan){
   const subject='Visit plan — '+plan.supervisor_name+' — week of '+weekRangeLabel(plan.week_start);
+  // Gmail's compose link carries plain text only (no HTML), so the "table" is pipe-separated rows, one visit per row.
   const lines=[
     'Visit plan — week of '+weekRangeLabel(plan.week_start),
-    'Employee: '+plan.supervisor_name,
-    'Location: '+plan.base_city,
-    ''
+    '',
+    'Employee : '+plan.supervisor_name,
+    'Location : '+plan.base_city,
+    '',
+    'Day | Date | Site | Reason | Status',
+    '-------------------------------------------'
   ];
   weekDays(plan.week_start).forEach(day=>{
-    plan.visits.filter(v=>v.date===day).forEach((v,i)=>{
-      const head=i===0?(dayName(day).slice(0,3)+' '+ddmmyy(day)):'              ';
-      const newTag=v.kind==='new_site'?' [New site]':'';
-      const reason=isRealVisit(v)?' — '+visitReasonLabel(v):'';
-      lines.push(head+'  '+visitSiteLabel(v)+newTag+reason+'  ('+(v.status||'Planned')+')');
+    plan.visits.filter(v=>v.date===day).forEach(v=>{
+      const site=visitSiteLabel(v)+(v.kind==='new_site'?' (New site)':'');
+      const reason=isRealVisit(v)?visitReasonLabel(v):'-';
+      lines.push([dayName(day).slice(0,3),ddmmyy(day),site,reason,v.status||'Planned'].join(' | '));
     });
   });
   lines.push('','Regards,','Ecoste Installation Tracker');
