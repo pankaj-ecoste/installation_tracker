@@ -103,8 +103,11 @@ export const statusAllowedOn=(status,visitDate,today)=>!(status==='Done'||status
 
 /* ── Email Plan recipients (plan.md v2-64) ──
    Plans of Shubham / Mahesh / Aditya -> To Aditya + Neelam; every other supervisor -> To Shashank + Neelam;
-   Cc Shalini + Sashi always. People are looked up BY NAME in the Team tab so an email change there is picked up. */
+   Cc Shalini + Shashi (Shashi Rawat) always. People are looked up BY NAME in the Team tab so an email change there is picked up. */
 const GROUP_A=['shubham','mahesh','aditya'];
+// Alternate spellings tried in the Team tab, and the full name shown in the "missing" warning so it says exactly what to add.
+const RECIPIENT_SPELLINGS={shashi:['shashi','sashi']};
+const RECIPIENT_LABELS={neelam:'Neelam Rawat',aditya:'Aditya',shashank:'Shashank Soni',shalini:'Shalini Gupta',shashi:'Shashi Rawat'};
 const wordsOf=s=>String(s||'').toLowerCase().split(/[^a-z]+/).filter(Boolean);
 export function findTeamMember(key,members){
   return members.find(m=>m.active&&(String(m.username||'').toLowerCase()===key||wordsOf(m.name).includes(key)))||null;
@@ -114,12 +117,13 @@ export function planEmailRecipients(plan,members){
   const supWords=[...wordsOf(plan.supervisor_name),...(sup?[String(sup.username||'').toLowerCase()]:[])];
   const groupA=GROUP_A.some(k=>supWords.includes(k));
   const toKeys=groupA?['aditya','neelam']:['shashank','neelam'];
-  const ccKeys=['shalini','sashi'];
+  const ccKeys=['shalini','shashi'];
   const resolve=keys=>{
     const emails=[],missing=[];
     keys.forEach(k=>{
-      const m=findTeamMember(k,members);
-      if(m&&String(m.email||'').trim()) emails.push(m.email.trim()); else missing.push(k.charAt(0).toUpperCase()+k.slice(1));
+      // try every known spelling of the person (Sashi/Shashi was the original mismatch)
+      const m=(RECIPIENT_SPELLINGS[k]||[k]).map(s=>findTeamMember(s,members)).find(Boolean);
+      if(m&&String(m.email||'').trim()) emails.push(m.email.trim()); else missing.push(RECIPIENT_LABELS[k]||k);
     });
     return {emails:[...new Set(emails)],missing};
   };

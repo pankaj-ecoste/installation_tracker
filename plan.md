@@ -4003,8 +4003,8 @@ Management ask: new **Visit Planner** tab, directly after the DPR Log tab. Desig
 
 **Email Plan (v1; WhatsApp NOT in v1)**
 - Prefilled email (subject + plan table in body). Recipients looked up **by name in the Team tab's email field** (warn instead of sending if a name/email is missing):
-  - Plan of **Shubham, Mahesh, Aditya** → To: Aditya, Neelam; Cc: Shalini, Sashi (Aditya in both places is intentional).
-  - Plan of **every other supervisor** → To: Shashank, Neelam; Cc: Shalini, Sashi.
+  - Plan of **Shubham, Mahesh, Aditya** → To: Aditya, Neelam; Cc: Shalini, Shashi Rawat (Aditya in both places is intentional).
+  - Plan of **every other supervisor** → To: Shashank, Neelam; Cc: Shalini, Shashi Rawat.
 
 **Notifications:** admin **bell notification** on each new plan submitted. No reminders, no not-submitted list in v1.
 **Out of v1:** WhatsApp share, Excel/CSV export, DPR cross-check (**standalone from DPR**), reminders.
@@ -4016,9 +4016,9 @@ Management ask: new **Visit Planner** tab, directly after the DPR Log tab. Desig
 - Production scope discipline: touch only files needed for this module.
 **Built (2026-10-21, uncommitted):** migration `0029_visit_planner.sql` (table `visit_plans`, visits as a jsonb array; a BEFORE INSERT/UPDATE trigger enforces every rule — week/date rules, India-date "today", max 4/day, status rules, `created_by_id` from the JWT; RLS: admin reads/writes all, supervisor reads/inserts only own, update/delete admin only; **no foreign key** to team_members so the Team tab's delete member is not blocked). Frontend: `src/lib/visitPlanner.js` (pure rules + email recipients), `src/lib/indianCities.js`, `src/sections/visitPlanner/visitPlannerTab.js`, tab after DPR log, form panel + remark panel in `index.html`, styles in `app.css`, bell/badge via `attentionKeys.js` + `alerts.js`, tab wiring in `navigation.js` / `teamAuth.js` / `domGlobals.js`. Plans are fetched after login (not in `loadAllData()`).
 Small additions beyond the spec: Visit Status filter also has **Not updated**; the notifications panel lists new plans under "New visit plans".
-**Verified in a TEST_MODE browser:** admin form + save, list/cards/stats, Done blocked for a future visit, Missed needs a remark, email recipient groups, supervisor locked name + locked past rows + "You can't plan a past day", duplicate-week block, admin bell/badge clears when the tab is opened. **Not yet done:** migration 0029 NOT applied to prod (needs a fresh confirm) and its SQL has not been run against a real Postgres yet; real-prod UI check; Team-tab emails/names for Aditya, Neelam, Shashank, Shalini, Sashi must exist for Email Plan to work.
+**Verified in a TEST_MODE browser:** admin form + save, list/cards/stats, Done blocked for a future visit, Missed needs a remark, email recipient groups, supervisor locked name + locked past rows + "You can't plan a past day", duplicate-week block, admin bell/badge clears when the tab is opened. **Not yet done:** migration 0029 NOT applied to prod (needs a fresh confirm) and its SQL has not been run against a real Postgres yet; real-prod UI check; Team-tab emails/names for Aditya, Neelam, Shashank, Shalini, Shashi Rawat must exist for Email Plan to work.
 **Pushed (d4639a8) and migration 0029 applied to prod 2026-10-21** (runner dry-run showed only 0029 pending; afterwards `visit_plans` exists with RLS on, 4 policies, the `visit_plans_enforce_trg` trigger, 0 rows). The SQL trigger has not been exercised with real data yet.
-**Status:** shipped (committed, pushed, migration applied); prod UI check pending — submit a real supervisor plan, check the admin bell/badge, status change and Email Plan (needs emails for Aditya, Neelam, Shashank, Shalini, Sashi in the Team tab); delete any test plan afterwards.
+**Status:** shipped (committed, pushed, migration applied); prod UI check pending — submit a real supervisor plan, check the admin bell/badge, status change and Email Plan (needs emails for Aditya, Neelam, Shashank, Shalini, Shashi Rawat in the Team tab); delete any test plan afterwards.
 
 ### v2-65: WhatsApp report automation — Step 1/4 built (report → PNG, no sending yet) (2026-10-21)
 Goal: a report image auto-sent to a WhatsApp group daily at 11:00 AM, via Maytapi (unofficial WhatsApp API, QR-linked number — no Meta Business verification). Agreed up front: build and test every step separately before anything goes live; nothing sends until the user explicitly says so. Two reports will eventually be wired up (second one TBD); the design below is extensible — adding a future report is one new file + one registry line, no changes to the shared pieces.
@@ -4056,3 +4056,5 @@ Team ask (screenshot `Screenshot 2026-10-21 122650.png`): every "Milestone stall
 - Frontend only, no DB change. Prod had 84 stalled milestones across 5 supervisors at the time.
 **Built:** `lib/whatsapp.js` new `teamMemberWhatsApp(username)`; `sections/alerts.js` `cardHTML` routes `type:'milestone'` to Team member `neelam` (button label, greeting, number, "Supervisor: …" line). **Verified in a TEST_MODE browser:** stalled-milestone cards show "WhatsApp {Neelam}" with her wa.me number and the supervisor in the text; overdue/constraint/JMR cards still go to the supervisor; blank number → greyed "No WhatsApp number — Neelam" pill.
 **Status:** shipped (committed & pushed); prod-unverified.
+
+**v2-64 follow-up (2026-10-21):** Email Plan said "no email in the Team tab for: Sashi" — the Team tab name is **Shashi Rawat**, the code looked for "Sashi". Fixed: Cc lookup now tries both spellings, and the "missing" warning shows the full name to add (Neelam Rawat, Aditya, Shashank Soni, Shalini Gupta, Shashi Rawat). Names confirmed by the user against the Team tab.
