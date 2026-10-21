@@ -2,7 +2,7 @@ import { state } from '../lib/state.js';
 import { getSeenLotIds } from '../lib/seenLots.js';
 import { countUnseen, getSeenKeys, markKeysSeen } from '../lib/seenItems.js';
 import { dprAttentionKeys, financeAttentionKeys, requestAttentionKeys, snagAttentionKeys } from '../lib/attentionKeys.js';
-import { supervisorWhatsApp } from '../lib/whatsapp.js';
+import { supervisorWhatsApp, teamMemberWhatsApp } from '../lib/whatsapp.js';
 import { syncProject } from '../data/loadAllData.js';
 import { CHECKLIST_DEFS, TODAY, reqTypeLabel } from '../lib/constants.js';
 import { canDo, daysDiff, fmt, fmtDate, needsFinanceReview, needsRABill, pct, visibleProjects } from '../lib/helpers.js';
@@ -223,16 +223,20 @@ export function buildNotifHTML(){
   const amber=alerts.filter(a=>a.sev==='amber');
   let html=reqSectionHTML;
   function cardHTML(a){
-    const waMsg=encodeURIComponent('Hi '+a.proj.supervisor+',\n\nAlert — '+a.proj.name+' '+a.proj.tower+':\n'+a.msg+'\n'+a.detail+'\n\n— Ecoste Ops');
-    const waNumber=supervisorWhatsApp(a.proj);
-    const noSupervisor=!String(a.proj.supervisor||'').trim()||a.proj.supervisor==='—';
+    // v2-65: stalled-milestone alerts go to Neelam Rawat (Team member 'neelam'), not the project supervisor.
+    const toNeelam=a.type==='milestone';
+    const neelam=toNeelam?teamMemberWhatsApp('neelam'):null;
+    const toName=toNeelam?((neelam&&neelam.name)||'Neelam Rawat'):a.proj.supervisor;
+    const waMsg=encodeURIComponent('Hi '+toName+',\n\nAlert — '+a.proj.name+' '+a.proj.tower+':\n'+a.msg+'\n'+a.detail+(toNeelam?'\nSupervisor: '+(a.proj.supervisor||'—'):'')+'\n\n— Ecoste Ops');
+    const waNumber=toNeelam?(neelam&&neelam.number):supervisorWhatsApp(a.proj);
+    const noSupervisor=!toNeelam&&(!String(a.proj.supervisor||'').trim()||a.proj.supervisor==='—');
     // No usable number -> a greyed, non-clickable pill instead of a link (v2-45; it used to open wa.me/91XXXXXXXXXX).
     // Sending the WhatsApp reminder is treated as "handled" — dismiss this alert from the bell/
     // panel right away (see dismissAlertNotification above). Doesn't touch the href, so the
     // wa.me tab still opens as normal; onclick just also fires alongside it.
     const waBtn=waNumber
-      ?'<a class="wa-btn" href="https://wa.me/'+waNumber+'?text='+waMsg+'" target="_blank" onclick="dismissAlertNotification(\''+a.key.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">📲 WhatsApp '+a.proj.supervisor+'</a>'
-      :'<span class="wa-btn" style="background:#bbb;cursor:not-allowed" title="Add this person\'s WhatsApp no. in the Team tab">📲 '+(noSupervisor?'No supervisor assigned':'No WhatsApp number — '+a.proj.supervisor)+'</span>';
+      ?'<a class="wa-btn" href="https://wa.me/'+waNumber+'?text='+waMsg+'" target="_blank" onclick="dismissAlertNotification(\''+a.key.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">📲 WhatsApp '+toName+'</a>'
+      :'<span class="wa-btn" style="background:#bbb;cursor:not-allowed" title="Add this person\'s WhatsApp no. in the Team tab">📲 '+(noSupervisor?'No supervisor assigned':'No WhatsApp number — '+toName)+'</span>';
     return '<div class="alert-card">'+
       '<div class="alert-header">'+
         '<div class="alert-icon '+(a.sev==='red'?'red':'amber')+'">'+(iconMap[a.type]||'⚠️')+'</div>'+

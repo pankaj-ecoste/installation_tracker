@@ -10,6 +10,14 @@ export function normalizeWhatsAppNumber(raw){
   return null;
 }
 
+// v2-65: a Team member looked up by username — returns {name, number} (number null if none usable),
+// or null if there is no such member. Used for alerts that go to a fixed person, not the supervisor.
+export function teamMemberWhatsApp(username){
+  const key=String(username||'').trim().toLowerCase();
+  const member=(state.teamMembers||[]).find(m=>String(m.username||'').trim().toLowerCase()===key);
+  return member?{name:member.name,number:normalizeWhatsAppNumber(member.wa)}:null;
+}
+
 // Number to WhatsApp for a project's supervisor, or null if there isn't a usable one (v2-45).
 // projects.supervisor_wa is an optional per-project override (almost always blank); otherwise the
 // number comes from the matching Team member — username first (what projects normally store),
