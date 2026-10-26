@@ -3,7 +3,7 @@ import { state } from '../../lib/state.js';
 import { syncProject } from '../../data/loadAllData.js';
 import { logActivity } from '../../lib/activityLog.js';
 import { CHECKLIST_DEFS, blankChecklistData, checklistDoneItems, checklistTotalItems, getAdminEmail, isChecklistActive, notifyByGmail } from '../../lib/constants.js';
-import { daysDiff, dprRowsInstalled, fmt, fmtDate, frameOnlyProject, isFrameProduct, visibleProjects } from '../../lib/helpers.js';
+import { daysDiff, dprRowsInstalled, fmt, fmtDate, isFrameProduct, visibleProjects } from '../../lib/helpers.js';
 import { projectHasChecklistAwaitingReview } from '../../lib/attentionKeys.js';
 import { dprToRow, lotToRow, rowToDpr } from '../../lib/mappers.js';
 import { pickFilesOrWarn, uploadFiles, uploadFilesWithNames } from '../../lib/uploads.js';
@@ -87,7 +87,7 @@ export function renderDPR(){
   vp.forEach(p=>{
     const entries=state.dprLog.filter(d=>d.projId===p.id);
     if(!entries.length){ avgPerDayByProj[p.id]=0; return; }
-    const total=entries.reduce((s,d)=>s+dprRowsInstalled(d.products,d.projId),0);
+    const total=entries.reduce((s,d)=>s+dprRowsInstalled(d.products),0);
     avgPerDayByProj[p.id]=Math.round(total/entries.length);
   });
   // v2-48: projects with a checklist completed and awaiting review float to the top of the checklist
@@ -98,7 +98,7 @@ export function renderDPR(){
   el.innerHTML=checklistSectionsHtml+visible.map(d=>{
     const hasConstraint=d.constraints&&d.constraints[0]!=='None';
     const borderColor=hasConstraint?'#cc3333':'#1D9E75';
-    const totalToday=dprRowsInstalled(d.products,d.projId);
+    const totalToday=dprRowsInstalled(d.products);
     const avgPerDay=avgPerDayByProj[d.projId]||0;
     // Live-computed, not the stored d.dayNo/d.daysLeft (those manual fields are gone as of
     // v2-26) — recalculated from the project's current dates every render, using this entry's
@@ -435,7 +435,7 @@ export function dprWeeklySums(projId,dateLike){
   const range=dprWeekRange(dateLike); if(!range) return null;
   const entries=state.dprLog.filter(e=>e.projId===projId&&isInWeekRange(e.date,range));
   const committed=entries.reduce((s,e)=>s+(e.todayProjectionQty||0),0);
-  const actual=entries.reduce((s,e)=>s+dprRowsInstalled(e.products,e.projId),0);
+  const actual=entries.reduce((s,e)=>s+dprRowsInstalled(e.products),0);
   return {committed,actual};
 }
 // "Today is Day No" and "Days Left" — computed from Installation Commencement Date (falling back
@@ -653,7 +653,7 @@ export async function saveDPR(){
   let oldTotalTodayForEdit=0;
   if(state.editingDprId){
     const oldEntry=state.dprLog.find(x=>x.id===state.editingDprId);
-    if(oldEntry) oldTotalTodayForEdit=dprRowsInstalled(oldEntry.products,projId);
+    if(oldEntry) oldTotalTodayForEdit=dprRowsInstalled(oldEntry.products);
   }
   let savedDpr;
   if(state.editingDprId){
@@ -746,7 +746,7 @@ export async function saveDPR(){
   // roll product totals up into project's installed qty
   if(p){
       // v2-68: frame rows are logged in the DPR but never roll into the project's Installed total.
-      const rawTotalToday=dprRowsInstalled(productsOut,projId);
+      const rawTotalToday=dprRowsInstalled(productsOut);
       // When editing an existing DPR, only the CHANGE since the original submission should
       // roll into the project total — otherwise the original day's qty gets double-counted
       // on top of the correction.
@@ -754,7 +754,7 @@ export async function saveDPR(){
       // If Supervisor corrected a product's "Cumulative till yesterday" (different from what
       // the system auto-computed from DPR history), that correction needs to reach the
       // project's overall Installed Qty too — not just this DPR sheet's own display math.
-      const correctionDelta=productsOut.filter(r=>frameOnlyProject(projId)||!isFrameProduct(r.product)).reduce((a,r)=>a+((r.cumulativeTillYesterday||0)-(r.originalCumulative!=null?r.originalCumulative:r.cumulativeTillYesterday)),0);
+      const correctionDelta=productsOut.filter(r=>!isFrameProduct(r.product)).reduce((a,r)=>a+((r.cumulativeTillYesterday||0)-(r.originalCumulative!=null?r.originalCumulative:r.cumulativeTillYesterday)),0);
       if(totalToday!==0||correctionDelta!==0){
       const wasNotStarted=p.status==='Not Started';
       p.installedQty=Math.max(0,Math.min(p.plannedQty,p.installedQty+totalToday+correctionDelta));
