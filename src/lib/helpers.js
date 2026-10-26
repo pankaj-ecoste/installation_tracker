@@ -7,6 +7,17 @@ export function toggleProjectDocs(projId){ state.projectDocsExpanded[projId]=!st
 /* ══ HELPERS ══ */
 export const fmt = n => Number(n||0).toLocaleString('en-IN');
 export const pct = (a,b) => b>0 ? Math.round((a/b)*100) : 0;
+// v2-68: a Frame (GI / MS / Aluminium) is a support structure, not installed product — it must never
+// count toward a project's Planned / Installed totals (the wall would be counted twice). Same
+// "name contains frame" rule the Dashboard's Frame Installed column already uses.
+export const isFrameProduct = name => !!name && String(name).toLowerCase().includes('frame');
+// Sum of DPR product rows' todayInstalled, frames excluded.
+export const dprRowsInstalled = rows => (rows||[]).reduce((a,r)=>a+(isFrameProduct(r.product)?0:(r.todayInstalled||0)),0);
+// Installed to date for one product name, summed across a project's whole DPR history.
+export const productInstalledToDate = (projId,productName) => state.dprLog.filter(d=>d.projId===projId).reduce((sum,d)=>{
+  const row=(d.products||[]).find(r=>r.product===productName);
+  return sum+(row?(row.todayInstalled||0):0);
+},0);
 export const fillCls = p => p>=100?'fg':p>=50?'fa':'fr';
 export const fmtDate = d => { if(!d) return '—'; try { return new Date(d).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); } catch(e) { return d; }};
 export const daysDiff = (a,b) => Math.round((new Date(b)-new Date(a))/86400000);

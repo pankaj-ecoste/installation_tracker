@@ -1,7 +1,7 @@
 import { state } from '../../lib/state.js';
 import { syncProject } from '../../data/loadAllData.js';
 import { CHECKLIST_DEFS, TODAY, checklistDoneItems, checklistTotalItems } from '../../lib/constants.js';
-import { canDo, crmSoBadge, fillCls, fmt, fmtDate, needsRABill, pct, statusBadge, visibleProjects } from '../../lib/helpers.js';
+import { canDo, crmSoBadge, fillCls, fmt, fmtDate, isFrameProduct, needsRABill, pct, productInstalledToDate, statusBadge, visibleProjects } from '../../lib/helpers.js';
 import { projectHasOpenSnag } from '../../lib/attentionKeys.js';
 import { docLink, pickFilesOrWarn, uploadFilesWithNames } from '../../lib/uploads.js';
 import { updateBell } from '../alerts.js';
@@ -202,7 +202,11 @@ export function renderDetail(p){
       '</div>'+
     '</div>').join(''):'<div style="font-size:12px;color:#888">No snags logged.</div>';
   const vendorHtml=p.vendors&&p.vendors.length?p.vendors.map(v=>'<span class="badge bgr">'+v.name+(v.role?' ('+v.role+')':'')+'</span>').join(' '):'<span style="font-size:12px;color:#888">'+p.vendor+'</span>';
-  const productHtml=p.products&&p.products.length?p.products.map(pr=>'<div style="font-size:12px;padding:3px 0;border-bottom:1px solid #f0f0f0">'+pr.name+' — <b>'+fmt(pr.qty)+'</b> '+unitLabel+'</div>').join(''):'';
+  // v2-68: product-wise "installed / planned" (from DPR history). Frames are listed separately,
+  // one simple line each, and are not part of the Planned / Installed totals above.
+  const prodLine=pr=>'<div style="font-size:12px;padding:3px 0;border-bottom:1px solid #f0f0f0">'+pr.name+' — <b>'+fmt(productInstalledToDate(p.id,pr.name))+' / '+fmt(pr.qty)+'</b> '+unitLabel+'</div>';
+  const mainProducts=(p.products||[]).filter(pr=>!isFrameProduct(pr.name)), frameProducts=(p.products||[]).filter(pr=>isFrameProduct(pr.name));
+  const productHtml=mainProducts.map(prodLine).join('')+(frameProducts.length?'<div class="ms-title" style="margin-top:8px">Frames</div>'+frameProducts.map(prodLine).join(''):'');
   const cmHtml=p.comments.map(c=>'<div class="comment"><div>'+c.text+'</div><div class="comment-meta">'+c.author+' · '+c.time+'</div></div>').join('');
   return '<div class="detail-panel">'+
     '<div class="detail-grid" style="grid-template-columns:1fr">'+

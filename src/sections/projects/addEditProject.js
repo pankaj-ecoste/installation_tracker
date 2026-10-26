@@ -4,7 +4,7 @@ import { TEST_MODE } from '../../lib/config.js';
 import { syncProject } from '../../data/loadAllData.js';
 import { logActivity } from '../../lib/activityLog.js';
 import { CHECKLIST_DEFS, CHECKLIST_TEMPLATES, checklistDoneItems, checklistTotalItems, isChecklistActive, milestoneKeyFor, notifyJMRUpload } from '../../lib/constants.js';
-import { canDo, daysDiff, fmt, fmtDate } from '../../lib/helpers.js';
+import { canDo, daysDiff, fmt, fmtDate, isFrameProduct } from '../../lib/helpers.js';
 import { projectToRow, rowToProject } from '../../lib/mappers.js';
 import { namedDocLink, pickFilesOrWarn, uploadFiles, uploadFilesWithNames } from '../../lib/uploads.js';
 import { updateBell } from '../alerts.js';
@@ -243,7 +243,8 @@ export async function saveProject(){
   const vendors=state.formVendors.filter(v=>v.name.trim());
   const products=state.formProducts.filter(pr=>pr.name.trim());
   const unit='sqft';
-  const totalPlanned=products.reduce((a,pr)=>a+(parseInt(pr.qty)||0),0)||0;
+  // v2-68: Frame lines are listed but never counted in Planned (the wall would be counted twice).
+  const totalPlanned=products.reduce((a,pr)=>a+(isFrameProduct(pr.name)?0:(parseInt(pr.qty)||0)),0)||0;
   const baseData={
     name,
     developer:document.getElementById('f-dev').value.trim()||'—',

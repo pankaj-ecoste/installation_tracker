@@ -4151,3 +4151,25 @@ Team request: Pre-Mockup projects keep milestones 1 and 2; "Approval from Financ
 - Status: verified in TEST_MODE browser (new Pre-Mockup project form loads 3 milestones: "Sample size and location verified", "Align manpower by the supervisor at the site", "Pre-mock Details Send to Sales Team"); not committed.
 
 **v2-64 follow-up 3 (2026-10-26):** the Email button was admin-only. A supervisor now sees **"✉ Notify by Email"** on their own plan card (RLS already limits them to their own plans); same recipients/table body as admin's Email Plan. Edit and Delete stay admin-only. `emailVisitPlan` also refuses a supervisor opening another supervisor's plan.
+
+### v2-68: Frame excluded from Planned/Installed totals; product-wise breakdown (2026-10-26)
+**Problem (user screenshots):** project card shows Planned 15,458 sqft = 24mm Grille 7,729 + MS Frame 7,729. Same wall counted twice.
+**Root cause:** `addEditProject.js` (~246) sums every product line (frames included) into `plannedQty`; `dprTab.js` (~748) sums every DPR product row (frames included) into `installedQty`. Every screen reading those two fields inherits the double count (card, dashboard, gantt, portals, alerts, finance/material fallbacks). `dashboardTab.js:36` already hand-subtracts frames for run-rate only.
+**Decisions (user):**
+- Top headline (Planned / Installed / % / progress bar): SUM OF NON-FRAME PRODUCTS ONLY.
+- Bottom Products list: planned AND installed per product ("24mm Grille — 3,314 / 7,729 sqft").
+- Frames (GI / MS / Aluminium) NOT in any total; shown as simple separate lines "Frame name — installed / planned".
+- Frame = product name contains "frame" (same rule the Dashboard already uses).
+- Installed stays hand-editable in Update Progress, relabelled non-frame installed; existing data fixed only after a read-only prod audit + before/after list shown to user.
+**Plan:**
+1. `isFrameProduct(name)` + per-product installed helper in `src/lib/helpers.js`.
+2. Planned total excludes frames (Add/Edit Project save).
+3. DPR roll-up (`saveDPR`, totals) excludes frame rows from `installedQty`.
+4. Project card detail: Products list planned/installed per product; Frames section separate.
+5. Remove Dashboard's manual frame subtraction (would double-subtract).
+6. Read-only prod audit of planned_qty/installed_qty vs products/DPR; backfill after user approval.
+7. Verify in real browser (TEST_MODE) + regression check of the other screens.
+**Built (code, not committed):** `helpers.js` (`isFrameProduct`, `dprRowsInstalled`, `productInstalledToDate`); `addEditProject.js` planned total excludes frames; `dprTab.js` roll-up, correction delta, DPR day/avg/weekly totals exclude frame rows; `projectCards.js` Products = "installed / planned" per product + separate FRAMES list; `dashboardTab.js` manual frame subtraction removed; `index.html` label "Installed qty (excl. frames)".
+**Verified (TEST_MODE browser, own server on :5200):** Grille 1000 + MS Frame 1000, DPR logged 300 grille + 500 frame -> project Installed 300 / Planned 1,000 (30%); card shows "24mm Grille — 300 / 1,000", FRAMES "MS Frame — 500 / 1,000". Build passes.
+**Prod audit (read-only, 2026-10-26) — 16 projects need attention, NOT yet changed.** Planned: stored = 2x non-frame in most cases (halve). Installed is messy: many are hand-set with no DPR, some DPR history disagrees with stored. Edge cases: id 62 (YTT, products all frame -> planned 0), id 40 (Leena, frame-only DPR), id 88 (Pioneer Monty, DPR only frame), id 66 / 85 (DPR total > stored). Backfill must be per-project, user-approved.
+**Status:** code done + browser-verified; prod data backfill pending user approval of the per-project before/after list.

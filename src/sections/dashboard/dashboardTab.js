@@ -33,8 +33,7 @@ export function renderDashboard(){
     // Required run rate — total planned qty (excluding Frame, since frame goes in as its
     // own separate pre-requisite step and isn't the pace being measured here) over the
     // working days from today to the planned/committed date.
-    const framePlannedQty=(p.products||[]).filter(pr=>pr.name&&pr.name.toLowerCase().includes('frame')).reduce((a,pr)=>a+(parseInt(pr.qty)||0),0);
-    const plannedQtyExcludingFrame=Math.max(0,(p.plannedQty||0)-framePlannedQty);
+    const plannedQtyExcludingFrame=p.plannedQty||0; // v2-68: plannedQty already excludes frames
     // Always compute a real number — even once overdue, clamp to a minimum of 1 day so this
     // shows "what it'd take to catch up starting today" instead of just the word "Overdue".
     const requiredRunRate=(daysRemaining!==null)?Math.round(plannedQtyExcludingFrame/Math.max(1,daysRemaining)):null;
