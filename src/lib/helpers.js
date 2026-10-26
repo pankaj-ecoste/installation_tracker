@@ -12,7 +12,10 @@ export const pct = (a,b) => b>0 ? Math.round((a/b)*100) : 0;
 // "name contains frame" rule the Dashboard's Frame Installed column already uses.
 export const isFrameProduct = name => !!name && String(name).toLowerCase().includes('frame');
 // Sum of DPR product rows' todayInstalled, frames excluded.
-export const dprRowsInstalled = rows => (rows||[]).reduce((a,r)=>a+(isFrameProduct(r.product)?0:(r.todayInstalled||0)),0);
+// A project whose products are ALL frames (nothing else is sold) counts them — the frame is then the product.
+export const frameOnlyProducts = products => !!(products||[]).length && (products||[]).every(x=>isFrameProduct(x.name));
+export const frameOnlyProject = projId => { const p=state.projects.find(x=>x.id===projId); return !!p&&frameOnlyProducts(p.products); };
+export const dprRowsInstalled = (rows,projId) => { const all=frameOnlyProject(projId); return (rows||[]).reduce((a,r)=>a+((!all&&isFrameProduct(r.product))?0:(r.todayInstalled||0)),0); };
 // Installed to date for one product name, summed across a project's whole DPR history.
 export const productInstalledToDate = (projId,productName) => state.dprLog.filter(d=>d.projId===projId).reduce((sum,d)=>{
   const row=(d.products||[]).find(r=>r.product===productName);
