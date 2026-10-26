@@ -4130,3 +4130,13 @@ at all and is fully live once deployed.
 script's own header comment — the session pooler connection string in `.env.local`), or grant the Bash/PowerShell permission this
 machine is asking for so it can be re-attempted. Once applied, a real round-trip (toggle a permission as admin, confirm it survives a
 reload, confirm a different-role login actually sees it) still needs to happen — not yet done, since the table doesn't exist in prod yet.
+
+**v2-66 — migration 0030 APPLIED to production (2026-10-26, user: "yes confirm from my side do it")**
+`node scripts/apply-migrations.mjs` run successfully (28 already applied + this one). Verified read-only afterward: table has the
+expected 5 columns, all 3 RLS policies present (`role_permissions_select/insert/update`), the `role_permissions_guard_trg` trigger
+present. Ran a rolled-back transaction to prove the trigger logic itself (not just that it exists): inserting a row for `role='admin'`
+correctly raised the guard's exception; a normal `design` row inserted successfully with `updated_at` stamped by the trigger; an
+upsert-style conflict update correctly flipped `allowed`. Rolled back — production `role_permissions` is confirmed at 0 rows, nothing
+left over from this verification. Not yet done: a real click-test through the live admin UI (toggle a permission, reload, confirm a
+different-role login sees it) — the SQL-level proof above is strong, but the actual browser round-trip hasn't been watched.
+**Status: v2-66 fully shipped** (Material/Design fix was already live via the earlier code push; the permissions table is now live too).
