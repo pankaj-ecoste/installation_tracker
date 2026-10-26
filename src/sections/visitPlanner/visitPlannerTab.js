@@ -127,7 +127,8 @@ function planCardHTML(plan){
     '<div class="vp-h3">Location = '+esc(plan.base_city)+'</div>'+
     '<div style="overflow-x:auto"><table class="vp-table"><thead><tr><th style="width:90px">Date</th><th style="width:100px">Day</th><th>Site location</th><th>Reason / Task</th><th style="width:140px">Status</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
     '<div class="vp-foot"><span style="color:#666;font-size:12px">'+doneCount+' of '+real.length+' visit'+(real.length!==1?'s':'')+' done</span>'+
-      (admin?'<span class="vp-actions"><button class="btn btn-outline btn-sm" onclick="openVisitPlanForm('+plan.id+')">✎ Edit Plan</button> <button class="btn btn-outline btn-sm" onclick="emailVisitPlan('+plan.id+')">✉ Email Plan</button> <button class="btn btn-outline btn-sm" style="color:#c0392b;border-color:#e6aaaa" onclick="deleteVisitPlan('+plan.id+')">Delete</button></span>':'')+
+      // Email Plan is for the supervisor too (their own plan — RLS only lets them see their own); Edit / Delete stay admin-only.
+      '<span class="vp-actions">'+(admin?'<button class="btn btn-outline btn-sm" onclick="openVisitPlanForm('+plan.id+')">✎ Edit Plan</button> ':'')+'<button class="btn btn-outline btn-sm" onclick="emailVisitPlan('+plan.id+')">✉ '+(admin?'Email Plan':'Notify by Email')+'</button>'+(admin?' <button class="btn btn-outline btn-sm" style="color:#c0392b;border-color:#e6aaaa" onclick="deleteVisitPlan('+plan.id+')">Delete</button>':'')+'</span>'+
     '</div></div>';
 }
 function statCard(label,value,color){
@@ -233,9 +234,10 @@ export async function vpSaveRemark(){
   await commitStatus(plan,p.visitId,p.status,remark);
 }
 
-/* ── email / delete (admin only) ── */
+/* ── email (admin, or the supervisor for their own plan) / delete (admin only) ── */
 export function emailVisitPlan(planId){
   const plan=state.visitPlans.find(p=>p.id===planId); if(!plan) return;
+  if(!isAdmin()&&String(plan.supervisor_id)!==String(state.currentUser&&state.currentUser.id)) return;
   const r=planEmailRecipients(plan,state.teamMembers);
   if(r.missing.length||!r.to.length){
     alert('Cannot prepare this email — no email address in the Team tab for: '+(r.missing.join(', ')||'the To recipients')+'.\nAdd it in the Team tab and try again.');

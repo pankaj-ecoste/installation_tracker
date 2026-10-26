@@ -4149,3 +4149,5 @@ Team request: Pre-Mockup projects keep milestones 1 and 2; "Approval from Financ
 - Decisions (user): new projects only, existing projects untouched; 3 milestones total; no email/notification behaviour.
 - Change: `MS_PREMOCKUP` in `src/lib/constants.js` only. No backend/migration.
 - Status: verified in TEST_MODE browser (new Pre-Mockup project form loads 3 milestones: "Sample size and location verified", "Align manpower by the supervisor at the site", "Pre-mock Details Send to Sales Team"); not committed.
+
+**v2-64 follow-up 3 (2026-10-26):** the Email button was admin-only. A supervisor now sees **"✉ Notify by Email"** on their own plan card (RLS already limits them to their own plans); same recipients/table body as admin's Email Plan. Edit and Delete stay admin-only. `emailVisitPlan` also refuses a supervisor opening another supervisor's plan.
