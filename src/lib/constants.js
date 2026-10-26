@@ -162,8 +162,7 @@ export const MS_SAMPLING = [
 export const MS_PREMOCKUP = [
   'Sample size and location verified',
   'Align manpower by the supervisor at the site',
-  'Approval from Finance',
-  'Send Work Order (WO) to the vendor'
+  'Pre-mock Details Send to Sales Team'
 ];
 // Mockup milestone workflow — mirrors the same sequence as when a new Mockup request comes
 // in from Sales: sample arrives, supervisor revisits, vendor installs, supervisor checks

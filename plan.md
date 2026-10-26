@@ -4143,3 +4143,9 @@ different-role login sees it) — the SQL-level proof above is strong, but the a
 
 **v2-66 — prod-verified by the user 2026-10-26**: live click-test done (toggle a permission as admin, reload, confirmed it stuck).
 v2-66 is closed out — both the Material/Design read-only access and the Role Permissions persistence fix are confirmed working in production.
+
+### v2-67: Pre-Mockup milestones 4 -> 3 (2026-10-26)
+Team request: Pre-Mockup projects keep milestones 1 and 2; "Approval from Finance" and "Send Work Order (WO) to the vendor" are replaced by one milestone, "Pre-mock Details Send to Sales Team" (plain planned/actual date, like the others).
+- Decisions (user): new projects only, existing projects untouched; 3 milestones total; no email/notification behaviour.
+- Change: `MS_PREMOCKUP` in `src/lib/constants.js` only. No backend/migration.
+- Status: verified in TEST_MODE browser (new Pre-Mockup project form loads 3 milestones: "Sample size and location verified", "Align manpower by the supervisor at the site", "Pre-mock Details Send to Sales Team"); not committed.
