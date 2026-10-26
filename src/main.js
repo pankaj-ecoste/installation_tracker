@@ -2,7 +2,7 @@ import './styles/app.css';
 import { installDomGlobals } from './utils/domGlobals.js';
 import { state } from './lib/state.js';
 import { loadAllData } from './data/loadAllData.js';
-import { showTeamDashboard, restoreTeamSession } from './auth/teamAuth.js';
+import { loadRolePermissions, showTeamDashboard, restoreTeamSession } from './auth/teamAuth.js';
 import { restoreClientSession } from './auth/clientAuth.js';
 import { restoreVendorSession } from './auth/vendorAuth.js';
 import { initVersionCheck } from './lib/versionCheck.js';
@@ -22,8 +22,8 @@ initVersionCheck();
   // for a remembered session in priority order team > client > vendor — at most one of these
   // flows is ever logged in at a time, so first match wins. Each restore*() call is a no-op
   // (returns false) if nothing valid is stored.
-  if(restoreTeamSession()){ showTeamDashboard(); }
+  if(restoreTeamSession()){ await loadRolePermissions(); showTeamDashboard(); }
   else if(await restoreClientSession()){ /* restoreClientSession already shows the client portal */ }
   else if(await restoreVendorSession()){ /* restoreVendorSession already shows the vendor portal */ }
-  else if(state.currentUser){ showTeamDashboard(); } // dead in practice today, kept for safety
+  else if(state.currentUser){ await loadRolePermissions(); showTeamDashboard(); } // dead in practice today, kept for safety
 })();

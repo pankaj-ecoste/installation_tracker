@@ -83,7 +83,22 @@ export function renderTeamMgmt(){
   el.innerHTML=html;
 }
 
-export function togglePerm(role,perm){ if(role==='admin') return; if(!canDo('editPermissions')) return; ROLES[role].can[perm]=!ROLES[role].can[perm]; renderTeamMgmt(); if(state.currentUser&&state.currentUser.role===role) showTeamDashboard(); }
+// v2-66: this used to only mutate the in-memory ROLES constant — no table backed it, so a toggle was
+// lost on the next reload and was never visible to any other session (incl. the role it was meant to
+// affect) to begin with. Now persisted: optimistic (the UI flips immediately, same as before) with a
+// rollback + alert if the save fails, so the screen never silently drifts from the database.
+export async function togglePerm(role,perm){
+  if(role==='admin') return; if(!canDo('editPermissions')) return;
+  const next=!ROLES[role].can[perm];
+  ROLES[role].can[perm]=next; renderTeamMgmt(); if(state.currentUser&&state.currentUser.role===role) showTeamDashboard();
+  if(TEST_MODE) return; // mock db has no role_permissions table — in-memory only, same as before this existed
+  const {error}=await db.from('role_permissions').upsert({role,permission:perm,allowed:next},{onConflict:'role,permission'});
+  if(error){
+    console.error('Supabase: failed to save role permission',error);
+    ROLES[role].can[perm]=!next; renderTeamMgmt(); if(state.currentUser&&state.currentUser.role===role) showTeamDashboard();
+    alert('Could not save this permission change — check console. It has been reverted.');
+  }
+}
 
 export function openAddMember(){
   state.editingMemberId=null;

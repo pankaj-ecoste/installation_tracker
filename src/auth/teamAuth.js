@@ -8,10 +8,25 @@ import { renderProjects } from '../sections/projects/projectCards.js';
 import { updateNewVendorBadge } from '../sections/vendors/newVendorsTab.js';
 import { canUseVisitPlanner, loadVisitPlans, updateVisitPlannerBadge } from '../sections/visitPlanner/visitPlannerTab.js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY, TEST_MODE } from '../lib/config.js';
-import { setTeamAuthToken } from '../lib/supabaseClient.js';
+import { db, setTeamAuthToken } from '../lib/supabaseClient.js';
 import { saveTeamSession, loadTeamSession, clearTeamSession } from '../lib/rememberMe.js';
 
 /* ══ TEAM AUTH ══ */
+// v2-66: merges any saved role-permission overrides into the in-memory ROLES constant. Called once,
+// right after a login/session-restore is established and BEFORE showTeamDashboard() runs (that's
+// what reads canDo() to decide every tab's visibility). TEST_MODE's mock db has no role_permissions
+// table (and no real multi-session concept to persist across anyway), so it's skipped there — ROLES
+// just stays at its hardcoded defaults, same as before this existed.
+export async function loadRolePermissions(){
+  if(TEST_MODE) return;
+  try{
+    const {data,error}=await db.from('role_permissions').select('role,permission,allowed');
+    if(error){ console.error('Supabase: failed to load role_permissions',error); return; }
+    (data||[]).forEach(row=>{
+      if(ROLES[row.role]&&row.role!=='admin') ROLES[row.role].can[row.permission]=!!row.allowed;
+    });
+  }catch(e){ console.error('loadRolePermissions failed',e); }
+}
 export function showTeamLogin(){
   showSection('team-login');
   document.getElementById('tbr-client').classList.add('hidden');
@@ -57,6 +72,7 @@ export async function teamLogin(){
   state.currentUser=member;
   document.getElementById('tl-user').value='';
   document.getElementById('tl-pass').value='';
+  await loadRolePermissions();
   showTeamDashboard();
 }
 
@@ -102,10 +118,11 @@ export function showTeamDashboard(){
   if(vpTab) vpTab.style.display=canUseVisitPlanner()?'':'none';
   state.visitPlans=[]; state.visitPlansLoaded=false; state.vpFilters={week:'',supervisorId:'',status:''};
   if(canUseVisitPlanner()) loadVisitPlans().then(()=>updateVisitPlannerBadge());
-  // Material tab — Admin/Dispatch Head can manage; Supervisor gets view-only access
-  // (right to view, not edit — the addLot permission still blocks adding/editing lots).
+  // Material tab — Admin/Dispatch Head can manage; Supervisor and Design get view-only access
+  // (right to view, not edit — the addLot permission still blocks adding/editing lots, and the
+  // only edit button on a lot is hardcoded to role==='admin'). See plan.md v2-66.
   const matTab=document.getElementById('tab-material');
-  if(matTab) matTab.style.display=(canDo('manageDispatch')||state.currentUser&&state.currentUser.role==='supervisor')?'':'none';
+  if(matTab) matTab.style.display=(canDo('manageDispatch')||state.currentUser&&['supervisor','design'].includes(state.currentUser.role))?'':'none';
   // Design role is scoped to only the Requests module (see plan.md v2-29) — "All projects" and
   // "Pipeline" aren't gated by any permission for any other role today, so this is an explicit
   // check rather than a side effect of the `can` flags above.

@@ -47,7 +47,10 @@ function lotPriority(lot){
 export function renderMaterial(){
   const el=document.getElementById('material-list'); if(!el) return;
   const sch=document.getElementById('mat-search')?.value.toLowerCase()||'';
-  const allVp=visibleProjects();
+  // v2-66: Design gets read-only access to every project's material here specifically — NOT a
+  // global viewAll grant, which would also leak every project's overdue/stuck alerts into their
+  // (currently empty) notification bell via computeAlerts(). Scoped to this one render only.
+  const allVp=(state.currentUser&&state.currentUser.role==='design')?state.projects:visibleProjects();
   if(!allVp.length){el.innerHTML='<div class="empty">No projects visible.</div>';return;}
   const vp=allVp.filter(p=>!sch||(p.name||'').toLowerCase().includes(sch)||(p.tower||'').toLowerCase().includes(sch));
   if(!vp.length){el.innerHTML='<div class="empty">No projects match your search.</div>';return;}

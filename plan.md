@@ -4060,3 +4060,49 @@ Team ask (screenshot `Screenshot 2026-10-21 122650.png`): every "Milestone stall
 **v2-64 follow-up (2026-10-21):** Email Plan said "no email in the Team tab for: Sashi" — the Team tab name is **Shashi Rawat**, the code looked for "Sashi". Fixed: Cc lookup now tries both spellings, and the "missing" warning shows the full name to add (Neelam Rawat, Aditya, Shashank Soni, Shalini Gupta, Shashi Rawat). Names confirmed by the user against the Team tab.
 
 **v2-64 follow-up 2 (2026-10-21):** (1) Email Plan body is now a pipe-separated table (Day | Date | Site | Reason | Status), one visit per row — Gmail's compose link is plain text only, so a real HTML table is not possible without a server-side email service (not used). (2) Cc "Shalini Gupta" replaced by **the Admin** (the active team member with role Admin; first one with an email); Shalini was deleted from the Team tab. Cc is now Admin + Shashi Rawat.
+
+### v2-66: Material tab read-only for Design + Role Permissions actually persists (2026-10-26)
+
+**Report (user)**: wanted Material visible to Design, read-only, downloads only. Toggled "Manage material dispatch" to ✅ for
+Design in the Role Permissions grid; after a refresh, Material still didn't show for Design.
+
+**Root cause (found in code, not guessed)**:
+1. `togglePerm(role,perm)` (`teamMgmtTab.js`) only ever did `ROLES[role].can[perm]=!ROLES[role].can[perm]` — an in-memory mutation of
+   the hardcoded `ROLES` constant, with **no database write at all**. No `role_permissions` table exists anywhere in the migrations.
+   So any toggle is lost on the very next reload, and was never visible to any other session/device/user to begin with — the whole
+   Role Permissions grid has been cosmetic since it was built.
+2. Separately: turning on "Manage material dispatch" for Design would have been the wrong fix anyway even if it had persisted —
+   that one permission gates both Material's tab visibility AND the ability to add/edit lots, so it would have given Design edit
+   rights too, not view-only.
+3. The actual read-only precedent already exists for Supervisor: `tab-material` visibility is a hardcoded
+   `canDo('manageDispatch')||role==='supervisor'` (`teamAuth.js`); Supervisor's own `addLot` is false, so no "+ Add lot" button and no
+   edit button (✏️, hardcoded `role==='admin'` only) ever show for them — view-only happens for free. Document links inside a lot are
+   plain `<a href target="_blank">` to public storage URLs, no permission check — downloads already work for anyone who can see the tab.
+
+**Decisions (user, "let fixed this permanently")**
+1. **Material/Design**: add `role==='design'` next to `role==='supervisor'` in that same hardcoded check — Design gets the exact
+   Supervisor-style read-only treatment (view + download, no add, no edit), zero other code touched.
+2. **Role Permissions persistence, fixed properly, not patched**: a real `role_permissions` table, RLS-protected the same way as every
+   other admin-only write in this app (`app_jwt_team_role()='admin'`, matching v2-64's `visit_plans` pattern — the current house style,
+   not the older fully-open pattern from before Phase C). Every active team member can SELECT (every role's `canDo()` needs the real
+   matrix, not just admin's), only admin can INSERT/UPDATE. A trigger refuses any write to the `admin` role's own permissions (mirrors
+   `togglePerm`'s existing client-side `if(role==='admin') return;`, so a crafted request can't downgrade admin's own access either).
+   `TEST_MODE`'s mock `db` has no `.upsert()` support and no real multi-session concept — toggles in TEST_MODE stay in-memory only
+   (unchanged behaviour there), matching how `uploadFiles`/similar already special-case TEST_MODE.
+3. Loaded once, merged into the in-memory `ROLES` object, right after a successful team login AND after a restored "remember me"
+   session (both paths that currently call `showTeamDashboard()` — the merge must finish before that, since tab visibility reads
+   `canDo()` immediately). `togglePerm` becomes optimistic (UI updates immediately) with a rollback + alert if the save fails.
+
+**Files**: `supabase/migrations/0030_role_permissions.sql` (new), `src/auth/teamAuth.js` (Material/Design line, `loadRolePermissions()`,
+called from `teamLogin()` and `main.js`'s session-restore path), `src/sections/team/teamMgmtTab.js` (`togglePerm` persists).
+**Status**: locked, build starting.
+
+**Build note (mid-build refinement)**: originally no change to `visibleProjects()`/`viewAll` was planned beyond the one-line tab-visibility
+check. While wiring it up, found that simply widening Design's visibility wasn't enough — `visibleProjects()` returns `[]` for Design
+(their `viewAll` is false, and they own no projects), so Material would have shown the tab but "No projects visible." Granting Design
+`viewAll:true` globally was rejected: `computeAlerts()` (the notification bell) also calls `visibleProjects()` unconditionally, and is
+NOT gated for Design, so a global `viewAll` would have leaked every project's overdue/stuck/constraint alerts into Design's bell (today
+empty for them) — real scope creep beyond "Material, read-only". Fix instead scoped to `renderMaterial()` alone: Design gets
+`state.projects` (all of them) only inside that one function, every other `visibleProjects()` call site (bell, dashboard, etc.) is
+untouched. Known minor gap, not fixed: the Material tab's red badge count still uses the global `visibleProjects()` (empty for Design),
+so it will always show 0 for them even with real in-transit lots — cosmetic only, no leak, not part of what was asked.
