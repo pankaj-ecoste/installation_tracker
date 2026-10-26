@@ -4140,3 +4140,6 @@ upsert-style conflict update correctly flipped `allowed`. Rolled back — produc
 left over from this verification. Not yet done: a real click-test through the live admin UI (toggle a permission, reload, confirm a
 different-role login sees it) — the SQL-level proof above is strong, but the actual browser round-trip hasn't been watched.
 **Status: v2-66 fully shipped** (Material/Design fix was already live via the earlier code push; the permissions table is now live too).
+
+**v2-66 — prod-verified by the user 2026-10-26**: live click-test done (toggle a permission as admin, reload, confirmed it stuck).
+v2-66 is closed out — both the Material/Design read-only access and the Role Permissions persistence fix are confirmed working in production.
