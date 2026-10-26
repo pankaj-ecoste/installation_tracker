@@ -4181,3 +4181,4 @@ Team request: Pre-Mockup projects keep milestones 1 and 2; "Approval from Financ
 **Backfill round 2 applied:** installed taken from DPR non-frame total, planned = non-frame sum: 103 Pioneer Shaft(-1&2) 7729/1315; 43 Omaxe 11332/780; 85 ATS Destinaire 1317/1200; 88 PIONEER MONTY 11800/0 (its DPRs hold only frame rows). Old values: 103 15458/3314, 43 22664/5774, 85 2634/800, 88 23600/1500.
 **Pending (frame-only projects, per final logic -> 0/0):** 62 YTT (2140/2140), 40 Leena (3900/3900) — awaiting user's yes to write 0/0.
 **Backfill round 3 applied (user: "yes write 0 / 0 for both"):** 62 YTT 2140/2140 -> 0/0; 40 Leena 3900/3900 -> 0/0 (frame-only projects). v2-68 data backfill complete: 15 projects. Awaiting user's prod check.
+**v2-68 prod-verified by the user 2026-10-26** ("ok done"). Closed.
