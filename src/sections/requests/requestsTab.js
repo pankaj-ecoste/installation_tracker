@@ -1,7 +1,7 @@
 import { state } from '../../lib/state.js';
 import { db } from '../../lib/supabaseClient.js';
 import { logActivity } from '../../lib/activityLog.js';
-import { CNC_FIELDS, CNC_STAGES, CNC_TEAM_EMAIL, HARISH_EMAIL, isWithoutFrame, restoreFramingMilestones, stripFramingMilestones, MS_MAIN, MS_MAINORDER_STEPS, MS_MOCKUP_STEPS, MS_POSTMOCKUP_STEPS, MS_PREMAINSURVEY_STEPS, MS_PREMOCKUP, MS_SAMPLING, NEELAM_WA, POSTPO_DOC_CATEGORIES, POSTPO_FIELDS, PREPO_FIELDS, SURVEY_FIELDS, VISIT_FIELDS, computeCNCStages, getAdminEmail, getManagementCcEmails, milestoneKeyFor, notifyByGmail, reqFieldGroup, reqNumberPrefix, reqTypeLabel } from '../../lib/constants.js';
+import { CNC_DESIGN_STATUSES, CNC_FIELDS, CNC_PRIORITY_LEVELS, CNC_STAGES, cncPriorityOf, CNC_TEAM_EMAIL, HARISH_EMAIL, isWithoutFrame, restoreFramingMilestones, stripFramingMilestones, MS_MAIN, MS_MAINORDER_STEPS, MS_MOCKUP_STEPS, MS_POSTMOCKUP_STEPS, MS_PREMAINSURVEY_STEPS, MS_PREMOCKUP, MS_SAMPLING, NEELAM_WA, POSTPO_DOC_CATEGORIES, POSTPO_FIELDS, PREPO_FIELDS, SURVEY_FIELDS, VISIT_FIELDS, computeCNCStages, getAdminEmail, getManagementCcEmails, milestoneKeyFor, notifyByGmail, reqFieldGroup, reqNumberPrefix, reqTypeLabel } from '../../lib/constants.js';
 import { canDo, crmSoBadge, daysDiff, fmtDate, visibleProjects } from '../../lib/helpers.js';
 import { markKeysSeen } from '../../lib/seenItems.js';
 import { requestAttentionKey, requestAttentionKeys } from '../../lib/attentionKeys.js';
@@ -114,6 +114,9 @@ export function renderRequestFields(){
   document.getElementById('req-fields-title').textContent=reqTypeLabel(type)+' details';
   document.getElementById('req-postpo-type-row').classList.toggle('hidden', group!=='order');
   document.getElementById('req-fields-list').innerHTML=fields.map(f=>fieldRowHTML(f,state.reqDetails,'req')).join('');
+  // v2-69: once a CNC request is saved, only admin can change its priority (sales ask the admin).
+  const prioEl=document.getElementById('req-cncPriorityCondition');
+  if(prioEl&&state.editingRequestId&&!(state.currentUser&&state.currentUser.role==='admin')) prioEl.disabled=true;
   // No backdating on any date field in the request form.
   const today=new Date().toISOString().slice(0,10);
   fields.forEach(f=>{ if(f.type==='date'){ const el=document.getElementById('req-'+f.key); if(el) el.min=today; } });
@@ -276,7 +279,10 @@ export async function saveRequest(){
   if(!scope){ err.classList.remove('hidden'); document.getElementById('req-err-msg').textContent='Please select a Scope (Installation or Only Supply).'; return; }
   if(group==='order'&&!subType){ err.classList.remove('hidden'); document.getElementById('req-err-msg').textContent='Please select an Installation type.'; return; }
   const fieldSet=(group==='order'?POSTPO_FIELDS:group==='survey'?SURVEY_FIELDS:group==='cnc'?CNC_FIELDS:PREPO_FIELDS).filter(f=>(!f.conditionalOn||f.conditionalOn===subType)&&(!f.onlyFor||f.onlyFor===type));
-  const missingField=fieldSet.find(f=>f.required&&!String(mergedDetails[f.key]||'').trim());
+  // v2-69: priority is mandatory on a new request; an existing CNC request saved before it existed has none,
+  // so a non-admin editing it must not be blocked (only admin can set it).
+  const isAdminUser=!!state.currentUser&&state.currentUser.role==='admin';
+  const missingField=fieldSet.find(f=>f.required&&!(f.key==='cncPriorityCondition'&&state.editingRequestId&&!isAdminUser)&&!String(mergedDetails[f.key]||'').trim());
   if(missingField){ err.classList.remove('hidden'); document.getElementById('req-err-msg').textContent='"'+missingField.label+'" is required.'; return; }
   if(group==='order'){
     const missingDoc=POSTPO_DOC_CATEGORIES.find(c=>!mergedDetails[c.id]||!mergedDetails[c.id].length);
@@ -362,6 +368,7 @@ export function notifyManagementNewRequest(r){
     // v2-38: the CNC team reads this email, so include the CNC-specific details up front.
     lines.push('Client name: '+(d.clientName||'—'));
     lines.push('Type of CNC request: '+(d.cncRequestType||'—'));
+    lines.push('Priority: '+(cncPriorityOf(d)?cncPriorityOf(d).label:'—'));
     lines.push('Size of grill (Sq Feet): '+(d.grillSizeSqFt||'—'));
     lines.push('Need installation: '+(d.needInstallation||'—'));
     lines.push('Remarks: '+(d.remarks||'—'));
@@ -457,7 +464,7 @@ export function renderRequests(){
   // v2-48: requests that need this user's attention (rules in attentionKeys.js) float to the top —
   // stable sort, so the existing order holds inside each group. Roles with no Requests badge have
   // no attention keys, so their order is unchanged.
-  filtered.sort((a,b)=>(requestAttentionKey(a)?0:1)-(requestAttentionKey(b)?0:1));
+  filtered.sort((a,b)=>(requestAttentionKey(a)?0:1)-(requestAttentionKey(b)?0:1)||cncPriorityRank(a)-cncPriorityRank(b)||cncPriorityTie(a,b));
   // The user is looking at the Requests tab, so everything currently counted on the badge is now
   // seen and the number clears (a new request, or a status change, brings it back). Marks ALL
   // attention keys, not just the filtered ones, so a filter never leaves some "unseen".
@@ -469,6 +476,14 @@ export function renderRequests(){
   el.innerHTML=filtered.map(r=>renderRequestCard(r)).join('');
 }
 
+// v2-69: P1 first, no-priority CNC after P3, Completed-by-Design after every active one; other request
+// types share one neutral rank so their order is unchanged. Ties: oldest CNC request first.
+function cncPriorityRank(r){
+  if(r.requestType!=='cnc') return 5;
+  const p=cncPriorityOf(r.details);
+  return (r.details&&r.details.designStatus==='Completed'?10:0)+(p?p.rank:4);
+}
+function cncPriorityTie(a,b){ return a.requestType==='cnc'&&b.requestType==='cnc'?a.id-b.id:0; }
 export const REQ_STATUS_COLOR={'New':'bb','Acknowledged':'ba','Visit Done':'bg','Reviewed':'bg','Converted to Project':'bgr','Dispatched':'bgr'};
 
 export function sendVisitReportEmail(id){
@@ -727,6 +742,22 @@ function renderRequestDocs(r){
       g.docs.map((doc,i)=>docLink(doc,i)).join('&nbsp;&nbsp;')+'</div>').join('')+
   '</div>';
 }
+// v2-69: "Priority from Design team" — Design and admin pick it, everyone else just sees it.
+function renderCNCDesignStatus(r){
+  const cur=(r.details&&r.details.designStatus)||'Not Started';
+  const role=state.currentUser&&state.currentUser.role;
+  const control=(role==='design'||role==='admin')
+    ? '<select class="form-input" style="width:auto;display:inline-block;padding:3px 6px;font-size:12px" onchange="setCNCDesignStatus('+r.id+',this.value)">'+CNC_DESIGN_STATUSES.map(o=>'<option'+(o===cur?' selected':'')+'>'+o+'</option>').join('')+'</select>'
+    : '<b>'+cur+'</b>';
+  return '<div style="margin-top:6px;font-size:12px;color:#666">Priority from Design team: '+control+'</div>';
+}
+export async function setCNCDesignStatus(id, value){
+  const role=state.currentUser&&state.currentUser.role;
+  if(role!=='design'&&role!=='admin'){ alert('Only the Design team or Admin can change this.'); renderRequests(); return; }
+  if(!CNC_DESIGN_STATUSES.includes(value)) return;
+  const r=state.requests.find(x=>x.id===id); if(!r) return;
+  await updateRequestFields(id,{details:{...r.details, designStatus:value}});
+}
 export function renderRequestCard(r){
   const d=r.details||{};
   const group=reqFieldGroup(r.requestType);
@@ -751,6 +782,8 @@ export function renderRequestCard(r){
         '<div class="proj-meta">'+
           '<span class="badge '+(group==='order'?'bb':group==='survey'?'bg':'ba')+'">'+reqTypeLabel(r.requestType)+'</span>'+
           (group==='cnc'&&d.cncRequestType?'<span class="badge '+(d.cncRequestType==='Revise'?'bp':'bg')+'">'+d.cncRequestType+'</span>':'')+
+          (group==='cnc'&&cncPriorityOf(d)?'<span class="badge '+cncPriorityOf(d).badge+'" title="'+cncPriorityOf(d).action+'">'+cncPriorityOf(d).label+'</span>':'')+
+          (group==='cnc'&&d.designStatus&&d.designStatus!=='Not Started'?'<span class="badge '+(d.designStatus==='Completed'?'bg':'ba')+'">Design: '+d.designStatus+'</span>':'')+
           (r.requestSubType?'<span class="badge bgr">'+r.requestSubType+'</span>':'')+
           '<span class="badge '+(isOnlySupply?'bt':'bgr')+'">'+scope+'</span>'+
           '<span class="badge '+(REQ_STATUS_COLOR[r.status]||'bgr')+'">'+r.status+'</span>'+
@@ -760,6 +793,7 @@ export function renderRequestCard(r){
           (r.assignedSupervisor?'<span style="font-size:11px;color:#666">👤 '+r.assignedSupervisor+'</span>':'')+
           (r.plannedVisitDate?'<span style="font-size:11px;color:#666">📅 Visit: '+fmtDate(r.plannedVisitDate)+(r.plannedDateLocked?' 🔒':'')+'</span>':'')+
         '</div>'+
+        (group==='cnc'?renderCNCDesignStatus(r):'')+
       '</div>'+
       '<div style="display:flex;gap:6px;flex-shrink:0">'+
         (!isReadOnlyRole&&r.plannedDateLocked&&state.currentUser&&state.currentUser.role==='admin'?'<button class="icon-btn btn-sm" title="Change planned date (admin only)" onclick="changePlannedDate('+r.id+')">🔓📅</button>':'')+

@@ -375,6 +375,18 @@ export const POSTPO_DOC_CATEGORIES=[
   {id:'req-docs-boqcad', label:'BOQ / CAD / Shop drawing documents', folder:'requests-boqcad'},
   {id:'req-docs-approvals', label:'Approvals / Approved drawing documents', folder:'requests-approvals'}
 ];
+// v2-69: sales picks a condition, never a P-number; the priority is derived from it. P4 – Hold is
+// deliberately not offered. `badge` is the existing badge colour class, `action` is the hover hint.
+export const CNC_PRIORITY_LEVELS = [
+  {condition:'Dispatch commitment at risk, site ready, material available', label:'P1 – Critical', rank:1, badge:'br', action:'Schedule immediately'},
+  {condition:'Due soon, downstream fabrication waiting', label:'P2 – High', rank:2, badge:'ba', action:'Schedule next'},
+  {condition:'Confirmed order, sufficient time before dispatch', label:'P3 – Normal', rank:3, badge:'bb', action:'Schedule by due date'}
+];
+export const CNC_DESIGN_STATUSES = ['Not Started','In Progress','Completed'];
+export function cncPriorityOf(details){
+  const c=details&&details.cncPriorityCondition;
+  return CNC_PRIORITY_LEVELS.find(p=>p.condition===c)||null;
+}
 // CNC request field set (see plan.md v2-29) — deliberately its own small set, not reusing
 // PREPO_FIELDS, since CNC collects a company-level "Client name" rather than a client contact
 // person, and has no visit/location fields at all.
@@ -385,6 +397,8 @@ export const CNC_FIELDS = [
   {key:'clientName',label:'Client name',required:true},
   // v2-47: Fresh / Revise, mandatory, no default.
   {key:'cncRequestType',label:'Type of CNC Request',type:'select',options:['Fresh','Revise'],required:true},
+  // v2-69: mandatory on a new request; only admin can change it afterwards (see saveRequest).
+  {key:'cncPriorityCondition',label:'Select Priority',type:'select',options:CNC_PRIORITY_LEVELS.map(p=>p.condition),required:true},
   // v2-47: no longer mandatory.
   {key:'grillSizeSqFt',label:'Size of Grill (Sq Feet)',type:'number'},
   {key:'developerName',label:'Developer name',required:true},

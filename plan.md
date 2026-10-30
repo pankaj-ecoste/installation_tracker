@@ -4182,3 +4182,20 @@ Team request: Pre-Mockup projects keep milestones 1 and 2; "Approval from Financ
 **Pending (frame-only projects, per final logic -> 0/0):** 62 YTT (2140/2140), 40 Leena (3900/3900) — awaiting user's yes to write 0/0.
 **Backfill round 3 applied (user: "yes write 0 / 0 for both"):** 62 YTT 2140/2140 -> 0/0; 40 Leena 3900/3900 -> 0/0 (frame-only projects). v2-68 data backfill complete: 15 projects. Awaiting user's prod check.
 **v2-68 prod-verified by the user 2026-10-26** ("ok done"). Closed.
+
+### v2-69: CNC request priority + "Priority from Design team" status (2026-10-30) — REQUIREMENTS, not built
+Team request (CNC requests only). Sales shouldn't type P1/P2/P3 (everyone would pick P1); they pick a *condition* and the system derives the priority.
+**Decisions (user):**
+1. New Request form, CNC only: mandatory drop-down "Select Priority" with exactly 3 conditions (P4 – Hold ignored), exact wording:
+   - "Dispatch commitment at risk, site ready, material available" -> P1 – Critical
+   - "Due soon, downstream fabrication waiting" -> P2 – High
+   - "Confirmed order, sufficient time before dispatch" -> P3 – Normal
+2. Priority tag ("P1 – Critical" etc.) shown on the request card in the same tag row as CNC / Fresh / Installation / New.
+3. Priority is NOT editable by sales after saving; they tell the admin, admin changes it.
+4. Existing CNC requests: no backfill; they have no priority and the admin fills it later after asking sales/Design. => admin must be able to set the priority on any CNC request (incl. existing).
+5. New card drop-down "Priority from Design team": Not Started (default) / In Progress / Completed. Editable by Design + admin only; read-only for everyone else. Several requests may be In Progress at once (no restriction). Placed on its own line under the tags.
+6. Requests list sorts by priority (P1 first).
+**Proposed defaults, awaiting user's OK:** no-priority requests sort last; ties oldest first; Completed drops below active; "Action" text as a hover tooltip on the tag; priority included in the CNC email; not added to the Reports CNC dashboard yet; colours P1 red / P2 orange / P3 blue; small Design-status tag in the tag row for In Progress / Completed (none for Not Started).
+**Built (2026-10-30, not committed):** `constants.js` (`CNC_PRIORITY_LEVELS`, `CNC_DESIGN_STATUSES`, `cncPriorityOf`, mandatory `cncPriorityCondition` field in `CNC_FIELDS`); `requestsTab.js` (priority + "Design: …" tags, Design status select on its own line, `setCNCDesignStatus`, priority sort, priority line in the new-request email, priority select disabled for non-admin on edit and not required when a non-admin edits an old request); `domGlobals.js` (registers handler). No migration: values live in `details`, and `requests_update` RLS already lets any active team member write (so Design can).
+**Verified (TEST_MODE browser, own server :5201, admin):** drop-down shows the 3 conditions; saving without one is blocked ("Select Priority" is required); saved P3 then P1 -> tags "P1 – Critical" / "P3 – Normal", P1 sorts first although created later; Design select defaults Not Started, switching to In Progress adds a "Design: In Progress" tag. Build passes.
+**Not yet checked:** logged in as Design (select editable) and as sales/viewer (read-only text), non-admin edit lock, prod.
