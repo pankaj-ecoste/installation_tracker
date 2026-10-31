@@ -71,6 +71,7 @@
     <button class="nav-tab" onclick="setTab('team')" id="tab-team-mgmt">Team</button>
     <button class="nav-tab" onclick="setTab('finance')" id="tab-finance">Finance<span class="bell-badge hidden" id="finance-count">0</span></button>
     <button class="nav-tab" onclick="setTab('newvendors')" id="tab-newvendors">New Vendors<span class="bell-badge hidden" id="newvendor-count">0</span></button>
+    <button class="nav-tab" onclick="setTab('summary')" id="tab-summary" style="display:none">Summary</button>
     <button class="nav-tab" onclick="setTab('reports')" id="tab-reports" style="display:none">Reports</button>
     <div class="nav-right">
       <!-- "+ Add project" removed: new projects can only be created by converting a Post-PO
@@ -154,6 +155,7 @@
       <div id="dashboard-content"></div>
     </div>
     <div id="tab-reports-view" class="hidden"><div id="reports-content"></div></div>
+    <div id="tab-summary-view" class="hidden"><div id="summary-content"></div></div>
     <div id="tab-newvendors-view" class="hidden">
       <h3 style="font-size:15px;font-weight:600;margin-bottom:12px">Newly registered vendors</h3>
       <div id="newvendors-content"></div>

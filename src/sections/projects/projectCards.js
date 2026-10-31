@@ -6,6 +6,17 @@ import { projectHasOpenSnag } from '../../lib/attentionKeys.js';
 import { docLink, pickFilesOrWarn, uploadFilesWithNames } from '../../lib/uploads.js';
 import { updateBell } from '../alerts.js';
 import { renderDPR } from '../dpr/dprTab.js';
+import { salesPersonOf } from '../../lib/summary.js';
+
+// v2-70: the Sales Owner's name as a small tag (name only — email/phone stay in the Team tab). A project whose
+// Sales Owner is not an active Sales / Viewer member gets a red warning tag instead, so the gap is visible.
+function salesTag(p){
+  const sp=salesPersonOf(p,state.teamMembers);
+  if(!sp&&p.status==='Completed') return ''; // completed projects are exempt from the "must have a sales person" rule
+  return sp
+    ?'<span style="font-size:11px;background:#e8f1fb;border:1px solid #b9d3ee;border-radius:20px;padding:2px 8px;color:#1d4f8a">💼 Sales: '+sp.name+'</span>'
+    :'<span class="badge br" title="Set a Sales / Viewer member as Sales owner in Update Progress">⚠ No sales person</span>';
+}
 
 /* ══ PROJECT CARDS ══ */
 export function renderProjects(){
@@ -132,6 +143,7 @@ export function renderCard(p){
           (raNeeded?'<span class="badge ba">💰 RA bill needed</span>':'')+
           (openSnagCount>0?'<span class="badge br">🔧 '+openSnagCount+' snag(s)</span>':'')+
           '<span style="font-size:11px;color:#666">👤 '+p.supervisor+'</span>'+
+          salesTag(p)+
           '<span style="font-size:11px;color:#666">🏢 Vendor ('+(p.vendor&&p.vendor!=='—'?p.vendor:'Not assigned yet')+')</span>'+
           '<span style="font-size:10px;background:#f0f0f0;border:1px solid #ccc;border-radius:20px;padding:2px 7px;color:#555">🔑 '+p.accessCode+'</span>'+
           crmSoBadge(p)+

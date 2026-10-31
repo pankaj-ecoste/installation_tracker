@@ -30,6 +30,7 @@ import { sodEodFormChanged, sodEodSlotChanged, saveSodEodEntry, toggleSodEodDay,
 import { cncFilterChanged, openCncListPopup, openCncRunDaysPopup, openCncOrderDetail, closeCncTopPopup, cncRunDaysTabChanged, cncListSearchChanged, cncListSortChanged, exportCncListCSV } from '../sections/reports/cncDashboardTab.js';
 import { updateNewVendorBadge, renderNewVendors, markVendorReviewed, markVendorApprovedByShashank } from '../sections/vendors/newVendorsTab.js';
 import { openVendorEdit, saveVendorEdit, closeVendorEdit } from '../sections/vendors/vendorEdit.js';
+import { summaryDateChanged, summaryStatusChanged, summaryPreviewToggle, summaryNoteChanged, summaryEmail, summaryWhatsApp } from '../sections/summary/summaryTab.js';
 import { renderVisitPlanner, goToVisitPlanner, vpWeekShift, vpWeekPicked, vpFilterChanged, vpSetStatus, vpCancelRemark, vpSaveRemark, emailVisitPlan, deleteVisitPlan, openVisitPlanForm, closeVisitPlanForm, saveVisitPlan, vpPastDayClicked, vpEmployeeChanged, vpCityChanged, vpFormWeekChanged, vpSiteChanged, vpNewSiteToggled, vpNewSiteTyped, vpReasonChanged, vpReasonOtherTyped, vpAddSameDay, vpRemoveVisit } from '../sections/visitPlanner/visitPlannerTab.js';
 
 // Every function invoked from an inline onclick="..." attribute in index.html needs to
@@ -268,6 +269,7 @@ export function installDomGlobals(){
     openVendorEdit,
     saveVendorEdit,
     closeVendorEdit,
+    summaryDateChanged, summaryStatusChanged, summaryPreviewToggle, summaryNoteChanged, summaryEmail, summaryWhatsApp,
     renderVisitPlanner, goToVisitPlanner, vpWeekShift, vpWeekPicked, vpFilterChanged, vpSetStatus, vpCancelRemark, vpSaveRemark,
     emailVisitPlan, deleteVisitPlan, openVisitPlanForm, closeVisitPlanForm, saveVisitPlan, vpPastDayClicked, vpEmployeeChanged,
     vpCityChanged, vpFormWeekChanged, vpSiteChanged, vpNewSiteToggled, vpNewSiteTyped, vpReasonChanged, vpReasonOtherTyped,

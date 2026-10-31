@@ -93,5 +93,12 @@ export const state = {
   visitPlansLoaded: false,
   vpFilters: {week: '', supervisorId: '', status: ''},
   vpDraft: null,
-  vpStatusPending: null
+  vpStatusPending: null,
+  // v2-70 Summary (admin only) — sent history is fetched per chosen date; notes are typed per project + date.
+  summaryDate: '',
+  summarySends: [],
+  summarySendsFor: '',
+  summaryNotes: {},
+  summaryStatus: '',
+  summaryPreview: ''
 };

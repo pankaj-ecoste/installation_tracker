@@ -111,6 +111,10 @@ export function showTeamDashboard(){
   // Reports (v2-42) — admin only. The database enforces this too; hiding the tab is just the UI half.
   const reportsTab=document.getElementById('tab-reports');
   if(reportsTab) reportsTab.style.display=(state.currentUser&&state.currentUser.role==='admin')?'':'none';
+  // Summary (v2-70) — admin only; the summary_sends table is admin-only in the database too.
+  const summaryTab=document.getElementById('tab-summary');
+  if(summaryTab) summaryTab.style.display=(state.currentUser&&state.currentUser.role==='admin')?'':'none';
+  state.summaryDate=''; state.summarySends=[]; state.summarySendsFor=''; state.summaryNotes={}; state.summaryStatus=''; state.summaryPreview='';
   updateNewVendorBadge();
   // Visit Planner (v2-64) — admin + supervisors only. Plans are read per user by the database (RLS), so they are
   // fetched here after login (never in loadAllData()); for admin that also drives the new-plan bell/badge.
