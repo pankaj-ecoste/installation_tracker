@@ -16,7 +16,31 @@ export function salesPersonOf(p,members){
   const key=lc(p&&p.createdBy); if(!key) return null;
   const m=(members||[]).find(x=>x.active&&x.role==='viewer'&&(lc(x.username)===key||lc(x.name)===key));
   if(!m) return null;
-  return {name:m.name,email:String(m.email||'').trim(),number:normalizeWhatsAppNumber(m.wa)};
+  return {name:m.name,username:m.username,email:String(m.email||'').trim(),number:normalizeWhatsAppNumber(m.wa)};
+}
+
+/* ── Email Cc (user, 2026-10-31) ──
+   Admin always. Ashish Singh when the sales person is Archana or Ritu. The site manager by the site supervisor:
+   Shubham Salvi or Mahesh -> Aditya; any other supervisor -> Shashank. People are looked up in the Team tab by
+   username or first name (so an email change there is picked up). Returns the addresses, plus the names that
+   should have been copied but have no email on file. */
+const words=s=>String(s==null?'':s).toLowerCase().split(/[^a-z]+/).filter(Boolean);
+const memberFor=(key,members)=>(members||[]).find(m=>m.active&&(lc(m.username)===key||words(m.name).includes(key)))||null;
+export function summaryCc(r,members,adminEmail){
+  const emails=[],missing=[],reasons=[];
+  const add=(key,label,why)=>{
+    const m=memberFor(key,members);
+    if(m&&String(m.email||'').trim()){ emails.push(m.email.trim()); reasons.push(label+' ('+why+')'); }
+    else missing.push(label);
+  };
+  if(adminEmail) { emails.push(adminEmail); reasons.push('Admin'); }
+  const salesWords=r.sales?[...words(r.sales.name),lc(r.sales.username)]:[];
+  if(salesWords.includes('archana')||salesWords.includes('ritu')) add('ashish','Ashish Singh','sales person is '+r.sales.name);
+  const supWords=words(r.supervisor);
+  const toAditya=supWords.includes('shubham')||supWords.includes('mahesh');
+  add(toAditya?'aditya':'shashank',toAditya?'Aditya':'Shashank','site supervisor '+(r.supervisor||'—'));
+  const to=lc(r.sales&&r.sales.email);
+  return {emails:[...new Set(emails)].filter(e=>lc(e)!==to),missing,reasons};
 }
 
 /* ── status vs projection (bands from the user's screenshot legend) ── */
@@ -67,12 +91,16 @@ export function buildSummaryRow(p,ymd,{dprLog,members,ledger}){
   const statusKey=statusKeyFor(filed,installedToday,projected);
   const sp=salesPersonOf(p,members);
   const issues=(p.constraints||[]).filter(c=>c.status==='open'||c.status==='in-progress').map(c=>c.text).filter(Boolean);
+  // Remark = the latest note on the project (All Projects card -> Notes), with who wrote it and when.
+  const notes=(p.comments||[]).filter(c=>c&&String(c.text||'').trim());
+  const lastNote=notes[notes.length-1];
+  const remark=lastNote?String(lastNote.text).trim()+' ('+(lastNote.author||'—')+(lastNote.time?', '+lastNote.time:'')+')':'';
   const ra=raBillSummary(p.id,ledger);
   return {
     key:p.id+'|'+ymd, projId:p.id, name:p.name, tower:p.tower, projStatus:p.status||'', ymd, filed, statusKey, status:SUMMARY_STATUS[statusKey],
     unit:p.unit||'sqft', installedToday, projected, todayPct:pctOf(installedToday,projected),
     installed:p.installedQty||0, planned:p.plannedQty||0, overallPct:pctOf(p.installedQty,p.plannedQty),
-    startDate:longDate(p.startDate), expectedCompletion:longDate(p.committedDate),
+    startDate:longDate(p.startDate), expectedCompletion:longDate(p.committedDate), remark,
     raStatus:ra.status, raDeadline:ra.deadline,
     manpowerActual:last?last.actualMp:null, manpowerCommitted:last?last.committedMp:null,
     supervisor:(last&&last.supervisor)||p.supervisor||'—', issues, sales:sp
@@ -100,12 +128,13 @@ const rowLines=(r,note)=>{
     ['Installed today',installedTodayText(r)],
     ['Overall progress',fmtN(r.installed)+' / '+fmtN(r.planned)+' '+r.unit+' ('+r.overallPct+'%)'],
     ['Start date',r.startDate],
-    ['Expected completion',r.expectedCompletion],
+    ['Committed completion',r.expectedCompletion],
     ['RA bill submission status',r.raStatus],
     ['RA bill submission deadline',r.raDeadline],
     ['Manpower (actual / committed)',mp],
     ['Site supervisor',r.supervisor],
-    ['Open issues / blockers',r.issues.length?r.issues.map(t=>'• '+t).join('\n'):'None']
+    ['Open issues / blockers',r.issues.length?r.issues.map(t=>'• '+t).join('\n'):'None'],
+    ['Remark',r.remark||'—']
   ].concat(note?[['Note',note]]:[]);
 };
 export const summarySubject=r=>r.status.emoji+' DPR summary — '+r.name+' — '+r.tower+' — '+longDate(r.ymd);

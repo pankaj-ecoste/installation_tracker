@@ -1,9 +1,9 @@
 import { state } from '../../lib/state.js';
 import { db } from '../../lib/supabaseClient.js';
-import { notifyByGmail } from '../../lib/constants.js';
+import { getAdminEmail, notifyByGmail } from '../../lib/constants.js';
 import { logActivity } from '../../lib/activityLog.js';
 import { todayYmd } from '../../lib/visitPlanner.js';
-import { SUMMARY_STATUS, buildSummaryRows, installedTodayText, longDate, summaryEmailBody, summarySubject, summaryWhatsAppText } from '../../lib/summary.js';
+import { SUMMARY_STATUS, buildSummaryRows, installedTodayText, longDate, summaryCc, summaryEmailBody, summarySubject, summaryWhatsAppText } from '../../lib/summary.js';
 
 /* ══ SUMMARY (admin only — see plan.md v2-70) ══
    Daily DPR summary for the Sales team. Admin picks a date, reviews the list, and sends each project's summary to
@@ -47,8 +47,7 @@ const STATUS_FILTERS=['Completed','In Progress','Not Started','On Hold'];
 const visibleRows=()=>rows().filter(r=>!state.summaryStatus||r.projStatus===state.summaryStatus);
 
 // Cc: Admin + Ops Manager — every active admin / manager with an email on file (Team tab), minus the To address.
-const ccFor=to=>[...new Set((state.teamMembers||[]).filter(m=>m.active&&['admin','manager'].includes(m.role)&&String(m.email||'').trim()).map(m=>m.email.trim()))]
-  .filter(e=>e.toLowerCase()!==String(to).toLowerCase()).join(',');
+const ccFor=r=>summaryCc(r,state.teamMembers,getAdminEmail()).emails.join(',');
 const noteOf=key=>((state.summaryNotes||{})[key]||'').trim();
 const waUrl=(r,note)=>'https://wa.me/'+r.sales.number+'?text='+encodeURIComponent(summaryWhatsAppText(r,note));
 
@@ -57,8 +56,12 @@ function previewHTML(r){
   if(!r.sales) return '<div style="color:#cc3333">No valid sales person — nothing can be sent for this project until its Sales owner is set.</div>';
   const note=noteOf(r.key);
   const box='background:#fff;border:1px solid #dde;border-radius:8px;padding:10px;white-space:pre-wrap;font-family:inherit;font-size:12px;margin:6px 0 0';
+  const cc=summaryCc(r,state.teamMembers,getAdminEmail());
   const email=r.sales.email
-    ?'<div style="font-size:12px"><b>To:</b> '+esc(r.sales.email)+'<br><b>Cc:</b> '+(esc(ccFor(r.sales.email))||'—')+'<br><b>Subject:</b> '+esc(summarySubject(r))+'</div><pre style="'+box+'">'+esc(summaryEmailBody(r,note))+'</pre>'
+    ?'<div style="font-size:12px"><b>To:</b> '+esc(r.sales.email)+'<br><b>Cc:</b> '+(esc(cc.emails.join(', '))||'—')+
+      '<br><span style="color:#888">Cc because: '+esc(cc.reasons.join(' · ')||'—')+'</span>'+
+      (cc.missing.length?'<br><span style="color:#cc3333">⚠ No email in the Team tab for: '+esc(cc.missing.join(', '))+' — not copied</span>':'')+
+      '<br><b>Subject:</b> '+esc(summarySubject(r))+'</div><pre style="'+box+'">'+esc(summaryEmailBody(r,note))+'</pre>'
     :'<div style="color:#cc3333;font-size:12px">No email for '+esc(r.sales.name)+' in the Team tab.</div>';
   const wa=r.sales.number
     ?'<div style="font-size:12px"><b>To:</b> '+esc(r.sales.name)+' (+'+r.sales.number+')</div><pre style="'+box+'">'+esc(summaryWhatsAppText(r,note))+'</pre>'
@@ -109,7 +112,7 @@ function drawSummary(){
     :'<div class="empty">'+(state.summaryStatus?'No '+state.summaryStatus+' project':'No project')+' filed a DPR on '+longDate(state.summaryDate)+(state.summaryStatus&&state.summaryStatus!=='In Progress'?'.':', and no In Progress project is waiting.')+'</div>';
   const legend='<div style="font-size:11px;color:#888;margin-top:10px">'+
     ['ontrack','slight','behind','notfiled'].map(k=>SUMMARY_STATUS[k].emoji+' '+SUMMARY_STATUS[k].label.toLowerCase()+' ('+SUMMARY_STATUS[k].note+')').join(' · ')+
-    '. Email opens a Gmail draft (To the sales person, Cc Admin and Ops Manager); WhatsApp opens a chat with the sales person. "Sent" means you clicked the button.</div>';
+    '. Email opens a Gmail draft (To the sales person; Cc Admin, the site manager, and Ashish Singh for Archana / Ritu — see Preview); WhatsApp opens a chat with the sales person. "Sent" means you clicked the button.</div>';
   host.innerHTML='<style>#summary-content button:disabled{opacity:.4;cursor:not-allowed}</style>'+head+body+legend;
 }
 
@@ -139,7 +142,7 @@ export function summaryEmail(key){
   if(!isAdmin()) return;
   const r=rowByKey(key); if(!r||!r.sales||!r.sales.email) return;
   const note=noteOf(key);
-  notifyByGmail(r.sales.email,summarySubject(r),summaryEmailBody(r,note),ccFor(r.sales.email));
+  notifyByGmail(r.sales.email,summarySubject(r),summaryEmailBody(r,note),ccFor(r));
   recordSend(r,'email',note);
 }
 
