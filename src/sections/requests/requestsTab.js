@@ -18,6 +18,7 @@ import { renderProjects } from '../projects/projectCards.js';
 import { dprWeeklySums } from '../dpr/dprTab.js';
 import { salesPersonOf } from '../../lib/summary.js';
 import { projectManagerOf } from '../../lib/managementOverview.js';
+import { loadManagerMap } from '../../lib/managerMap.js';
 
 /* ══ REQUESTS ══ */
 export function fieldRowHTML(f, valObj, idPrefix){
@@ -1053,9 +1054,12 @@ function finishConversion(r,insertedRow,closeConvertPanel){
   openEditProject(createdProject.id);
 }
 
-export function exportProjectsCSV(){
+export async function exportProjectsCSV(){
   const vp=visibleProjects();
   if(!vp.length){ alert('No projects to export.'); return; }
+  // v2-71: Project Manager comes from the admin-edited supervisor -> manager list (same one the Management Overview uses).
+  // Only an admin can read that list; for anyone else this quietly returns {} and the default rule applies.
+  const mgrMap=(await loadManagerMap()).map;
   const cols=['accessCode','name','tower','developer','city','state','status','supervisor','plannedQty','installedQty','jmrQty','poQty','soQty','startDate','committedDate','daysAvailable','installCommencementDate'];
   const header=['Access Code','Project Name','Tower/Block','Developer','City','State','Status','Supervisor','Planned Qty (sqft)','Installed Qty (sqft)','JMR Qty','PO Qty','SO Qty','Start Date','Committed Date','Days Available','Installation Commencement Date'];
   // v2-59: latest constraint / snag / stalled milestone / comment / uploaded files per project.
@@ -1096,7 +1100,7 @@ export function exportProjectsCSV(){
       // v2-71: Sales Person = the project's Sales Owner (same source as the "Sales:" tag on the card).
       // Project Manager is derived from the supervisor (no PM field exists) — see lib/managementOverview.js.
       (salesPersonOf(p,state.teamMembers)||{}).name||'',
-      projectManagerOf(p.supervisor)
+      projectManagerOf(p.supervisor,state.teamMembers,mgrMap)
     ];
   };
   const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';

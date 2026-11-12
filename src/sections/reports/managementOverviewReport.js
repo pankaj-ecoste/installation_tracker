@@ -5,8 +5,11 @@
    so no other file has to change. Download = a print-styled copy opened in a new tab -> "Save as PDF". */
 import { state } from '../../lib/state.js';
 import { salesPersonOf } from '../../lib/summary.js';
+import { db } from '../../lib/supabaseClient.js';
+import { rowToProject, rowToDpr } from '../../lib/mappers.js';
+import { loadManagerMap } from '../../lib/managerMap.js';
 import {
-  buildOverviewRows, filterRows, filterOptions, overviewKpis, groupRows, totalsOf, buildDayLog, dprVsProjectInstalled, TYPE_ORDER
+  buildOverviewRows, filterRows, filterOptions, overviewKpis, groupRows, totalsOf, buildDayLog, dprVsProjectInstalled, gapProjects, dataQuality, TYPE_ORDER
 } from '../../lib/managementOverview.js';
 
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -24,8 +27,11 @@ const pctTxt=(a,b)=>b?Math.round(a/b*100)+'%':'—';
 const pctColor=(a,b)=>!b?C.grey:a/b>=0.9?C.green:a/b<0.3?C.red:C.ink;
 
 /* ── UI state (module-local; lost on reload, which is fine for a report) ── */
-const ui={f:{q:'',pm:'',sup:'',city:'',type:'',vendor:'',product:'',sales:'',status:new Set()},sec:'all',attn:'all',paAll:false,openDays:new Set(),logOpen:true};
+const ui={f:{q:'',pm:'',sup:'',city:'',type:'',vendor:'',product:'',sales:'',status:new Set()},sec:'all',attn:'all',paAll:false,openDays:new Set(),logOpen:true,gapOpen:false};
 let host=null, printing=false;
+let teamMap={}, mapOk=false;   // admin-edited supervisor -> manager list (report_team_map); mapOk=false = could not be read
+let cache=null;                // the built rows — rebuilt only when data changes (open / refresh / a new day), not on every filter click
+let refreshedAt=null, refreshing=false;
 
 const label=(txt)=>'<div style="font-size:11px;color:#888;margin-bottom:2px">'+txt+'</div>';
 const panel=(title,body,extra)=>'<div class="proj-card" style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px"><div style="font-size:14px;font-weight:700">'+title+'</div>'+(extra||'')+'</div>'+body+'</div>';
@@ -43,20 +49,58 @@ const scroll=h=>'<div style="overflow-x:auto">'+h+'</div>';
 /* ── data ── */
 function dataset(){
   const today=ymdOfDate(new Date());
-  const all=buildOverviewRows({projects:state.projects,dprLog:state.dprLog,salesOf:p=>(salesPersonOf(p,state.teamMembers)||{}).name||'',todayYmd:today});
-  return {today,all,rows:filterRows(all,ui.f)};
+  if(!cache||cache.today!==today){
+    cache={today,all:buildOverviewRows({projects:state.projects,dprLog:state.dprLog,salesOf:p=>(salesPersonOf(p,state.teamMembers)||{}).name||'',todayYmd:today,members:state.teamMembers,teamMap,mapOk})};
+  }
+  return {today,all:cache.all,rows:filterRows(cache.all,ui.f)};
+}
+
+/* ── Refresh: the app loads its data once at login, so projects / DPRs filed since then are not in memory. This re-reads
+   ONLY the two tables the report uses (+ the manager list), in pages of 1000 — Supabase cuts a single query off at 1000
+   rows by default, and dpr_log is heading there. Read-only. ── */
+async function fetchAll(table){
+  const out=[];
+  try{
+    for(let from=0;;from+=1000){
+      const {data,error}=await db.from(table).select('*').order('id',{ascending:false}).range(from,from+999);
+      if(error) throw error;
+      out.push(...(data||[]));
+      if(!data||data.length<1000) break;
+    }
+  }catch(e){
+    if(!(e instanceof TypeError)) throw e;            // the TEST_MODE mock has no .range(): fall back to one plain query
+    const {data,error}=await db.from(table).select('*').order('id',{ascending:false});
+    if(error) throw error;
+    return data||[];
+  }
+  return out;
+}
+function setStatus(text,bad){ const el=document.getElementById('mgmt-status'); if(el){ el.textContent=text; el.style.color=bad?C.red:'#888'; } }
+const clock=d=>pad(d.getHours())+':'+pad(d.getMinutes());
+async function refresh(){
+  if(refreshing) return; refreshing=true; setStatus('Refreshing…');
+  try{
+    const [p,d,m]=await Promise.all([fetchAll('projects'),fetchAll('dpr_log'),loadManagerMap()]);
+    state.projects=p.map(rowToProject); state.dprLog=d.map(rowToDpr);
+    teamMap=m.map; mapOk=m.ok; cache=null; refreshedAt=new Date();
+    setStatus('Refreshed at '+clock(refreshedAt)+' — '+p.length+' projects, '+d.length+' DPRs');
+  }catch(e){ console.error('Management Overview refresh failed',e); setStatus('Could not refresh — check your connection and try again.',true); }
+  refreshing=false; drawBar(); drawBody();
 }
 
 /* ══ ENTRY POINT — called by reportsTab.js's REPORTS registry ══ */
-export function renderManagementOverview(el){
-  host=el;
+export async function renderManagementOverview(el){
+  host=el; cache=null;
   el.innerHTML=
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;margin-bottom:6px">'+
       '<div><div style="font-size:15px;font-weight:700">Management Overview</div>'+
-      '<div style="font-size:12px;color:#888">Live from the app — projects, DPRs, constraints and snags. As of '+longDate(ymdOfDate(new Date()))+'.</div></div>'+
-      '<div style="display:flex;gap:6px"><button class="btn btn-outline btn-sm" onclick="mgmt.pdf()">⬇ Download PDF</button><button class="btn btn-outline btn-sm" onclick="closeReport()">← All reports</button></div>'+
+      '<div style="font-size:12px;color:#888">Projects, DPRs, constraints and snags as of '+longDate(ymdOfDate(new Date()))+'. <span id="mgmt-status">'+(refreshedAt?'Last refreshed at '+clock(refreshedAt)+'.':'Data is as loaded when you logged in — press Refresh for the latest.')+'</span></div></div>'+
+      '<div style="display:flex;gap:6px"><button class="btn btn-outline btn-sm" onclick="mgmt.refresh()">⟳ Refresh data</button><button class="btn btn-outline btn-sm" onclick="mgmt.pdf()">⬇ Download PDF</button><button class="btn btn-outline btn-sm" onclick="closeReport()">← All reports</button></div>'+
     '</div>'+
-    '<div id="mgmt-bar"></div><div id="mgmt-body"></div>';
+    '<div id="mgmt-bar"></div><div id="mgmt-body"><div style="font-size:12px;color:#888;padding:8px 0">Loading…</div></div>';
+  const m=await loadManagerMap();                       // admin-only table; non-admins never get here, but fail quietly anyway
+  if(host!==el) return;                                  // user left the report while this loaded
+  teamMap=m.map; mapOk=m.ok; cache=null;
   drawBar(); drawBody();
 }
 
@@ -88,14 +132,15 @@ function bodyHTML(forPrint){
   const bar=forPrint?'':'<div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 12px">'+
     secBtn('all','All')+secBtn('attn','Needs attention',rows.filter(r=>r.attention).length)+secBtn('pa','Planned vs actual',live.filter(r=>r.planned).length)+
     secBtn('vendor','Vendor',new Set(rows.map(r=>r.vendor)).size)+secBtn('sup','Supervisor',new Set(rows.map(r=>r.supervisor)).size)+
-    secBtn('pm','Project manager',new Set(rows.map(r=>r.pm)).size)+secBtn('log','Day-wise log')+'</div>';
+    secBtn('pm','Project manager',new Set(rows.map(r=>r.pm)).size)+secBtn('log','Day-wise log')+secBtn('dq','Data checks',dqCount(rows))+'</div>';
   const S={type:()=>typePanel(rows),log:()=>logPanel(rows,today,forPrint),pa:()=>paPanel(rows,forPrint),vendor:()=>groupPanel('By vendor',rows,r=>r.vendor,'Vendor',{drill:'vendor',muted:'No vendor',products:true,cities:true,hint:'Click a row to show only that vendor. Spellings that differ only by case or a doubled letter count as one vendor. A project with several vendors is counted under its first vendor.'}),
     sup:()=>groupPanel('By supervisor',rows,r=>r.supervisor,'Supervisor',{drill:'sup',muted:'Unassigned',need:true,hint:'Click a row to show only that supervisor. Today proj. turns amber when it is less than what is needed today to finish on the committed date (balance ÷ working days left, Mon–Sat).'}),
-    pm:()=>groupPanel('By project manager',rows,r=>r.pm,'Project manager',{drill:'pm',muted:'Unassigned',need:true,hint:'Click a row to show only that manager. Project manager comes from the supervisor: Shubham Salvi, Mahesh and Aditya → Aditya; every other supervisor → Shashank.'}),
-    attn:()=>attnPanel(rows,forPrint)};
-  const parts=forPrint||ui.sec==='all'?['type','log','pa','vendor','sup','pm','attn']:[ui.sec];
+    pm:()=>groupPanel('By project manager',rows,r=>r.pm,'Project manager',{drill:'pm',muted:'Unassigned',need:true,hint:'Click a row to show only that manager. Project manager comes from the supervisor, using the "Who reports to whom" list in Reports → Installation Scoring Report. A supervisor not on that list is counted by the default rule (Shubham, Mahesh, Aditya → Aditya; everyone else → Shashank) and appears under Data checks.'}),
+    attn:()=>attnPanel(rows,forPrint),dq:()=>dqPanel(rows)};
+  const parts=forPrint||ui.sec==='all'?['type','log','pa','vendor','sup','pm','attn','dq']:[ui.sec];
   return kpiHTML(k)+bar+parts.map(p=>S[p]()).join('');
 }
+const dqCount=rows=>{ const q=dataQuality(rows); return q.unmappedSup.length+q.noSales.length+q.noPlanned.length+q.qtyFromSoPo.length+q.noCommitted.length+q.multiVendor.length+(mapOk?0:1); };
 function drawBody(){ const el=document.getElementById('mgmt-body'); if(el) el.innerHTML=bodyHTML(false); }
 
 /* ── KPI block ── */
@@ -108,7 +153,7 @@ function kpiHTML(k){
   const col=(title,body)=>'<div style="flex:1 1 260px;min-width:240px"><div style="font-size:11px;font-weight:700;letter-spacing:.04em;color:#888;text-transform:uppercase;margin-bottom:2px">'+title+' · sqft</div>'+body+'</div>';
   return '<div class="proj-card" style="margin-bottom:12px"><div style="display:flex;gap:22px;flex-wrap:wrap">'+
     col('Planned',cell('Total qty',fmt(k.total),pl(k.n,'project'))+cell('Weekly projection',fmt(k.wP),pl(k.wN,'active project')+' · last 7 days')+cell('Today projection',fmt(k.tP),pl(k.tN,'active project')))+
-    col('Actual',cell('Installed',fmt(k.inst),(k.total?Math.round(k.inst/k.total*100):0)+'% of total qty')+cell('Last 7 days',fmt(k.week),'from DPRs')+cell('Installed today',k.todayA==null?'—':fmt(k.todayA),k.todayA==null?'no DPR filed today yet':'from today\'s DPRs'))+
+    col('Actual',cell('Installed',fmt(k.inst),(k.total?Math.round(k.inst/k.total*100):0)+'% of total qty')+cell('Last 7 days',fmt(k.week),'from DPRs')+cell('Installed today',k.todayA==null?'—':fmt(k.todayA),k.todayA==null?'no DPR filed today yet ('+k.inProgress+' in progress)':k.filedToday+' of '+k.inProgress+' in-progress projects have filed today'))+
     col('Difference',cell('Balance',fmt(k.balance),(k.total?Math.round(k.balance/k.total*100):0)+'% of total qty left',k.balance>0?C.ink:C.green)+cell('Weekly',gapTxt(k.weekGap),gapSub(k.weekGap,'weekly projection'),gapCol(k.weekGap))+cell('Today',gapTxt(k.todayGap),gapSub(k.todayGap,'today\'s projection'),gapCol(k.todayGap)))+
     '</div></div>';
 }
@@ -167,7 +212,35 @@ function logPanel(rows,today,forPrint){
   const note=Math.abs(cmp.diff)>0?hint('Installed total on the projects is '+fmt(cmp.proj)+' sqft; DPRs add up to '+fmt(cmp.dpr)+' sqft ('+(cmp.diff>0?fmt(cmp.diff)+' sqft is not in any DPR — e.g. installed before DPRs were used, or set by hand in Edit Project':fmt(-cmp.diff)+' sqft more in DPRs than in project totals — e.g. the planned-qty cap or corrections')+'). Daily bars use DPRs only.'):'';
   return panel('Day-wise installed log',
     '<div style="font-size:12px;color:#888;margin-bottom:4px">'+sub+'</div>'+legend+dayChart(log)+
-    scroll('<table style="width:100%;border-collapse:collapse;margin-top:8px"><thead><tr><th '+TH+'>Date</th><th '+THN+'>Installed</th><th '+THN+'>Projected</th><th '+THN+'>Projects</th></tr></thead><tbody>'+list+'</tbody></table>')+note,toggle);
+    scroll('<table style="width:100%;border-collapse:collapse;margin-top:8px"><thead><tr><th '+TH+'>Date</th><th '+THN+'>Installed</th><th '+THN+'>Projected</th><th '+THN+'>Projects</th></tr></thead><tbody>'+list+'</tbody></table>')+note+gapListHTML(rows,forPrint),toggle);
+}
+// Which projects make the DPR total differ from the project Installed total (opens from a button under the log).
+function gapListHTML(rows,forPrint){
+  const g=gapProjects(rows); if(!g.length||forPrint) return '';
+  const btn='<button class="btn btn-outline btn-sm" style="margin-top:6px" onclick="mgmt.gap()">'+(ui.gapOpen?'Hide':'Which projects differ?')+' ('+g.length+')</button>';
+  if(!ui.gapOpen) return btn;
+  const tr=g.slice(0,25).map(x=>'<tr><td '+TD+'><b>'+esc(x.name)+'</b>'+(x.tower?' · '+esc(x.tower):'')+'<div style="font-size:11px;color:#888">'+esc(x.status)+' · '+esc(x.supervisor)+'</div></td><td '+TDN+'>'+fmt(x.installed)+'</td><td '+TDN+'>'+fmt(x.dpr)+'</td><td '+TDN+' style="color:'+(x.diff>0?C.amber:C.red)+'">'+(x.diff>0?'+':'')+fmt(x.diff)+'</td></tr>').join('');
+  return btn+scroll('<table style="width:100%;border-collapse:collapse;margin-top:6px"><thead><tr><th '+TH+'>Project</th><th '+THN+'>Project Installed</th><th '+THN+'>Sum of DPRs</th><th '+THN+'>Difference</th></tr></thead><tbody>'+tr+'</tbody></table>')+
+    hint('Largest differences first'+(g.length>25?' (top 25 of '+g.length+')':'')+'. A positive difference means the project says more is installed than its DPRs add up to (work before DPRs were used, or Installed set by hand in Edit Project). A negative one means the DPRs add up to more (the planned-qty cap, or corrections).');
+}
+
+/* ── Data checks: reasons a number above may look wrong or incomplete, with the projects to fix ── */
+function dqPanel(rows){
+  const q=dataQuality(rows);
+  const names=list=>list.slice(0,12).map(r=>esc(r.name+(r.tower?' · '+r.tower:''))).join(', ')+(list.length>12?' … +'+(list.length-12)+' more':'');
+  const item=(n,title,fix,detail)=>'<div style="border-left:4px solid '+C.amber+';padding:6px 10px;margin:6px 0;background:#fafafa;border-radius:0 6px 6px 0"><div style="font-size:13px"><b>'+n+'</b> '+title+'</div>'+
+    (detail?'<div style="font-size:12px;color:#555;margin-top:2px">'+detail+'</div>':'')+'<div style="font-size:11.5px;color:#888;margin-top:2px">'+fix+'</div></div>';
+  const out=[];
+  if(!mapOk) out.push('<div style="border-left:4px solid '+C.red+';padding:6px 10px;margin:6px 0;background:#fdf0f0;border-radius:0 6px 6px 0;font-size:12.5px">The supervisor → manager list could not be read, so the default rule is used (Shubham, Mahesh, Aditya → Aditya; everyone else → Shashank). Press Refresh to try again.</div>');
+  if(q.unmappedSup.length) out.push(item(q.unmappedSup.length,'supervisor name(s) not in the manager list — counted under the default rule',
+    'Assign them in Reports → Installation Scoring Report → "Who reports to whom". They then move to the right manager here and in the export.',
+    q.unmappedSup.map(s=>esc(s.name)+' ('+pl(s.count,'project')+' → '+esc(s.pm)+')').join(', ')));
+  if(q.noSales.length) out.push(item(q.noSales.length,'active project(s) have no valid sales person','Set an active Sales / Viewer member as Sales owner in the project\'s Update Progress.',names(q.noSales)));
+  if(q.noPlanned.length) out.push(item(q.noPlanned.length,'active project(s) have no quantity at all (no planned, SO or PO qty)','Fill the Planned qty in Edit Project; until then they add nothing to the totals.',names(q.noPlanned)));
+  if(q.qtyFromSoPo.length) out.push(item(q.qtyFromSoPo.length,'project(s) use the SO / PO qty because Planned qty is empty','Fill the Planned qty in Edit Project to use the real figure.',names(q.qtyFromSoPo)));
+  if(q.noCommitted.length) out.push(item(q.noCommitted.length,'running project(s) have no committed date, so no day target or late / behind check','Set the Committed date in Edit Project.',names(q.noCommitted)));
+  if(q.multiVendor.length) out.push(item(q.multiVendor.length,'project(s) have more than one vendor — counted under the first vendor only','The app does not split quantity between vendors, so the vendor table cannot either.',names(q.multiVendor)));
+  return panel('Data checks',out.length?out.join(''):'<div style="font-size:12.5px;color:'+C.green+'">✓ Nothing to fix — every project has a supervisor on the manager list, a sales person, a quantity and a committed date.</div>');
 }
 
 /* ── Planned vs actual (active projects) ── */
@@ -250,15 +323,21 @@ function attnPanel(rows,forPrint){
 /* ══ Handlers (window.mgmt) ══ */
 function reset(){ ui.f={q:'',pm:'',sup:'',city:'',type:'',vendor:'',product:'',sales:'',status:new Set()}; }
 function openPrintView(){
-  const w=window.open('','_blank');
-  if(!w){ alert('Your browser blocked the pop-up. Allow pop-ups for this site, then click Download PDF again.'); return; }
+  // Preferred: a new tab. If the browser blocks pop-ups, print from a hidden frame on this page instead, so the button
+  // still works without the user having to change any browser setting.
+  let w=window.open('','_blank'), frame=null;
+  if(!w){
+    frame=document.createElement('iframe'); frame.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+    document.body.appendChild(frame); w=frame.contentWindow;
+  }
   const f=ui.f, applied=[f.q&&'search "'+f.q+'"',f.pm&&'PM '+f.pm,f.sup&&'supervisor '+f.sup,f.city&&'city '+f.city,f.type&&'type '+f.type,f.vendor&&'vendor '+f.vendor,f.product&&'product '+f.product,f.sales&&'sales '+f.sales,f.status.size&&'status '+[...f.status].join('/')].filter(Boolean);
   w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Management Overview — '+esc(longDate(ymdOfDate(new Date())))+'</title>'+
     '<style>@page{size:A4 landscape;margin:10mm}body{font-family:Arial,Helvetica,sans-serif;color:#222;margin:0;font-size:12px}.proj-card{border:1px solid #ddd;border-radius:8px;padding:10px;margin-bottom:10px;break-inside:avoid-page}table{break-inside:auto}tr{break-inside:avoid}.btn{display:none}h1{font-size:18px;margin:0 0 2px}</style></head><body>'+
     '<h1>Ecoste — Management Overview</h1><div style="color:#888;margin-bottom:10px">As of '+esc(longDate(ymdOfDate(new Date())))+(applied.length?' · Filters: '+esc(applied.join(', ')):' · All projects')+'</div>'+
     bodyHTML(true)+'</body></html>');
+  printing=false;
   w.document.close(); w.focus();
-  setTimeout(()=>{ try{ w.print(); }catch(e){} },400);
+  setTimeout(()=>{ try{ w.print(); }catch(e){} if(frame) setTimeout(()=>frame.remove(),60000); },400);
 }
 window.mgmt={
   set:(k,v)=>{ ui.f[k]=v; drawBar(); drawBody(); },
@@ -271,5 +350,7 @@ window.mgmt={
   day:ymd=>{ ui.openDays.has(ymd)?ui.openDays.delete(ymd):ui.openDays.add(ymd); drawBody(); },
   drill:(k,v)=>{ ui.f[k]=v; drawBar(); drawBody(); try{ window.scrollTo(0,0); }catch(e){} },
   paAll:()=>{ ui.paAll=!ui.paAll; drawBody(); },
+  gap:()=>{ ui.gapOpen=!ui.gapOpen; drawBody(); },
+  refresh,
   pdf:openPrintView
 };

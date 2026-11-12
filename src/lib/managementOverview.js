@@ -10,7 +10,7 @@
    - Today / Weekly projection = the DPR "today projection qty" summed over the same windows (today / last 7 days),
                so projection and actual always cover the same days.
    - Planned qty falls back to SO qty, then PO qty (labelled via qtySrc). */
-import { toYmd as parseYmd, addDays } from './installationScoring.js';
+import { toYmd as parseYmd, addDays, managerOfSupervisor } from './installationScoring.js';
 
 // parseYmd accepts "2026-13-45" as-is; reject impossible calendar dates so they can never produce nonsense
 // "late by N days" figures (the value is treated as "no date").
@@ -28,11 +28,21 @@ const words=s=>String(s==null?'':s).toLowerCase().split(/[^a-z]+/).filter(Boolea
 //   no supervisor ('', '—', null)     -> 'Unassigned'
 // Same word-matching idea as summaryCc() in summary.js (case-insensitive, matches first name or full name), so
 // "shubham", "Shubham Salvi" and "SHUBHAM" all count.
-export function projectManagerOf(supervisor){
+//
+// v2-71 round 3: the admin-edited supervisor -> manager map (report_team_map, same list the Installation Scoring Report
+// uses) is checked FIRST, so a new supervisor or a changed team is handled by editing that list, not code. The word
+// rule above is only the fallback; `mapped:false` tells the report that a supervisor came from the fallback so it
+// can be listed for the admin to assign.
+const MANAGER_LABEL={shashank:'Shashank',aditya:'Aditya'};
+const ruleManager=w=>(w.includes('shubham')||w.includes('mahesh')||w.includes('aditya'))?'Aditya':'Shashank';
+export function resolveManager(supervisor,members,map){
   const w=words(supervisor);
-  if(!w.length) return 'Unassigned';
-  return (w.includes('shubham')||w.includes('mahesh')||w.includes('aditya'))?'Aditya':'Shashank';
+  if(!w.length) return {pm:'Unassigned',mapped:true};
+  const key=managerOfSupervisor(supervisor,members,map)||w.map(x=>map&&map[x]).find(Boolean);
+  if(key&&MANAGER_LABEL[key]) return {pm:MANAGER_LABEL[key],mapped:true};
+  return {pm:ruleManager(w),mapped:false};
 }
+export const projectManagerOf=(supervisor,members,map)=>resolveManager(supervisor,members,map).pm;
 
 const num=v=>{ const n=Number(v); return isNaN(n)?0:n; };
 const clean=v=>{ const t=String(v==null?'':v).trim(); return (t==='—'||t==='-'||t.toLowerCase()==='nan')?'':t; };
@@ -65,7 +75,9 @@ function primaryVendor(p){
   return clean(String(p.vendor||'').split(',')[0]);
 }
 
-export function buildOverviewRows({projects,dprLog,salesOf,todayYmd}){
+// members / teamMap / mapOk: the Team list and the admin-edited supervisor -> manager map (see resolveManager). mapOk=false
+// means the map could not be read (non-admin, or no connection): the fallback rule is used and nobody is flagged as unmapped.
+export function buildOverviewRows({projects,dprLog,salesOf,todayYmd,members,teamMap,mapOk}){
   const weekStart=addDays(todayYmd,-6);
   // DPRs per project, with parsed date + installed + projection
   const byProj={};
@@ -122,9 +134,12 @@ export function buildOverviewRows({projects,dprLog,salesOf,todayYmd}){
     const type=clean(p.sourceRequestType)||ORDER_TYPE_LABELS[p.orderType]||'Not set';
     const vendor=vname(primaryVendor(p));
     const product=(p.products||[]).map(x=>clean(x&&x.name)).filter(Boolean).join(', ');
+    const mgr=resolveManager(p.supervisor,members,teamMap);
+    const vendorCount=new Set((p.vendors||[]).map(v=>vkey(clean(v&&v.name))).filter(Boolean)).size;
     const row={
+      pmMapped:mapOk?mgr.mapped:null,vendorCount,
       id:p.id,name:p.name||'(unnamed)',tower:clean(p.tower),developer:clean(p.developer),city:clean(p.city),state:clean(p.state),status,type,
-      supervisor:sup,pm:projectManagerOf(p.supervisor),sales:sales||'Not set',vendor,product,
+      supervisor:sup,pm:mgr.pm,sales:sales||'Not set',vendor,product,
       live,running,planned,qtySrc,installed,balance,progress:P>0?Math.min(installed/P,1):(status==='Completed'?1:0),
       committed,daysLeft,expected,gap,dayTarget,overdue,
       dprDate:latest?latest.ymd:null,dprAge:age,hasToday,todayInst,todayProj:hasToday?todayProj:null,weekInst,weekProj,dprInstTotal,days,
@@ -167,7 +182,10 @@ export function overviewKpis(rows){
   const week=rows.reduce((a,r)=>a+r.weekInst,0);
   const hasToday=rows.some(r=>r.hasToday);
   const todayA=hasToday?rows.reduce((a,r)=>a+r.todayInst,0):null;
-  return {n:rows.length,total,inst,balance:Math.max(total-inst,0),wP,wN:lv.filter(r=>r.weekProj>0).length,tP,tN:lv.filter(r=>r.todayProj>0).length,
+  // How many In Progress projects have filed a DPR today — tells management whether "Installed today" is complete yet.
+  const inProg=rows.filter(r=>r.status==='In Progress');
+  const filedToday=inProg.filter(r=>r.hasToday).length, inProgress=inProg.length;
+  return {filedToday,inProgress,n:rows.length,total,inst,balance:Math.max(total-inst,0),wP,wN:lv.filter(r=>r.weekProj>0).length,tP,tN:lv.filter(r=>r.todayProj>0).length,
     week,todayA,weekGap:wP-week,todayGap:todayA==null?null:tP-todayA};
 }
 
@@ -204,4 +222,26 @@ export function buildDayLog(rows){
 export function dprVsProjectInstalled(rows){
   const dpr=rows.reduce((a,r)=>a+r.dprInstTotal,0), proj=rows.reduce((a,r)=>a+r.installed,0);
   return {dpr,proj,diff:proj-dpr};
+}
+
+// Projects whose own Installed total differs from what their DPRs add up to (manual edits in Edit Project, work from before
+// DPRs were used, the planned-qty cap, corrections). Largest difference first. diff > 0 = project says more than the DPRs.
+export function gapProjects(rows){
+  return rows.map(r=>({id:r.id,name:r.name,tower:r.tower,supervisor:r.supervisor,status:r.status,installed:r.installed,dpr:r.dprInstTotal,diff:r.installed-r.dprInstTotal}))
+    .filter(x=>Math.round(x.diff)!==0).sort((a,b)=>Math.abs(b.diff)-Math.abs(a.diff));
+}
+
+// "Things to fix in the data": each list is a reason a number on the report may look wrong or incomplete.
+export function dataQuality(rows){
+  const live=rows.filter(r=>r.live);
+  const bySup={};
+  rows.filter(r=>r.pmMapped===false).forEach(r=>{ const o=bySup[r.supervisor]||(bySup[r.supervisor]={name:r.supervisor,count:0,pm:r.pm}); o.count++; });
+  return {
+    noSales:live.filter(r=>r.sales==='Not set'),
+    multiVendor:rows.filter(r=>r.vendorCount>1),
+    qtyFromSoPo:rows.filter(r=>r.qtySrc&&r.qtySrc!=='Planned'),
+    noPlanned:rows.filter(r=>r.live&&r.planned==null),
+    noCommitted:rows.filter(r=>r.running&&!r.committed),
+    unmappedSup:Object.values(bySup).sort((a,b)=>b.count-a.count)
+  };
 }
