@@ -29,7 +29,7 @@ const pctTxt=(a,b)=>b?Math.round(a/b*100)+'%':'—';
 const pctColor=(a,b)=>!b?C.grey:a/b>=0.9?C.green:a/b<0.3?C.red:C.ink;
 
 /* ── UI state (module-local; lost on reload, which is fine for a report) ── */
-const ui={f:{q:'',pm:'',sup:'',city:'',type:'',vendor:'',product:'',sales:'',status:new Set()},sec:'all',attn:'all',paAll:false,openDays:new Set(),logOpen:true,gapOpen:false};
+const ui={f:{q:'',pm:'',sup:'',city:'',type:'',vendor:'',product:'',sales:'',status:new Set()},sec:'all',attn:'all',paAll:false,openDays:new Set(),logOpen:true,gapOpen:false,olderOpen:false};
 let host=null, printing=false;
 let teamMap={}, mapOk=false;   // admin-edited supervisor -> manager list (report_team_map); mapOk=false = could not be read
 let cache=null;                // the built rows — rebuilt only when data changes (open / refresh / a new day), not on every filter click
@@ -191,20 +191,24 @@ function logPanel(rows,today,forPrint){
   const log=buildDayLog(rows), cmp=dprVsProjectInstalled(rows);
   const wk=(()=>{ const [y,m,d]=today.split('-').map(Number); return ymdOfDate(new Date(y,m-1,d-6)); })();
   const last7=log.filter(l=>l.ymd>=wk&&l.ymd<=today).reduce((a,l)=>a+l.inst,0);
-  const sub=log.length?'Last 7 days: +'+fmt(last7)+' sqft · '+log.length+' days with DPRs':'No DPRs filed yet';
+  const sub=log.length?'Last 7 days: +'+fmt(last7)+' sqft · '+log.filter(l=>l.ymd>=wk).length+' day(s) with DPRs':'No DPRs filed yet';
   const toggle=forPrint?'':'<button class="btn btn-outline btn-sm" onclick="mgmt.log()">'+(ui.logOpen?'Hide':'Show')+'</button>';
   if(!ui.logOpen&&!forPrint) return panel('Day-wise installed log','<div style="font-size:12px;color:#888">'+sub+'</div>',toggle);
   if(!log.length) return panel('Day-wise installed log','<div style="font-size:12px;color:#888">No DPRs filed for these projects yet.</div>',toggle);
   const legend='<div style="display:flex;gap:16px;font-size:11px;color:#888;margin:4px 0"><span><i style="display:inline-block;width:10px;height:10px;border-radius:2px;background:'+C.green+';margin-right:5px"></i>Installed that day</span><span><i style="display:inline-block;width:14px;border-top:2px dashed '+C.ink+';margin-right:5px;vertical-align:middle"></i>Projection from DPR</span></div>';
-  const list=log.slice(0,forPrint?14:60).map(l=>{
+  const rowHtml=l=>{
     const open=!forPrint&&ui.openDays.has(l.ymd);
     const det=open?'<tr><td colspan="4" style="padding:0 8px 8px 24px;border-bottom:1px solid #f0f0f0">'+l.projects.map(p=>'<div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:2px 0"><span>'+plink(p.id,p.name)+(p.tower?' · '+esc(p.tower):'')+' <span style="color:#888">'+esc(p.supervisor)+'</span></span><span><b>'+fmt(p.inst)+'</b> <span style="color:#888">/ proj. '+fmt(p.proj)+'</span></span></div>').join('')+'</div></td></tr>':'';
     return '<tr'+(forPrint?'':' style="cursor:pointer" onclick="mgmt.day(\''+l.ymd+'\')"')+'><td '+TD+'>'+(forPrint?'':(open?'▾ ':'▸ '))+longDate(l.ymd)+'</td><td '+TDN+'>'+(l.projects.length?'<b>'+fmt(l.inst)+'</b>':'<span style="color:#888;font-style:italic">DPR filed, nothing installed</span>')+'</td><td '+TDN+'>'+(l.proj?fmt(l.proj):'—')+'</td><td '+TDN+'>'+l.projects.length+'</td></tr>'+det;
-  }).join('');
+  };
+  // v2-74: the table shows the last 7 days only; older days sit behind a Show / Hide button (never in the PDF)
+  const recent=log.filter(l=>l.ymd>=wk), older=log.filter(l=>l.ymd<wk);
+  const list=(recent.length?recent.map(rowHtml).join(''):'<tr><td colspan="4" style="padding:8px;font-size:12.5px;color:#888">No DPRs filed in the last 7 days.</td></tr>')+((!forPrint&&ui.olderOpen)?older.map(rowHtml).join(''):'');
+  const olderBtn=(forPrint||!older.length)?'':'<button class="btn btn-outline btn-sm" style="margin-top:6px" onclick="mgmt.older()">'+(ui.olderOpen?'Hide older days':'Show older days ('+older.length+')')+'</button>';
   const note=Math.abs(cmp.diff)>0?hint('Installed total on the projects is '+fmt(cmp.proj)+' sqft; DPRs add up to '+fmt(cmp.dpr)+' sqft ('+(cmp.diff>0?fmt(cmp.diff)+' sqft is not in any DPR — e.g. installed before DPRs were used, or set by hand in Edit Project':fmt(-cmp.diff)+' sqft more in DPRs than in project totals — e.g. the planned-qty cap or corrections')+'). Daily bars use DPRs only.'):'';
   return panel('Day-wise installed log',
-    '<div style="font-size:12px;color:#888;margin-bottom:4px">'+sub+'</div>'+legend+dayChart(log)+
-    scroll('<table style="width:100%;border-collapse:collapse;margin-top:8px"><thead><tr><th '+TH+'>Date</th><th '+THN+'>Installed</th><th '+THN+'>Projected</th><th '+THN+'>Projects</th></tr></thead><tbody>'+list+'</tbody></table>')+note+gapListHTML(rows,forPrint),toggle);
+    '<div style="font-size:12px;color:#888;margin-bottom:4px">'+sub+'</div>'+legend+dayChart((!forPrint&&ui.olderOpen)?log:recent)+
+    scroll('<table style="width:100%;border-collapse:collapse;margin-top:8px"><thead><tr><th '+TH+'>Date</th><th '+THN+'>Installed</th><th '+THN+'>Projected</th><th '+THN+'>Projects</th></tr></thead><tbody>'+list+'</tbody></table>')+olderBtn+note+gapListHTML(rows,forPrint),toggle);
 }
 // Which projects make the DPR total differ from the project Installed total (opens from a button under the log).
 function gapListHTML(rows,forPrint){
@@ -355,6 +359,7 @@ window.mgmt={
   drill:(k,v)=>{ ui.f[k]=v; drawBar(); drawBody(); try{ window.scrollTo(0,0); }catch(e){} },
   paAll:()=>{ ui.paAll=!ui.paAll; drawBody(); },
   gap:()=>{ ui.gapOpen=!ui.gapOpen; drawBody(); },
+  older:()=>{ ui.olderOpen=!ui.olderOpen; drawBody(); },
   open:openProject,
   refresh,
   pdf:openPrintView

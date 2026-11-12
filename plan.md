@@ -4306,3 +4306,7 @@ Decisions: items 7 (multi-vendor stays "first vendor", listed under Data checks)
 - Day log: a DPR day with nothing installed/projected reads "DPR filed, nothing installed".
 - Smoke: all 8 report sections, filter, drill, Refresh, console clean, production build OK.
 **Test-harness note (not a product bug):** my export tests stubbed `HTMLAnchorElement.prototype.click` to suppress downloads; leaving that stub in place made `link.click()` do nothing in later tests. Reload the page after such a test.
+
+## v2-74: Day-wise log shows only the last 7 days — 2026-11-12 (user, from a prod screenshot showing ~60 rows)
+The day log table (and the bar chart above it) now show only the last 7 calendar days (today and the 6 before). Older days sit behind a **Show older days (N)** button; it turns into **Hide older days**. The PDF always has the last 7 days only. A day row still opens to its projects; if there are no DPRs in the last 7 days it says so and still offers the older days. The "Last 7 days: +X sqft" total is unchanged (it was already the 7-day window); the "N days with DPRs" count now means days inside the last 7.
+**Verified (TEST_MODE browser):** DPRs on days 0,-1,-2,-4,-6 (inside) and -7,-8,-10,-15,-20 (older): default 5 rows + 5 bars; button "Show older days (5)"; after Show 10 rows + 10 bars; after Hide back to 5; PDF = 5 day rows and no button even when older days are open on screen; empty-window message; day detail still opens; console clean (only a dev-server favicon 404, unrelated). Not yet prod-verified.
