@@ -25,7 +25,7 @@ const pctColor=(a,b)=>!b?C.grey:a/b>=0.9?C.green:a/b<0.3?C.red:C.ink;
 
 /* ── UI state (module-local; lost on reload, which is fine for a report) ── */
 const ui={f:{q:'',pm:'',sup:'',city:'',type:'',vendor:'',product:'',sales:'',status:new Set()},sec:'all',attn:'all',paAll:false,openDays:new Set(),logOpen:true};
-let host=null;
+let host=null, printing=false;
 
 const label=(txt)=>'<div style="font-size:11px;color:#888;margin-bottom:2px">'+txt+'</div>';
 const panel=(title,body,extra)=>'<div class="proj-card" style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px"><div style="font-size:14px;font-weight:700">'+title+'</div>'+(extra||'')+'</div>'+body+'</div>';
@@ -37,6 +37,7 @@ const TD='style="padding:7px 8px;border-bottom:1px solid #f0f0f0;font-size:12.5p
 const TDN='style="padding:7px 8px;border-bottom:1px solid #f0f0f0;font-size:12.5px;text-align:right;white-space:nowrap"';
 const TF='style="padding:7px 8px;border-top:2px solid #ddd;font-size:12.5px;font-weight:700;"';
 const TFN='style="padding:7px 8px;border-top:2px solid #ddd;font-size:12.5px;font-weight:700;text-align:right;white-space:nowrap"';
+const drillAttr=(key,name)=>printing?'':' title="Click to show only these projects" onclick="mgmt.drill(\''+key+'\',this.dataset.k)" data-k="'+esc(name)+'"';
 const scroll=h=>'<div style="overflow-x:auto">'+h+'</div>';
 
 /* ── data ── */
@@ -78,6 +79,7 @@ function drawBar(){
 
 /* ══ BODY (KPIs + sections) ══ */
 function bodyHTML(forPrint){
+  printing=!!forPrint;
   const {today,rows}=dataset();
   if(!rows.length) return '<div class="proj-card" style="color:#888;font-size:13px">No projects match these filters.</div>';
   const k=overviewKpis(rows);
@@ -87,9 +89,9 @@ function bodyHTML(forPrint){
     secBtn('all','All')+secBtn('attn','Needs attention',rows.filter(r=>r.attention).length)+secBtn('pa','Planned vs actual',live.filter(r=>r.planned).length)+
     secBtn('vendor','Vendor',new Set(rows.map(r=>r.vendor)).size)+secBtn('sup','Supervisor',new Set(rows.map(r=>r.supervisor)).size)+
     secBtn('pm','Project manager',new Set(rows.map(r=>r.pm)).size)+secBtn('log','Day-wise log')+'</div>';
-  const S={type:()=>typePanel(rows),log:()=>logPanel(rows,today,forPrint),pa:()=>paPanel(rows,forPrint),vendor:()=>groupPanel('By vendor',rows,r=>r.vendor,'Vendor',{muted:'No vendor',products:true,cities:true,hint:'Spellings that differ only by case or a doubled letter count as one vendor. A project with several vendors is counted under its first vendor.'}),
-    sup:()=>groupPanel('By supervisor',rows,r=>r.supervisor,'Supervisor',{muted:'Unassigned',need:true,hint:'Today proj. turns amber when it is less than what is needed today to finish on the committed date (balance ÷ working days left, Mon–Sat).'}),
-    pm:()=>groupPanel('By project manager',rows,r=>r.pm,'Project manager',{muted:'Unassigned',need:true,hint:'Project manager comes from the supervisor: Shubham Salvi, Mahesh and Aditya → Aditya; every other supervisor → Shashank.'}),
+  const S={type:()=>typePanel(rows),log:()=>logPanel(rows,today,forPrint),pa:()=>paPanel(rows,forPrint),vendor:()=>groupPanel('By vendor',rows,r=>r.vendor,'Vendor',{drill:'vendor',muted:'No vendor',products:true,cities:true,hint:'Click a row to show only that vendor. Spellings that differ only by case or a doubled letter count as one vendor. A project with several vendors is counted under its first vendor.'}),
+    sup:()=>groupPanel('By supervisor',rows,r=>r.supervisor,'Supervisor',{drill:'sup',muted:'Unassigned',need:true,hint:'Click a row to show only that supervisor. Today proj. turns amber when it is less than what is needed today to finish on the committed date (balance ÷ working days left, Mon–Sat).'}),
+    pm:()=>groupPanel('By project manager',rows,r=>r.pm,'Project manager',{drill:'pm',muted:'Unassigned',need:true,hint:'Click a row to show only that manager. Project manager comes from the supervisor: Shubham Salvi, Mahesh and Aditya → Aditya; every other supervisor → Shashank.'}),
     attn:()=>attnPanel(rows,forPrint)};
   const parts=forPrint||ui.sec==='all'?['type','log','pa','vendor','sup','pm','attn']:[ui.sec];
   return kpiHTML(k)+bar+parts.map(p=>S[p]()).join('');
@@ -123,11 +125,11 @@ function typePanel(rows){
   g.sort((a,b)=>order(a.name)-order(b.name));
   const col=(t,i)=>t==='Not set'?C.plan:SERIES[i%SERIES.length];
   const items=g.map((o,i)=>({label:o.name,value:o.projects,color:col(o.name,i)}));
-  const tr=g.map((o,i)=>'<tr><td '+TD+'><span style="display:inline-flex;gap:8px;align-items:center"><i style="width:10px;height:10px;border-radius:2px;background:'+col(o.name,i)+'"></i><b>'+esc(o.name)+'</b></span></td>'+
+  const tr=g.map((o,i)=>'<tr'+drillAttr('type',o.name)+(printing?'':' style="cursor:pointer"')+'><td '+TD+'><span style="display:inline-flex;gap:8px;align-items:center"><i style="width:10px;height:10px;border-radius:2px;background:'+col(o.name,i)+'"></i><b>'+esc(o.name)+'</b></span></td>'+
     '<td '+TDN+'>'+o.projects+'</td><td '+TDN+'>'+o.active+'</td><td '+TDN+'>'+fmt(o.total)+'</td><td '+TDN+'>'+fmt(o.installed)+'</td><td '+TD+'>'+miniBar(o.total?o.installed/o.total:0)+'</td></tr>').join('');
   return panel('By request type','<div style="display:flex;flex-wrap:wrap;gap:20px;align-items:center"><div style="margin:0 auto">'+donut(items,180,[String(rows.length),'projects'])+'</div>'+
     '<div style="flex:1 1 380px;min-width:0">'+scroll('<table style="width:100%;border-collapse:collapse"><thead><tr><th '+TH+'>Request type</th><th '+THN+'>Projects</th><th '+THN+'>Active</th><th '+THN+'>Total qty</th><th '+THN+'>Installed</th><th '+TH+'>Progress</th></tr></thead><tbody>'+tr+'</tbody></table>')+'</div></div>'+
-    hint('The ring shows the number of projects. Request type = what the project was created from; older projects use their Order Type.'));
+    hint('Click a row to show only that request type. The ring shows the number of projects. Request type = what the project was created from; older projects use their Order Type.'));
 }
 
 /* ── Day-wise installed log ── */
@@ -198,7 +200,7 @@ function groupPanel(title,rows,keyFn,firstCol,opt){
   const tr=g.map(o=>{
     const muted=o.name===opt.muted?'color:#999;':'';
     const sub=opt.cities?[...o.cities].slice(0,3).join(', '):'';
-    return '<tr style="'+muted+'"><td '+TD+'><b>'+esc(o.name)+'</b>'+(sub?'<div style="font-size:11px;color:#888">'+esc(sub)+'</div>':'')+'</td>'+
+    return '<tr'+drillAttr(opt.drill,o.name)+' style="'+muted+(printing?'':'cursor:pointer;')+'"><td '+TD+'><b>'+esc(o.name)+'</b>'+(sub?'<div style="font-size:11px;color:#888">'+esc(sub)+'</div>':'')+'</td>'+
       (opt.products?'<td '+TD+'>'+esc([...o.products].join(', ')||'—')+'</td>':'')+
       '<td '+TDN+'>'+o.projects+'</td><td '+TDN+'>'+o.active+'</td><td '+TDN+'>'+fmt(o.total)+'</td><td '+TDN+'>'+fmt(o.installed)+'</td>'+
       '<td '+TDN+' style="color:'+pctColor(o.installed,o.total)+'">'+pctTxt(o.installed,o.total)+'</td><td '+TDN+'>'+fmt(Math.max(o.total-o.installed,0))+'</td>'+
@@ -267,6 +269,7 @@ window.mgmt={
   attn:k=>{ ui.attn=k; drawBody(); },
   log:()=>{ ui.logOpen=!ui.logOpen; drawBody(); },
   day:ymd=>{ ui.openDays.has(ymd)?ui.openDays.delete(ymd):ui.openDays.add(ymd); drawBody(); },
+  drill:(k,v)=>{ ui.f[k]=v; drawBar(); drawBody(); try{ window.scrollTo(0,0); }catch(e){} },
   paAll:()=>{ ui.paAll=!ui.paAll; drawBody(); },
   pdf:openPrintView
 };

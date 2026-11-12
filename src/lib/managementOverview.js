@@ -10,7 +10,15 @@
    - Today / Weekly projection = the DPR "today projection qty" summed over the same windows (today / last 7 days),
                so projection and actual always cover the same days.
    - Planned qty falls back to SO qty, then PO qty (labelled via qtySrc). */
-import { toYmd, addDays } from './installationScoring.js';
+import { toYmd as parseYmd, addDays } from './installationScoring.js';
+
+// parseYmd accepts "2026-13-45" as-is; reject impossible calendar dates so they can never produce nonsense
+// "late by N days" figures (the value is treated as "no date").
+function toYmd(v){
+  const y=parseYmd(v); if(!y) return null;
+  const [Y,M,D]=y.split('-').map(Number); const dt=new Date(Y,M-1,D);
+  return (dt.getFullYear()===Y&&dt.getMonth()===M-1&&dt.getDate()===D)?y:null;
+}
 
 const words=s=>String(s==null?'':s).toLowerCase().split(/[^a-z]+/).filter(Boolean);
 
