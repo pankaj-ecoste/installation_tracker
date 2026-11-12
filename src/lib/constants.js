@@ -298,7 +298,7 @@ export const POSTPO_FIELDS = [
   {key:'salesName',label:'Sales team name',required:true},
   {key:'salesEmail',label:'Sales team email',required:true},
   {key:'requestFor',label:'Request For',type:'select',options:REQUEST_FOR_OPTIONS,required:true},
-  {key:'crmSoNumber',label:'CRM / Quotation Number',type:'numeric',required:true},
+  {key:'crmSoNumber',label:'CRM/Quotation Number',type:'numeric',required:true},
   {key:'developerName',label:'Developer name',required:true},
   {key:'contactPerson',label:'Client representative name',required:true},
   {key:'mobile',label:'Client representative number',type:'phone',required:true},
