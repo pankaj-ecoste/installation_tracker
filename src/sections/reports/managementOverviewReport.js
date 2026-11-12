@@ -5,7 +5,7 @@
    so no other file has to change. Download = a print-styled copy opened in a new tab -> "Save as PDF". */
 import { state } from '../../lib/state.js';
 import { salesPersonOf } from '../../lib/summary.js';
-import { db } from '../../lib/supabaseClient.js';
+import { selectAllRows } from '../../data/selectAllRows.js';
 import { rowToProject, rowToDpr } from '../../lib/mappers.js';
 import { loadManagerMap } from '../../lib/managerMap.js';
 import {
@@ -56,24 +56,12 @@ function dataset(){
 }
 
 /* ── Refresh: the app loads its data once at login, so projects / DPRs filed since then are not in memory. This re-reads
-   ONLY the two tables the report uses (+ the manager list), in pages of 1000 — Supabase cuts a single query off at 1000
-   rows by default, and dpr_log is heading there. Read-only. ── */
+   ONLY the two tables the report uses (+ the manager list), through selectAllRows (paged past Supabase's 1000-row cap,
+   see data/selectAllRows.js). Read-only. ── */
 async function fetchAll(table){
-  const out=[];
-  try{
-    for(let from=0;;from+=1000){
-      const {data,error}=await db.from(table).select('*').order('id',{ascending:false}).range(from,from+999);
-      if(error) throw error;
-      out.push(...(data||[]));
-      if(!data||data.length<1000) break;
-    }
-  }catch(e){
-    if(!(e instanceof TypeError)) throw e;            // the TEST_MODE mock has no .range(): fall back to one plain query
-    const {data,error}=await db.from(table).select('*').order('id',{ascending:false});
-    if(error) throw error;
-    return data||[];
-  }
-  return out;
+  const {data,error}=await selectAllRows(table);
+  if(error) throw error;
+  return data||[];
 }
 function setStatus(text,bad){ const el=document.getElementById('mgmt-status'); if(el){ el.textContent=text; el.style.color=bad?C.red:'#888'; } }
 const clock=d=>pad(d.getHours())+':'+pad(d.getMinutes());

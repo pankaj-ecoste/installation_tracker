@@ -2,6 +2,7 @@ import { state } from '../lib/state.js';
 import { db } from '../lib/supabaseClient.js';
 import { dprToRow, lotToRow, memberToRow, projectToRow, rowToDpr, rowToFinanceRow, rowToLot, rowToMember, rowToProject, rowToRequest } from '../lib/mappers.js';
 import { SEED_DPR, SEED_LOTS, SEED_PROJECTS, SEED_TEAM } from '../lib/seedData.js';
+import { selectAllRows } from './selectAllRows.js';
 
 // Every column team_members has except pin/pin_hash — loadAllData() runs for every visitor,
 // even before any login, so this list is what keeps the Phase C PIN hashing meaningful: a
@@ -24,25 +25,26 @@ export async function syncProject(p){
 export async function loadAllData(){
   try{
     // PROJECTS
-    let {data:projRows,error:projErr}=await db.from('projects').select('*').order('id',{ascending:false});
+    // (v2-72: projects and dpr_log are read through selectAllRows — a plain select stops at Supabase's 1000-row cap.)
+    let {data:projRows,error:projErr}=await selectAllRows('projects');
     if(projErr) throw projErr;
     if(!projRows.length){
       const seedRows=SEED_PROJECTS.map(p=>({id:p.id,...projectToRow(p)}));
       const {error:seedErr}=await db.from('projects').insert(seedRows);
       if(seedErr) throw seedErr;
-      ({data:projRows}=await db.from('projects').select('*').order('id',{ascending:false}));
+      ({data:projRows}=await selectAllRows('projects'));
     }
     state.projects=projRows.map(rowToProject);
     state.nextId=state.projects.length?Math.max(...state.projects.map(p=>p.id))+1:1;
 
     // DPR LOG
-    let {data:dprRows,error:dprErr}=await db.from('dpr_log').select('*').order('id',{ascending:false});
+    let {data:dprRows,error:dprErr}=await selectAllRows('dpr_log');
     if(dprErr) throw dprErr;
     if(!dprRows.length){
       const seedRows=SEED_DPR.map(d=>({id:d.id,...dprToRow(d)}));
       const {error:seedErr}=await db.from('dpr_log').insert(seedRows);
       if(seedErr) throw seedErr;
-      ({data:dprRows}=await db.from('dpr_log').select('*').order('id',{ascending:false}));
+      ({data:dprRows}=await selectAllRows('dpr_log'));
     }
     state.dprLog=dprRows.map(rowToDpr);
     state.nextDprId=state.dprLog.length?Math.max(...state.dprLog.map(d=>d.id))+1:1;
