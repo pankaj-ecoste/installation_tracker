@@ -2,6 +2,7 @@ import { state } from '../../lib/state.js';
 import { renderSodEodReport } from './sodEodReport.js';
 import { renderCncDashboard } from './cncDashboardTab.js';
 import { renderInstallationScoringReport } from './installationScoringReport.js';
+import { renderManagementOverview } from './managementOverviewReport.js';
 
 /* ══ REPORTS (admin only — see plan.md v2-42) ══
    REPORTS is the registry: to add another report later, write its own file that exports a
@@ -9,7 +10,8 @@ import { renderInstallationScoringReport } from './installationScoringReport.js'
 export const REPORTS=[
   { id:'sod-eod', icon:'📞', title:'SOD / EOD Follow-Up Tracker', desc:'Daily start-of-day and end-of-day follow-up with each project, with a simple score.', render:renderSodEodReport },
   { id:'cnc-dashboard', icon:'🏭', title:'CNC Order Tracking Dashboard', desc:'Where every CNC order is stuck across the 7 production stages, and how long each runs on the CNC machine.', render:renderCncDashboard },
-  { id:'installation-scoring', icon:'📊', title:'Installation Scoring Report', desc:'Weekly (Mon–Sat) promised vs. achieved installation for each manager\'s team, with a weekly percentage.', render:renderInstallationScoringReport }
+  { id:'installation-scoring', icon:'📊', title:'Installation Scoring Report', desc:'Weekly (Mon–Sat) promised vs. achieved installation for each manager\'s team, with a weekly percentage.', render:renderInstallationScoringReport },
+  { id:'management-overview', icon:'🧭', title:'Management Overview', desc:'Live overview for management: planned vs actual, day-wise installed log, vendor / supervisor / project manager tables and what needs attention. Downloadable as PDF.', render:renderManagementOverview }
 ];
 
 export function renderReports(){

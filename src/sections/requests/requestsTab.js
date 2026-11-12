@@ -16,6 +16,8 @@ import { closePanel, openPanel, setTab, showSection } from '../navigation.js';
 import { openEditProject } from '../projects/addEditProject.js';
 import { renderProjects } from '../projects/projectCards.js';
 import { dprWeeklySums } from '../dpr/dprTab.js';
+import { salesPersonOf } from '../../lib/summary.js';
+import { projectManagerOf } from '../../lib/managementOverview.js';
 
 /* ══ REQUESTS ══ */
 export function fieldRowHTML(f, valObj, idPrefix){
@@ -1058,7 +1060,7 @@ export function exportProjectsCSV(){
   const header=['Access Code','Project Name','Tower/Block','Developer','City','State','Status','Supervisor','Planned Qty (sqft)','Installed Qty (sqft)','JMR Qty','PO Qty','SO Qty','Start Date','Committed Date','Days Available','Installation Commencement Date'];
   // v2-59: latest constraint / snag / stalled milestone / comment / uploaded files per project.
   // Constraint + snag prefer the latest OPEN item, falling back to the latest overall.
-  header.push('SO Number','Vendor','Latest Constraint','Latest Snag Point','Latest Stalled Milestone','Feedback and Notes','Uploaded Files','Request Type','DPR Date','Today Projection','Weekly Projection','Remarks','Next Day Action','Action Taken','Escalations','Internal Hindrance');
+  header.push('SO Number','Vendor','Latest Constraint','Latest Snag Point','Latest Stalled Milestone','Feedback and Notes','Uploaded Files','Request Type','DPR Date','Today Projection','Weekly Projection','Remarks','Next Day Action','Action Taken','Escalations','Internal Hindrance','Sales Person','Project Manager');
   const latestOpen=(list,isOpen)=>{ const l=list||[]; for(let i=l.length-1;i>=0;i--) if(isOpen(l[i])) return l[i]; return l[l.length-1]; };
   const today=new Date().toISOString().slice(0,10);
   // v2-61: DPR columns come from each project's LATEST DPR (newest date, then highest id); blank if none.
@@ -1090,7 +1092,11 @@ export function exportProjectsCSV(){
       d&&d.next!=='—'?d.next:'',
       d?d.actionTaken:'',
       d?d.escalations:'',
-      d?d.internalHindrance:''
+      d?d.internalHindrance:'',
+      // v2-71: Sales Person = the project's Sales Owner (same source as the "Sales:" tag on the card).
+      // Project Manager is derived from the supervisor (no PM field exists) — see lib/managementOverview.js.
+      (salesPersonOf(p,state.teamMembers)||{}).name||'',
+      projectManagerOf(p.supervisor)
     ];
   };
   const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
