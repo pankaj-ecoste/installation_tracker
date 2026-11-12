@@ -3,6 +3,8 @@ import { db } from '../lib/supabaseClient.js';
 import { dprToRow, lotToRow, memberToRow, projectToRow, rowToDpr, rowToFinanceRow, rowToLot, rowToMember, rowToProject, rowToRequest } from '../lib/mappers.js';
 import { SEED_DPR, SEED_LOTS, SEED_PROJECTS, SEED_TEAM } from '../lib/seedData.js';
 import { selectAllRows } from './selectAllRows.js';
+import { shouldSeed } from './seedPolicy.js';
+import { TEST_MODE } from '../lib/config.js';
 
 // Every column team_members has except pin/pin_hash — loadAllData() runs for every visitor,
 // even before any login, so this list is what keeps the Phase C PIN hashing meaningful: a
@@ -22,13 +24,14 @@ export async function syncProject(p){
   }catch(e){ console.error('Supabase error', e); return {ok:false,error:e}; }
 }
 
-export async function loadAllData(){
+// allowSeed: demo rows into an EMPTY table only in TEST_MODE or with VITE_ALLOW_SEED_ON_EMPTY=true (see seedPolicy.js). Overridable for tests.
+export async function loadAllData({allowSeed=TEST_MODE||import.meta.env.VITE_ALLOW_SEED_ON_EMPTY==='true'}={}){
   try{
     // PROJECTS
     // (v2-72: projects and dpr_log are read through selectAllRows — a plain select stops at Supabase's 1000-row cap.)
     let {data:projRows,error:projErr}=await selectAllRows('projects');
     if(projErr) throw projErr;
-    if(!projRows.length){
+    if(shouldSeed(projRows,allowSeed,'projects')){
       const seedRows=SEED_PROJECTS.map(p=>({id:p.id,...projectToRow(p)}));
       const {error:seedErr}=await db.from('projects').insert(seedRows);
       if(seedErr) throw seedErr;
@@ -40,7 +43,7 @@ export async function loadAllData(){
     // DPR LOG
     let {data:dprRows,error:dprErr}=await selectAllRows('dpr_log');
     if(dprErr) throw dprErr;
-    if(!dprRows.length){
+    if(shouldSeed(dprRows,allowSeed,'dpr_log')){
       const seedRows=SEED_DPR.map(d=>({id:d.id,...dprToRow(d)}));
       const {error:seedErr}=await db.from('dpr_log').insert(seedRows);
       if(seedErr) throw seedErr;
@@ -52,7 +55,7 @@ export async function loadAllData(){
     // TEAM MEMBERS (pin/pin_hash deliberately excluded — see TEAM_MEMBER_PUBLIC_COLUMNS above)
     let {data:memRows,error:memErr}=await db.from('team_members').select(TEAM_MEMBER_PUBLIC_COLUMNS).order('id');
     if(memErr) throw memErr;
-    if(!memRows.length){
+    if(shouldSeed(memRows,allowSeed,'team_members')){
       const seedRows=SEED_TEAM.map(m=>({id:m.id,...memberToRow(m)}));
       const {error:seedErr}=await db.from('team_members').insert(seedRows);
       if(seedErr) throw seedErr;
@@ -64,7 +67,7 @@ export async function loadAllData(){
     // MATERIAL LOTS
     let {data:lotRows,error:lotErr}=await db.from('material_lots').select('*').order('id',{ascending:false});
     if(lotErr) throw lotErr;
-    if(!lotRows.length){
+    if(shouldSeed(lotRows,allowSeed,'material_lots')){
       const seedRows=SEED_LOTS.map(l=>({id:l.id,...lotToRow(l)}));
       const {error:seedErr}=await db.from('material_lots').insert(seedRows);
       if(seedErr) throw seedErr;

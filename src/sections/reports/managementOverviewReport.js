@@ -7,6 +7,8 @@ import { state } from '../../lib/state.js';
 import { salesPersonOf } from '../../lib/summary.js';
 import { selectAllRows } from '../../data/selectAllRows.js';
 import { rowToProject, rowToDpr } from '../../lib/mappers.js';
+import { setTab } from '../navigation.js';
+import { renderProjects } from '../projects/projectCards.js';
 import { loadManagerMap } from '../../lib/managerMap.js';
 import {
   buildOverviewRows, filterRows, filterOptions, overviewKpis, groupRows, totalsOf, buildDayLog, dprVsProjectInstalled, gapProjects, dataQuality, TYPE_ORDER
@@ -44,6 +46,8 @@ const TDN='style="padding:7px 8px;border-bottom:1px solid #f0f0f0;font-size:12.5
 const TF='style="padding:7px 8px;border-top:2px solid #ddd;font-size:12.5px;font-weight:700;"';
 const TFN='style="padding:7px 8px;border-top:2px solid #ddd;font-size:12.5px;font-weight:700;text-align:right;white-space:nowrap"';
 const drillAttr=(key,name)=>printing?'':' title="Click to show only these projects" onclick="mgmt.drill(\''+key+'\',this.dataset.k)" data-k="'+esc(name)+'"';
+// v2-73: a project name that opens that project on All Projects (plain text in the PDF)
+const plink=(id,name)=>printing?esc(name):'<a href="#" onclick="mgmt.open('+Number(id)+');return false" title="Open this project" style="color:inherit;text-decoration:underline dotted">'+esc(name)+'</a>';
 const scroll=h=>'<div style="overflow-x:auto">'+h+'</div>';
 
 /* ── data ── */
@@ -194,8 +198,8 @@ function logPanel(rows,today,forPrint){
   const legend='<div style="display:flex;gap:16px;font-size:11px;color:#888;margin:4px 0"><span><i style="display:inline-block;width:10px;height:10px;border-radius:2px;background:'+C.green+';margin-right:5px"></i>Installed that day</span><span><i style="display:inline-block;width:14px;border-top:2px dashed '+C.ink+';margin-right:5px;vertical-align:middle"></i>Projection from DPR</span></div>';
   const list=log.slice(0,forPrint?14:60).map(l=>{
     const open=!forPrint&&ui.openDays.has(l.ymd);
-    const det=open?'<tr><td colspan="4" style="padding:0 8px 8px 24px;border-bottom:1px solid #f0f0f0">'+l.projects.map(p=>'<div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:2px 0"><span>'+esc(p.name)+(p.tower?' · '+esc(p.tower):'')+' <span style="color:#888">'+esc(p.supervisor)+'</span></span><span><b>'+fmt(p.inst)+'</b> <span style="color:#888">/ proj. '+fmt(p.proj)+'</span></span></div>').join('')+'</div></td></tr>':'';
-    return '<tr'+(forPrint?'':' style="cursor:pointer" onclick="mgmt.day(\''+l.ymd+'\')"')+'><td '+TD+'>'+(forPrint?'':(open?'▾ ':'▸ '))+longDate(l.ymd)+'</td><td '+TDN+'><b>'+fmt(l.inst)+'</b></td><td '+TDN+'>'+(l.proj?fmt(l.proj):'—')+'</td><td '+TDN+'>'+l.projects.length+'</td></tr>'+det;
+    const det=open?'<tr><td colspan="4" style="padding:0 8px 8px 24px;border-bottom:1px solid #f0f0f0">'+l.projects.map(p=>'<div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:2px 0"><span>'+plink(p.id,p.name)+(p.tower?' · '+esc(p.tower):'')+' <span style="color:#888">'+esc(p.supervisor)+'</span></span><span><b>'+fmt(p.inst)+'</b> <span style="color:#888">/ proj. '+fmt(p.proj)+'</span></span></div>').join('')+'</div></td></tr>':'';
+    return '<tr'+(forPrint?'':' style="cursor:pointer" onclick="mgmt.day(\''+l.ymd+'\')"')+'><td '+TD+'>'+(forPrint?'':(open?'▾ ':'▸ '))+longDate(l.ymd)+'</td><td '+TDN+'>'+(l.projects.length?'<b>'+fmt(l.inst)+'</b>':'<span style="color:#888;font-style:italic">DPR filed, nothing installed</span>')+'</td><td '+TDN+'>'+(l.proj?fmt(l.proj):'—')+'</td><td '+TDN+'>'+l.projects.length+'</td></tr>'+det;
   }).join('');
   const note=Math.abs(cmp.diff)>0?hint('Installed total on the projects is '+fmt(cmp.proj)+' sqft; DPRs add up to '+fmt(cmp.dpr)+' sqft ('+(cmp.diff>0?fmt(cmp.diff)+' sqft is not in any DPR — e.g. installed before DPRs were used, or set by hand in Edit Project':fmt(-cmp.diff)+' sqft more in DPRs than in project totals — e.g. the planned-qty cap or corrections')+'). Daily bars use DPRs only.'):'';
   return panel('Day-wise installed log',
@@ -207,7 +211,7 @@ function gapListHTML(rows,forPrint){
   const g=gapProjects(rows); if(!g.length||forPrint) return '';
   const btn='<button class="btn btn-outline btn-sm" style="margin-top:6px" onclick="mgmt.gap()">'+(ui.gapOpen?'Hide':'Which projects differ?')+' ('+g.length+')</button>';
   if(!ui.gapOpen) return btn;
-  const tr=g.slice(0,25).map(x=>'<tr><td '+TD+'><b>'+esc(x.name)+'</b>'+(x.tower?' · '+esc(x.tower):'')+'<div style="font-size:11px;color:#888">'+esc(x.status)+' · '+esc(x.supervisor)+'</div></td><td '+TDN+'>'+fmt(x.installed)+'</td><td '+TDN+'>'+fmt(x.dpr)+'</td><td '+TDN+' style="color:'+(x.diff>0?C.amber:C.red)+'">'+(x.diff>0?'+':'')+fmt(x.diff)+'</td></tr>').join('');
+  const tr=g.slice(0,25).map(x=>'<tr><td '+TD+'><b>'+plink(x.id,x.name)+'</b>'+(x.tower?' · '+esc(x.tower):'')+'<div style="font-size:11px;color:#888">'+esc(x.status)+' · '+esc(x.supervisor)+'</div></td><td '+TDN+'>'+fmt(x.installed)+'</td><td '+TDN+'>'+fmt(x.dpr)+'</td><td '+TDN+' style="color:'+(x.diff>0?C.amber:C.red)+'">'+(x.diff>0?'+':'')+fmt(x.diff)+'</td></tr>').join('');
   return btn+scroll('<table style="width:100%;border-collapse:collapse;margin-top:6px"><thead><tr><th '+TH+'>Project</th><th '+THN+'>Project Installed</th><th '+THN+'>Sum of DPRs</th><th '+THN+'>Difference</th></tr></thead><tbody>'+tr+'</tbody></table>')+
     hint('Largest differences first'+(g.length>25?' (top 25 of '+g.length+')':'')+'. A positive difference means the project says more is installed than its DPRs add up to (work before DPRs were used, or Installed set by hand in Edit Project). A negative one means the DPRs add up to more (the planned-qty cap, or corrections).');
 }
@@ -240,7 +244,7 @@ function paPanel(rows,forPrint){
   const signed=d=>(d>0?'+':'')+fmt(d);
   const tr=shown.map(r=>{
     const d=r.expected==null?null:r.installed-r.expected;
-    return '<tr><td '+TD+'><b>'+esc(r.name)+'</b><div style="font-size:11px;color:#888">'+esc([r.tower,r.supervisor].filter(Boolean).join(' · '))+(r.qtySrc&&r.qtySrc!=='Planned'?' · qty from '+r.qtySrc:'')+'</div></td>'+
+    return '<tr><td '+TD+'><b>'+plink(r.id,r.name)+'</b><div style="font-size:11px;color:#888">'+esc([r.tower,r.supervisor].filter(Boolean).join(' · '))+(r.qtySrc&&r.qtySrc!=='Planned'?' · qty from '+r.qtySrc:'')+'</div></td>'+
       '<td '+TDN+'>'+fmt(r.planned)+'</td><td '+TDN+'>'+(r.expected==null?'—':fmt(r.expected))+'</td><td '+TDN+'>'+fmt(r.installed)+'</td>'+
       '<td '+TDN+' style="color:'+(d==null?C.grey:d<0?C.red:C.green)+'">'+(d==null?'—':signed(d))+'</td>'+
       '<td '+TDN+' style="color:'+pctColor(r.installed,r.planned)+'">'+pctTxt(r.installed,r.planned)+'</td><td '+TD+'>'+miniBar(r.planned?r.installed/r.planned:0)+'</td>'+
@@ -296,7 +300,7 @@ function attnPanel(rows,forPrint){
     if(mode==='stuck') { why.length=0; why.push((r.milestone.label||'Milestone')+' — '+r.milestone.overdue+' days overdue (planned '+shortDate(r.milestone.planned)+')'); }
     const bad=r.late||r.constraint;
     return '<div style="border-left:4px solid '+(bad?C.red:C.amber)+';padding:6px 10px;margin:6px 0;background:#fafafa;border-radius:0 6px 6px 0">'+
-      '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b style="font-size:13px">'+esc(r.name)+(r.tower?' · '+esc(r.tower):'')+'</b><span style="font-size:11px;color:#888">'+esc(r.status)+' · '+esc(r.supervisor)+' · PM '+esc(r.pm)+'</span></div>'+
+      '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b style="font-size:13px">'+plink(r.id,r.name)+(r.tower?' · '+esc(r.tower):'')+'</b><span style="font-size:11px;color:#888">'+esc(r.status)+' · '+esc(r.supervisor)+' · PM '+esc(r.pm)+'</span></div>'+
       '<div style="font-size:12.5px;margin-top:2px">'+why.map(esc).join(' · ')+'</div></div>';
   };
   const empty={all:'Nothing late, behind plan, or blocked in this filter.',constraint:'No open constraints on active projects.',stuck:'No work stuck on active projects.',snag:'No open snags on active projects.'}[mode];
@@ -309,6 +313,18 @@ function attnPanel(rows,forPrint){
 }
 
 /* ══ Handlers (window.mgmt) ══ */
+// Open a project: switch to All Projects, expand that card and scroll to it. If the All Projects filters hide it, say so.
+function openProject(id){
+  try{ setTab('projects'); }catch(e){ console.error(e); return; }
+  state.expanded[id]=true; renderProjects();
+  setTimeout(()=>{
+    const card=document.getElementById('card-'+id);
+    if(!card){ alert('That project is hidden by the filters on All Projects. Clear the status / state / search filters there and try again.'); return; }
+    card.scrollIntoView({behavior:'smooth',block:'center'});
+    card.style.transition='box-shadow .3s'; card.style.boxShadow='0 0 0 3px '+C.green;
+    setTimeout(()=>{ card.style.boxShadow=''; },2200);
+  },120);
+}
 function reset(){ ui.f={q:'',pm:'',sup:'',city:'',type:'',vendor:'',product:'',sales:'',status:new Set()}; }
 function openPrintView(){
   // Preferred: a new tab. If the browser blocks pop-ups, print from a hidden frame on this page instead, so the button
@@ -339,6 +355,7 @@ window.mgmt={
   drill:(k,v)=>{ ui.f[k]=v; drawBar(); drawBody(); try{ window.scrollTo(0,0); }catch(e){} },
   paAll:()=>{ ui.paAll=!ui.paAll; drawBody(); },
   gap:()=>{ ui.gapOpen=!ui.gapOpen; drawBody(); },
+  open:openProject,
   refresh,
   pdf:openPrintView
 };
