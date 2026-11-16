@@ -17,6 +17,7 @@ import { openEditProject } from '../projects/addEditProject.js';
 import { renderProjects } from '../projects/projectCards.js';
 import { dprWeeklySums } from '../dpr/dprTab.js';
 import { salesPersonOf } from '../../lib/summary.js';
+import { lostBadgeHTML, lostSelectHTML } from '../../lib/lost.js';
 import { projectManagerOf } from '../../lib/managementOverview.js';
 import { loadManagerMap } from '../../lib/managerMap.js';
 
@@ -456,7 +457,8 @@ export function renderRequests(){
   const tf=document.getElementById('req-f-type')?.value||'';
   const filtered=visible.filter(r=>{
     if(sf&&r.status!==sf) return false;
-    if(tf&&r.requestType!==tf) return false;
+    if(tf==='lost'){ if(!r.isLost) return false; }       // v2-75: Lost has its own filter,
+    else{ if(r.isLost) return false; if(tf&&r.requestType!==tf) return false; } // and is hidden from every other view
     if(sch){
       const d=r.details||{};
       const haystack=[r.createdBy,d.salesName,d.projectName,d.projectNameKnown,d.developerName].filter(Boolean).join(' ').toLowerCase();
@@ -790,6 +792,7 @@ export function renderRequestCard(r){
           (r.requestSubType?'<span class="badge bgr">'+r.requestSubType+'</span>':'')+
           '<span class="badge '+(isOnlySupply?'bt':'bgr')+'">'+scope+'</span>'+
           '<span class="badge '+(REQ_STATUS_COLOR[r.status]||'bgr')+'">'+r.status+'</span>'+
+          lostBadgeHTML(r.isLost)+lostSelectHTML('request',r.id,r.isLost)+
           (group==='order'?crmSoBadge({crmSoNumber:d.crmSoNumber}):'')+
           tatBadge(r)+
           reviewWaitBadge(r)+

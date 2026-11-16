@@ -24,6 +24,7 @@ import { renderProjects, toggleChecklistDropdown, renderChecklistDropdown, rende
 import { fieldRowHTML, captureDPRArrivalGeoLocation, captureGeoLocation, reqFieldChanged, reqScopeChanged, renderRequestFields, openAddRequest, openEditRequest, genRequestNumber, saveRequest, notifyProjectTeamNewRequest, notifyNewRequest, renderRequests, sendVisitReportEmail, tatBadge, reviewWaitBadge, toggleRequestTimeline, fmtDateTime, slaGap, renderRequestStageTimeline, renderCNCStageTimeline, setCNCStageActual, setCNCDesignStatus, uploadCNCRoughDrawing, uploadCNCPreviewPdf, emailSalesPreviewUpdated, renderRequestCard, viewRequestReadOnly, updateRequestFields, acknowledgeRequest, confirmAcknowledge, sendAssignmentEmails, changePlannedDate, advanceRequestStatus, convertRequestToProject, confirmConvertRequestToProject, exportProjectsCSV, parseCSV, importProjectsCSV, exportRequestsCSV, askDeleteRequest } from '../sections/requests/requestsTab.js';
 import { renderTeamMgmt, togglePerm, openAddMember, openEditMember, updateRolePreview, saveMember, toggleMemberStatus, deleteMember } from '../sections/team/teamMgmtTab.js';
 import { renderVendorPortal } from '../sections/vendorPortal/vendorPortal.js';
+import { setLost } from '../lib/lost.js';
 import { renderReports, openReport, closeReport } from '../sections/reports/reportsTab.js';
 import { scoringWeekShift, scoringWeekThis, scoringSetManager, scoringMonthPicked, scoringWeekPicked } from '../sections/reports/installationScoringReport.js';
 import { sodEodFormChanged, sodEodSlotChanged, saveSodEodEntry, toggleSodEodDay, sodEodSearchChanged } from '../sections/reports/sodEodReport.js';
@@ -221,6 +222,7 @@ export function installDomGlobals(){
     renderRequestFields,
     openAddRequest,
     openEditRequest,
+    setLost,
     genRequestNumber,
     saveRequest,
     notifyProjectTeamNewRequest,

@@ -27,7 +27,7 @@ export function projectToRow(p){
     work_policy_checklist:p.workPolicyChecklist||null, work_policy_checklist_completed_at:p.workPolicyChecklistCompletedAt||null, work_policy_checklist_reviewed:p.workPolicyChecklistReviewed||false,
     po_date:p.poDate||null, days_available:p.daysAvailable||null, material_first_lot_date:p.materialFirstLotDate||null, install_commencement_date:p.installCommencementDate||null,
     wcc_docs:p.wccDocs||[], ra_bill_docs:p.raBillDocs||[], project_docs:p.projectDocs||[], premockup_checklist:p.premockupChecklist||null,
-    crm_so_number:p.crmSoNumber||''
+    crm_so_number:p.crmSoNumber||'', is_lost:p.isLost||false
   };
 }
 export function rowToProject(r){
@@ -52,7 +52,7 @@ export function rowToProject(r){
     workPolicyChecklist:r.work_policy_checklist||null, workPolicyChecklistCompletedAt:r.work_policy_checklist_completed_at||'', workPolicyChecklistReviewed:r.work_policy_checklist_reviewed||false,
     poDate:r.po_date||'', daysAvailable:r.days_available||0, materialFirstLotDate:r.material_first_lot_date||'', installCommencementDate:r.install_commencement_date||'',
     wccDocs:r.wcc_docs||[], raBillDocs:r.ra_bill_docs||[], projectDocs:r.project_docs||[], premockupChecklist:r.premockup_checklist||null,
-    crmSoNumber:r.crm_so_number||''
+    crmSoNumber:r.crm_so_number||'', isLost:r.is_lost||false
   };
 }
 
@@ -113,7 +113,7 @@ export function requestToRow(r){
     assigned_supervisor:r.assignedSupervisor||null, planned_visit_date:r.plannedVisitDate||null,
     actual_visit_date:r.actualVisitDate||null, planned_date_locked:r.plannedDateLocked||false,
     details:r.details||{}, checklist:r.checklist||[], linked_project_id:r.linkedProjectId||null,
-    reviewed_at:r.reviewedAt||null, converted_at:r.convertedAt||null
+    reviewed_at:r.reviewedAt||null, converted_at:r.convertedAt||null, is_lost:r.isLost||false
   };
 }
 export function rowToRequest(row){
@@ -122,7 +122,7 @@ export function rowToRequest(row){
     createdBy:row.created_by, assignedSupervisor:row.assigned_supervisor||'', plannedVisitDate:row.planned_visit_date||'',
     actualVisitDate:row.actual_visit_date||'', plannedDateLocked:row.planned_date_locked||false,
     details:row.details||{}, checklist:row.checklist||[], linkedProjectId:row.linked_project_id||null,
-    createdAt:row.created_at||'', reviewedAt:row.reviewed_at||'', convertedAt:row.converted_at||''
+    createdAt:row.created_at||'', reviewedAt:row.reviewed_at||'', convertedAt:row.converted_at||'', isLost:row.is_lost||false
   };
 }
 

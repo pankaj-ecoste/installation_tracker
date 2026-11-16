@@ -7,6 +7,7 @@ import { docLink, pickFilesOrWarn, uploadFilesWithNames } from '../../lib/upload
 import { updateBell } from '../alerts.js';
 import { renderDPR } from '../dpr/dprTab.js';
 import { salesPersonOf } from '../../lib/summary.js';
+import { lostBadgeHTML, lostSelectHTML } from '../../lib/lost.js';
 
 // v2-70: the Sales Owner's name as a small tag (name only — email/phone stay in the Team tab). A project whose
 // Sales Owner is not an active Sales / Viewer member gets a red warning tag instead, so the gap is visible.
@@ -26,7 +27,8 @@ export function renderProjects(){
   const grid=document.getElementById('project-grid'); if(!grid) return;
   const filtered=visibleProjects().filter(p=>{
     if(state.filterOpenConstraintsOnly&&!(p.constraintsOpen>0)) return false;
-    if(sf&&p.status!==sf) return false;
+    if(sf==='Lost'){ if(!p.isLost) return false; }       // v2-75: Lost has its own filter,
+    else{ if(p.isLost) return false; if(sf&&p.status!==sf) return false; } // and is hidden from every other view
     if(stf&&p.state!==stf) return false;
     if(sch&&!(p.name||'').toLowerCase().includes(sch)&&!(p.tower||'').toLowerCase().includes(sch)&&!(p.supervisor||'').toLowerCase().includes(sch)) return false;
     return true;
@@ -136,6 +138,7 @@ export function renderCard(p){
         '<div class="proj-sub">'+p.developer+' · '+p.city+', '+p.state+(p.orderType?' · '+p.orderType.charAt(0).toUpperCase()+p.orderType.slice(1):'')+'</div>'+
         '<div class="proj-meta">'+
           statusBadge(p.status)+
+          lostBadgeHTML(p.isLost)+lostSelectHTML('project',p.id,p.isLost)+
           (isOverdue?'<span class="badge br">🚨 Overdue</span>':'')+
           (stalledMs>0?'<span class="badge br">⏰ '+stalledMs+' stalled</span>':'')+
           (p.constraintsOpen>0?'<span class="badge br">🔴 '+p.constraintsOpen+' open</span>':'')+

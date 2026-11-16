@@ -84,7 +84,7 @@
     <div id="tab-projects-view">
       <div class="metrics" id="metrics-row"></div>
       <div class="filters">
-        <select id="f-status" onchange="renderProjects()"><option value="">All statuses</option><option>Completed</option><option>In Progress</option><option>Not Started</option><option>On Hold</option><option>CNC</option><option>Only Supply</option></select>
+        <select id="f-status" onchange="renderProjects()"><option value="">All statuses</option><option>Completed</option><option>In Progress</option><option>Not Started</option><option>On Hold</option><option>CNC</option><option>Only Supply</option><option>Lost</option></select>
         <select id="f-state" onchange="renderProjects()"><option value="">All states</option><option>Maharastra</option><option>Delhi</option><option>Gujarat</option></select>
         <input type="text" id="f-search" placeholder="Search project..." oninput="renderProjects()" style="min-width:150px">
         <button class="btn btn-outline btn-sm" onclick="exportProjectsCSV()">⬇ Export Excel/CSV</button>
@@ -101,7 +101,7 @@
         </div>
       </div>
       <div class="filters">
-        <select id="req-f-type" onchange="renderRequests()"><option value="">All request types</option><option value="pre-mockup">Pre-Mockup</option><option value="mockup">Mockup</option><option value="post-mockup">Post-Mockup</option><option value="pre-main-survey">Pre-Main Order Survey</option><option value="sampling-survey">Sampling Survey</option><option value="main-order">Main Order</option><option value="post-main-order">Post-Main Order</option><option value="cnc">CNC</option></select>
+        <select id="req-f-type" onchange="renderRequests()"><option value="">All request types</option><option value="pre-mockup">Pre-Mockup</option><option value="mockup">Mockup</option><option value="post-mockup">Post-Mockup</option><option value="pre-main-survey">Pre-Main Order Survey</option><option value="sampling-survey">Sampling Survey</option><option value="main-order">Main Order</option><option value="post-main-order">Post-Main Order</option><option value="cnc">CNC</option><option value="lost">Lost</option></select>
         <select id="req-f-status" onchange="renderRequests()"><option value="">All statuses</option><option>New</option><option>Acknowledged</option><option>Visit Done</option><option>Reviewed</option><option>Converted to Project</option><option>Dispatched</option></select>
         <input type="text" id="req-f-search" placeholder="Search by sales person or project..." oninput="renderRequests()" style="min-width:220px">
       </div>
