@@ -5,7 +5,7 @@
    A key changes when the item's state changes (e.g. a request moving New -> Visit Done), so it
    counts as new again. The rules below are the badge rules that existed before v2-48, unchanged. */
 import { state } from './state.js';
-import { canDo, needsFinanceReview, needsRABill, visibleProjects } from './helpers.js';
+import { canDo, vpAdminAccess, needsFinanceReview, needsRABill, visibleProjects } from './helpers.js';
 import { CHECKLIST_DEFS, TODAY } from './constants.js';
 
 // Requests: Admin/Manager act on brand-new and visit-done requests; a Supervisor on requests
@@ -76,7 +76,7 @@ export function vendorAttentionKeys(){
 // Visit Planner (v2-64): admin only — each submitted plan is "new" until the admin opens the tab.
 export function visitPlanAttentionKeys(){
   const u = state.currentUser;
-  if(!u || u.role !== 'admin') return [];
+  if(!u || !vpAdminAccess()) return [];
   return (state.visitPlans || []).map(p => 'vp:' + p.id);
 }
 

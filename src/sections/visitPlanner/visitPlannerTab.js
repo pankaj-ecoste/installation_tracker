@@ -1,6 +1,7 @@
 import { state } from '../../lib/state.js';
 import { db } from '../../lib/supabaseClient.js';
 import { INDIAN_CITIES } from '../../lib/indianCities.js';
+import { vpAdminAccess, vpSupervisorAccess } from '../../lib/helpers.js';
 import { notifyByGmail } from '../../lib/constants.js';
 import { logActivity } from '../../lib/activityLog.js';
 import { countUnseen, markKeysSeen } from '../../lib/seenItems.js';
@@ -21,8 +22,8 @@ import { updateBell } from '../alerts.js';
    enforces every rule again, this file just gives friendly messages first. */
 
 const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-const isAdmin=()=>!!state.currentUser&&state.currentUser.role==='admin';
-const isSupervisor=()=>!!state.currentUser&&state.currentUser.role==='supervisor';
+const isAdmin=()=>vpAdminAccess(); // v2-77: Admin, or any non-supervisor role ticked for Visit Planner (e.g. Ops Manager)
+const isSupervisor=()=>vpSupervisorAccess();
 export const canUseVisitPlanner=()=>isAdmin()||isSupervisor();
 const activeSupervisors=()=>state.teamMembers.filter(m=>m.role==='supervisor'&&m.active);
 

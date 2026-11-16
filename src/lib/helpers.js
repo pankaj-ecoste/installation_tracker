@@ -90,3 +90,7 @@ export function visibleProjects(){
   return state.projects.filter(p=>p.createdBy===state.currentUser.username||p.supervisor===state.currentUser.username||p.supervisor===state.currentUser.name);
 }
 
+// v2-77: Visit Planner access comes from the Role Permissions grid ("useVisitPlanner").
+// Supervisor keeps its own-plans behaviour; every other role with the tick (Admin, Ops Manager, ...) gets full admin-level access.
+export const vpAdminAccess=()=>!!state.currentUser&&state.currentUser.role!=='supervisor'&&(state.currentUser.role==='admin'||canDo('useVisitPlanner'));
+export const vpSupervisorAccess=()=>!!state.currentUser&&state.currentUser.role==='supervisor'&&canDo('useVisitPlanner');
