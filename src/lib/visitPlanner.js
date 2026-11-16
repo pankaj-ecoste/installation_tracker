@@ -141,8 +141,8 @@ export function planEmailContent(plan){
     'Employee : '+plan.supervisor_name,
     'Location : '+plan.base_city,
     '',
-    'Day | Date | Site | Reason | Remark | Status',
-    '-----------------------------------------------------'
+    'Day | Date | Site | Reason | Next Action Plan | Status',
+    '-------------------------------------------------------------------'
   ];
   weekDays(plan.week_start).forEach(day=>{
     plan.visits.filter(v=>v.date===day).forEach(v=>{

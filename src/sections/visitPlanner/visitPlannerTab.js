@@ -126,7 +126,7 @@ function planCardHTML(plan){
     '<div class="vp-h1">Visit plan — week of '+esc(weekRangeLabel(plan.week_start))+'</div>'+
     '<div class="vp-h2">Employee name = '+esc(plan.supervisor_name)+'</div>'+
     '<div class="vp-h3">Location = '+esc(plan.base_city)+'</div>'+
-    '<div style="overflow-x:auto"><table class="vp-table"><thead><tr><th style="width:90px">Date</th><th style="width:100px">Day</th><th>Site location</th><th>Reason / Task</th><th>Remark</th><th style="width:140px">Status</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
+    '<div style="overflow-x:auto"><table class="vp-table"><thead><tr><th style="width:90px">Date</th><th style="width:100px">Day</th><th>Site location</th><th>Reason / Task</th><th>Next Action Plan</th><th style="width:140px">Status</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
     '<div class="vp-foot"><span style="color:#666;font-size:12px">'+doneCount+' of '+real.length+' visit'+(real.length!==1?'s':'')+' done</span>'+
       // Email Plan is for the supervisor too (their own plan — RLS only lets them see their own); Edit / Delete stay admin-only.
       '<span class="vp-actions">'+(admin?'<button class="btn btn-outline btn-sm" onclick="openVisitPlanForm('+plan.id+')">✎ Edit Plan</button> ':'')+'<button class="btn btn-outline btn-sm" onclick="emailVisitPlan('+plan.id+')">✉ '+(admin?'Email Plan':'Notify by Email')+'</button>'+(admin?' <button class="btn btn-outline btn-sm" style="color:#c0392b;border-color:#e6aaaa" onclick="deleteVisitPlan('+plan.id+')">Delete</button>':'')+'</span>'+
@@ -370,7 +370,7 @@ function renderVpVisits(){
           (v.reason==='Other'?'<input class="form-input" style="margin-top:4px" placeholder="Type the reason" value="'+esc(v.reason_other)+'" onchange="vpReasonOtherTyped('+idx+',this.value)">':'');
       const noteCell=noVisit
         ?'<span style="color:#aaa;font-size:12px">—</span>'
-        :'<input class="form-input" maxlength="300" placeholder="Remark (optional)" value="'+esc(v.note||'')+'" onchange="vpNoteTyped('+idx+',this.value)">';
+        :'<input class="form-input" maxlength="300" placeholder="Next Action Plan (optional)" value="'+esc(v.note||'')+'" onchange="vpNoteTyped('+idx+',this.value)">';
       rows+='<tr>'+
         (i===0?'<td rowspan="'+entries.length+'">'+ddmmyy(day)+'</td><td rowspan="'+entries.length+'">'+dayName(day)+'</td>':'')+
         '<td>'+siteInput+(noVisit?'':'<label class="vp-newchk"><input type="checkbox"'+(v.kind==='new_site'?' checked':'')+' onchange="vpNewSiteToggled('+idx+',this.checked)"> 🆕 <b>New site (not in project list)</b></label>')+'</td>'+
@@ -384,7 +384,7 @@ function renderVpVisits(){
   });
   wrap.innerHTML=siteListHTML+
     (sup?'':'<div class="vp-hint">Select the employee first — the Site list shows the projects linked to them.</div>')+
-    '<div style="overflow-x:auto"><table class="vp-table vp-form-table"><thead><tr><th style="width:80px">Date</th><th style="width:90px">Day</th><th>Site location</th><th style="width:200px">Reason / Task</th><th style="width:200px">Remark</th><th style="width:150px"></th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+    '<div style="overflow-x:auto"><table class="vp-table vp-form-table"><thead><tr><th style="width:80px">Date</th><th style="width:90px">Day</th><th>Site location</th><th style="width:200px">Reason / Task</th><th style="width:200px">Next Action Plan</th><th style="width:150px"></th></tr></thead><tbody>'+rows+'</tbody></table></div>';
 }
 
 export function vpPastDayClicked(){ setVpError('You can\'t plan a past day.'); }
