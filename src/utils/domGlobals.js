@@ -32,7 +32,7 @@ import { cncFilterChanged, openCncListPopup, openCncRunDaysPopup, openCncOrderDe
 import { updateNewVendorBadge, renderNewVendors, markVendorReviewed, markVendorApprovedByShashank } from '../sections/vendors/newVendorsTab.js';
 import { openVendorEdit, saveVendorEdit, closeVendorEdit } from '../sections/vendors/vendorEdit.js';
 import { summaryDateChanged, summaryStatusChanged, summaryPreviewToggle, summaryNoteChanged, summaryEmail, summaryWhatsApp } from '../sections/summary/summaryTab.js';
-import { renderVisitPlanner, goToVisitPlanner, vpWeekShift, vpWeekPicked, vpFilterChanged, vpSetStatus, vpCancelRemark, vpSaveRemark, emailVisitPlan, deleteVisitPlan, openVisitPlanForm, closeVisitPlanForm, saveVisitPlan, vpPastDayClicked, vpEmployeeChanged, vpCityChanged, vpFormWeekChanged, vpSiteChanged, vpNewSiteToggled, vpNewSiteTyped, vpReasonChanged, vpReasonOtherTyped, vpAddSameDay, vpRemoveVisit } from '../sections/visitPlanner/visitPlannerTab.js';
+import { renderVisitPlanner, goToVisitPlanner, vpWeekShift, vpWeekPicked, vpFilterChanged, vpSetStatus, vpCancelRemark, vpSaveRemark, emailVisitPlan, deleteVisitPlan, openVisitPlanForm, closeVisitPlanForm, saveVisitPlan, vpPastDayClicked, vpEmployeeChanged, vpCityChanged, vpFormWeekChanged, vpSiteChanged, vpNewSiteToggled, vpNewSiteTyped, vpReasonChanged, vpReasonOtherTyped, vpNoteTyped, vpAddSameDay, vpRemoveVisit } from '../sections/visitPlanner/visitPlannerTab.js';
 
 // Every function invoked from an inline onclick="..." attribute in index.html needs to
 // be reachable on window - once this app moved into ES modules those functions stopped
@@ -274,7 +274,7 @@ export function installDomGlobals(){
     summaryDateChanged, summaryStatusChanged, summaryPreviewToggle, summaryNoteChanged, summaryEmail, summaryWhatsApp,
     renderVisitPlanner, goToVisitPlanner, vpWeekShift, vpWeekPicked, vpFilterChanged, vpSetStatus, vpCancelRemark, vpSaveRemark,
     emailVisitPlan, deleteVisitPlan, openVisitPlanForm, closeVisitPlanForm, saveVisitPlan, vpPastDayClicked, vpEmployeeChanged,
-    vpCityChanged, vpFormWeekChanged, vpSiteChanged, vpNewSiteToggled, vpNewSiteTyped, vpReasonChanged, vpReasonOtherTyped,
+    vpCityChanged, vpFormWeekChanged, vpSiteChanged, vpNewSiteToggled, vpNewSiteTyped, vpReasonChanged, vpReasonOtherTyped, vpNoteTyped,
     vpAddSameDay, vpRemoveVisit,
     renderReports,
     openReport,

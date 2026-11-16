@@ -108,7 +108,7 @@ function planCardHTML(plan){
   days.forEach(day=>{
     const list=plan.visits.filter(v=>v.date===day);
     if(!list.length){
-      rows+='<tr><td class="vp-d">'+ddmmyy(day)+'</td><td class="vp-d">'+dayName(day)+'</td><td colspan="3" style="color:#aaa">Not planned</td></tr>';
+      rows+='<tr><td class="vp-d">'+ddmmyy(day)+'</td><td class="vp-d">'+dayName(day)+'</td><td colspan="4" style="color:#aaa">Not planned</td></tr>';
       return;
     }
     list.forEach((v,i)=>{
@@ -118,6 +118,7 @@ function planCardHTML(plan){
         (i===0?'<td class="vp-d" rowspan="'+list.length+'">'+ddmmyy(day)+'</td><td class="vp-d" rowspan="'+list.length+'">'+dayName(day)+'</td>':'')+
         '<td><b>'+esc(visitSiteLabel(v))+'</b>'+tag+'</td>'+
         '<td>'+(isRealVisit(v)?esc(visitReasonLabel(v)):'')+remark+'</td>'+
+        '<td>'+(isRealVisit(v)?esc(v.note||''):'')+'</td>'+
         '<td>'+statusCell(plan,v)+'</td></tr>';
     });
   });
@@ -125,7 +126,7 @@ function planCardHTML(plan){
     '<div class="vp-h1">Visit plan — week of '+esc(weekRangeLabel(plan.week_start))+'</div>'+
     '<div class="vp-h2">Employee name = '+esc(plan.supervisor_name)+'</div>'+
     '<div class="vp-h3">Location = '+esc(plan.base_city)+'</div>'+
-    '<div style="overflow-x:auto"><table class="vp-table"><thead><tr><th style="width:90px">Date</th><th style="width:100px">Day</th><th>Site location</th><th>Reason / Task</th><th style="width:140px">Status</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
+    '<div style="overflow-x:auto"><table class="vp-table"><thead><tr><th style="width:90px">Date</th><th style="width:100px">Day</th><th>Site location</th><th>Reason / Task</th><th>Remark</th><th style="width:140px">Status</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
     '<div class="vp-foot"><span style="color:#666;font-size:12px">'+doneCount+' of '+real.length+' visit'+(real.length!==1?'s':'')+' done</span>'+
       // Email Plan is for the supervisor too (their own plan — RLS only lets them see their own); Edit / Delete stay admin-only.
       '<span class="vp-actions">'+(admin?'<button class="btn btn-outline btn-sm" onclick="openVisitPlanForm('+plan.id+')">✎ Edit Plan</button> ':'')+'<button class="btn btn-outline btn-sm" onclick="emailVisitPlan('+plan.id+')">✉ '+(admin?'Email Plan':'Notify by Email')+'</button>'+(admin?' <button class="btn btn-outline btn-sm" style="color:#c0392b;border-color:#e6aaaa" onclick="deleteVisitPlan('+plan.id+')">Delete</button>':'')+'</span>'+
@@ -347,12 +348,12 @@ function renderVpVisits(){
     const entries=d.visits.map((v,idx)=>({v,idx})).filter(x=>x.v.date===day);
     const past=!dayAllowedFor(admin,day,today);
     if(past){
-      rows+='<tr class="vp-past" onclick="vpPastDayClicked()" title="Past day"><td>'+ddmmyy(day)+'</td><td>'+dayName(day)+'</td><td colspan="3" style="color:#999">Past day — can\'t be planned</td></tr>';
+      rows+='<tr class="vp-past" onclick="vpPastDayClicked()" title="Past day"><td>'+ddmmyy(day)+'</td><td>'+dayName(day)+'</td><td colspan="4" style="color:#999">Past day — can\'t be planned</td></tr>';
       return;
     }
     if(!entries.length){
       // only reachable when editing a plan that never had this (past) day — admin can add one
-      rows+='<tr><td>'+ddmmyy(day)+'</td><td>'+dayName(day)+'</td><td colspan="3"><button class="btn btn-outline btn-sm" onclick="vpAddSameDay(\''+day+'\')">+ Add visit</button></td></tr>';
+      rows+='<tr><td>'+ddmmyy(day)+'</td><td>'+dayName(day)+'</td><td colspan="4"><button class="btn btn-outline btn-sm" onclick="vpAddSameDay(\''+day+'\')">+ Add visit</button></td></tr>';
       return;
     }
     entries.forEach(({v,idx},i)=>{
@@ -362,14 +363,19 @@ function renderVpVisits(){
       const siteInput=v.kind==='new_site'
         ?'<input class="form-input" placeholder="Type the new site name" value="'+esc(v.site)+'" onchange="vpNewSiteTyped('+idx+',this.value)">'
         :'<input class="form-input" list="vp-site-list" autocomplete="off" placeholder="Pick a project or type" value="'+esc(siteVal)+'" onchange="vpSiteChanged('+idx+',this.value)">';
+      const reasonList=v.reason&&!VISIT_REASONS.includes(v.reason)?[...VISIT_REASONS,v.reason]:VISIT_REASONS; // keeps an old saved reason (e.g. "Other") selectable
       const reasonCell=noVisit
         ?'<span style="color:#aaa;font-size:12px">—</span>'
-        :'<select class="form-input" onchange="vpReasonChanged('+idx+',this.value)"><option value="">Select a reason</option>'+VISIT_REASONS.map(r=>'<option'+(r===v.reason?' selected':'')+'>'+r+'</option>').join('')+'</select>'+
+        :'<select class="form-input" onchange="vpReasonChanged('+idx+',this.value)"><option value="">Select a reason</option>'+reasonList.map(r=>'<option'+(r===v.reason?' selected':'')+'>'+r+'</option>').join('')+'</select>'+
           (v.reason==='Other'?'<input class="form-input" style="margin-top:4px" placeholder="Type the reason" value="'+esc(v.reason_other)+'" onchange="vpReasonOtherTyped('+idx+',this.value)">':'');
+      const noteCell=noVisit
+        ?'<span style="color:#aaa;font-size:12px">—</span>'
+        :'<input class="form-input" maxlength="300" placeholder="Remark (optional)" value="'+esc(v.note||'')+'" onchange="vpNoteTyped('+idx+',this.value)">';
       rows+='<tr>'+
         (i===0?'<td rowspan="'+entries.length+'">'+ddmmyy(day)+'</td><td rowspan="'+entries.length+'">'+dayName(day)+'</td>':'')+
         '<td>'+siteInput+(noVisit?'':'<label class="vp-newchk"><input type="checkbox"'+(v.kind==='new_site'?' checked':'')+' onchange="vpNewSiteToggled('+idx+',this.checked)"> 🆕 <b>New site (not in project list)</b></label>')+'</td>'+
         '<td>'+reasonCell+'</td>'+
+        '<td>'+noteCell+'</td>'+
         '<td style="white-space:nowrap">'+
           (i===0?'<button class="btn btn-outline btn-sm" '+(entries.length>=MAX_VISITS_PER_DAY?'disabled title="Max '+MAX_VISITS_PER_DAY+' visits a day"':'')+' onclick="vpAddSameDay(\''+day+'\')">+ Same Day</button> ':'')+
           (entries.length>1?'<button class="btn btn-outline btn-sm" title="Remove this visit" onclick="vpRemoveVisit('+idx+')">🗑</button>':'')+
@@ -378,7 +384,7 @@ function renderVpVisits(){
   });
   wrap.innerHTML=siteListHTML+
     (sup?'':'<div class="vp-hint">Select the employee first — the Site list shows the projects linked to them.</div>')+
-    '<div style="overflow-x:auto"><table class="vp-table vp-form-table"><thead><tr><th style="width:80px">Date</th><th style="width:90px">Day</th><th>Site location</th><th style="width:240px">Reason / Task</th><th style="width:150px"></th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+    '<div style="overflow-x:auto"><table class="vp-table vp-form-table"><thead><tr><th style="width:80px">Date</th><th style="width:90px">Day</th><th>Site location</th><th style="width:200px">Reason / Task</th><th style="width:200px">Remark</th><th style="width:150px"></th></tr></thead><tbody>'+rows+'</tbody></table></div>';
 }
 
 export function vpPastDayClicked(){ setVpError('You can\'t plan a past day.'); }
@@ -421,7 +427,7 @@ export function vpSiteChanged(idx,val){
   const d=state.vpDraft; if(!d) return; const v=d.visits[idx]; if(!v) return;
   const text=String(val).trim();
   const noVisit=NO_VISIT_OPTIONS.find(o=>o.label.toLowerCase()===text.toLowerCase());
-  if(noVisit){ v.kind=noVisit.kind; v.site=''; v.project_id=null; v.reason=''; v.reason_other=''; setVpError(''); renderVpVisits(); return; }
+  if(noVisit){ v.kind=noVisit.kind; v.site=''; v.project_id=null; v.reason=''; v.reason_other=''; v.note=''; setVpError(''); renderVpVisits(); return; }
   const p=projectsOfSupervisor(memberFor(d.supervisor_id)).find(x=>projectLabel(x).toLowerCase()===text.toLowerCase());
   v.kind='project';
   if(p){ v.project_id=p.id; v.site=projectLabel(p); setVpError(''); }
@@ -439,6 +445,7 @@ export function vpReasonChanged(idx,val){
   v.reason=val; if(val!=='Other') v.reason_other='';
   renderVpVisits();
 }
+export function vpNoteTyped(idx,val){ const v=state.vpDraft&&state.vpDraft.visits[idx]; if(v) v.note=String(val).trim(); }
 export function vpReasonOtherTyped(idx,val){ const v=state.vpDraft&&state.vpDraft.visits[idx]; if(v) v.reason_other=String(val).trim(); }
 export function vpAddSameDay(day){
   const d=state.vpDraft; if(!d) return;
@@ -473,7 +480,7 @@ export async function saveVisitPlan(){
     id:v.id||newVisitId(), date:v.date, kind:v.kind,
     project_id:v.kind==='project'?v.project_id:null,
     site:isRealVisit(v)?v.site:'', reason:isRealVisit(v)?v.reason:'', reason_other:isRealVisit(v)&&v.reason==='Other'?v.reason_other:'',
-    status:v.status||'Planned', remark:v.remark||''
+    status:v.status||'Planned', remark:v.remark||'', note:isRealVisit(v)?(v.note||''):''
   })).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
   btn.disabled=true;
   try{

@@ -5,7 +5,7 @@
 import { TODAY } from './config.js';
 import { addDays, mondayOf, weekDays } from './installationScoring.js';
 
-export const VISIT_REASONS=['New site visit','Execution of work','Rectification of work','Final WCC','Sample approval','Measurement / JMR','Client meeting','Other'];
+export const VISIT_REASONS=['New site visit','Execution of work','Rectification of work','Final WCC','Sample approval','Measurement / JMR','Client meeting'];
 export const VISIT_STATUSES=['Planned','Done','Missed','Rescheduled'];
 export const MAX_VISITS_PER_DAY=4;
 // "Site" choices for a day with no site visit — stored as kind off/leave/office, not counted as visits.
@@ -54,7 +54,7 @@ export const dayAllowedFor=(isAdmin,ymd,today)=>isAdmin||ymd>=today;
 
 // The 7-day skeleton a fresh form starts from: one empty row per day.
 export function blankVisit(date){
-  return {id:newVisitId(),date,kind:'project',project_id:null,site:'',reason:'',reason_other:'',status:'Planned',remark:''};
+  return {id:newVisitId(),date,kind:'project',project_id:null,site:'',reason:'',reason_other:'',status:'Planned',remark:'',note:''};
 }
 export const blankWeek=monday=>weekDays(monday).map(blankVisit);
 
@@ -141,14 +141,14 @@ export function planEmailContent(plan){
     'Employee : '+plan.supervisor_name,
     'Location : '+plan.base_city,
     '',
-    'Day | Date | Site | Reason | Status',
-    '-------------------------------------------'
+    'Day | Date | Site | Reason | Remark | Status',
+    '-----------------------------------------------------'
   ];
   weekDays(plan.week_start).forEach(day=>{
     plan.visits.filter(v=>v.date===day).forEach(v=>{
       const site=visitSiteLabel(v)+(v.kind==='new_site'?' (New site)':'');
       const reason=isRealVisit(v)?visitReasonLabel(v):'-';
-      lines.push([dayName(day).slice(0,3),ddmmyy(day),site,reason,v.status||'Planned'].join(' | '));
+      lines.push([dayName(day).slice(0,3),ddmmyy(day),site,reason,(isRealVisit(v)&&v.note)||'-',v.status||'Planned'].join(' | '));
     });
   });
   lines.push('','Regards,','Ecoste Installation Tracker');
