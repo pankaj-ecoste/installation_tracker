@@ -29,7 +29,7 @@ const pctTxt=(a,b)=>b?Math.round(a/b*100)+'%':'—';
 const pctColor=(a,b)=>!b?C.grey:a/b>=0.9?C.green:a/b<0.3?C.red:C.ink;
 
 /* ── UI state (module-local; lost on reload, which is fine for a report) ── */
-const ui={f:{q:'',pm:'',sup:'',city:'',type:'',vendor:'',product:'',sales:'',status:new Set()},sec:'all',attn:'all',paAll:false,openDays:new Set(),logOpen:true,gapOpen:false,olderOpen:false};
+const ui={f:{q:'',pm:'',sup:'',city:'',type:'',vendor:'',product:'',sales:'',status:new Set()},sec:'all',attn:'all',paAll:false,openDays:new Set(),logOpen:true,gapOpen:false,olderOpen:false,paScope:'active'};
 let host=null, printing=false;
 let teamMap={}, mapOk=false;   // admin-edited supervisor -> manager list (report_team_map); mapOk=false = could not be read
 let cache=null;                // the built rows — rebuilt only when data changes (open / refresh / a new day), not on every filter click
@@ -110,7 +110,10 @@ function drawBar(){
       sel('pm','All project managers',o.pm)+sel('sup','All supervisors',o.sup)+sel('city','All cities',o.city)+sel('type','All request types',o.type)+
       sel('vendor','All vendors',o.vendor)+sel('product','All products',o.product)+sel('sales','All sales people',o.sales)+
       (any?'<button class="btn btn-outline btn-sm" onclick="mgmt.reset()">✕ Clear filters</button>':'')+
-    '</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">'+o.status.map(chip).join('')+'</div></div>';
+    '</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">'+o.status.map(chip).join('')+
+    '<span style="border-left:1px solid #ddd;margin:0 2px"></span>'+
+    '<button class="btn btn-sm '+(ui.paScope==='all'?'btn-primary':'btn-outline')+'" title="Planned vs actual: list every project (completed too), not only the active ones" onclick="mgmt.scope()">All projects</button>'+
+    '</div></div>';
 }
 
 /* ══ BODY (KPIs + sections) ══ */
@@ -122,7 +125,7 @@ function bodyHTML(forPrint){
   const secBtn=(id,text,n)=>'<button class="btn btn-sm '+(ui.sec===id?'btn-primary':'btn-outline')+'" onclick="mgmt.sec(\''+id+'\')">'+text+(n!=null?' <span style="opacity:.7">'+n+'</span>':'')+'</button>';
   const live=rows.filter(r=>r.live);
   const bar=forPrint?'':'<div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 12px">'+
-    secBtn('all','All')+secBtn('attn','Needs attention',rows.filter(r=>r.attention).length)+secBtn('pa','Planned vs actual',live.filter(r=>r.planned).length)+
+    secBtn('all','All')+secBtn('attn','Needs attention',rows.filter(r=>r.attention).length)+secBtn('pa','Planned vs actual',rows.filter(r=>(ui.paScope==='all'||r.live)&&r.planned).length)+
     secBtn('vendor','Vendor',new Set(rows.map(r=>r.vendor)).size)+secBtn('sup','Supervisor',new Set(rows.map(r=>r.supervisor)).size)+
     secBtn('pm','Project manager',new Set(rows.map(r=>r.pm)).size)+secBtn('log','Day-wise log')+secBtn('dq','Data checks',dqCount(rows))+'</div>';
   const S={type:()=>typePanel(rows),log:()=>logPanel(rows,today,forPrint),pa:()=>paPanel(rows,forPrint),vendor:()=>groupPanel('By vendor',rows,r=>r.vendor,'Vendor',{drill:'vendor',muted:'No vendor',products:true,cities:true,hint:'Click a row to show only that vendor. Spellings that differ only by case or a doubled letter count as one vendor. A project with several vendors is counted under its first vendor.'}),
@@ -241,24 +244,27 @@ function dqPanel(rows){
 
 /* ── Planned vs actual (active projects) ── */
 function paPanel(rows,forPrint){
-  const list=rows.filter(r=>r.live&&r.planned).sort((a,b)=>b.planned-a.planned);
-  if(!list.length) return panel('Planned vs actual — active projects','<div style="font-size:12px;color:#888">No active projects with a total qty in this filter.</div>');
+  const everyone=ui.paScope==='all';   // v2-78: the "All projects" button — every project, not only the active ones
+  const title=everyone?'Planned vs actual — all projects (active and completed)':'Planned vs actual — active projects';
+  const list=rows.filter(r=>(everyone||r.live)&&r.planned).sort((a,b)=>b.planned-a.planned);
+  const noQty=rows.filter(r=>(everyone||r.live)&&!r.planned).length;
+  if(!list.length) return panel(title,'<div style="font-size:12px;color:#888">No '+(everyone?'':'active ')+'projects with a total qty in this filter.</div>');
   const LIMIT=15, shown=(ui.paAll||forPrint)?list:list.slice(0,LIMIT);
   const T=list.reduce((t,r)=>{ t.planned+=r.planned; t.expected+=r.expected||0; t.installed+=r.installed; t.balance+=r.balance; t.tp+=r.todayProj||0; t.wp+=r.weekProj; return t; },{planned:0,expected:0,installed:0,balance:0,tp:0,wp:0});
   const signed=d=>(d>0?'+':'')+fmt(d);
   const tr=shown.map(r=>{
     const d=r.expected==null?null:r.installed-r.expected;
-    return '<tr><td '+TD+'><b>'+plink(r.id,r.name)+'</b><div style="font-size:11px;color:#888">'+esc([r.tower,r.supervisor].filter(Boolean).join(' · '))+(r.qtySrc&&r.qtySrc!=='Planned'?' · qty from '+r.qtySrc:'')+'</div></td>'+
+    return '<tr><td '+TD+'><b>'+plink(r.id,r.name)+'</b><div style="font-size:11px;color:#888">'+esc([everyone?r.status:'',r.tower,r.supervisor].filter(Boolean).join(' · '))+(r.qtySrc&&r.qtySrc!=='Planned'?' · qty from '+r.qtySrc:'')+'</div></td>'+
       '<td '+TDN+'>'+fmt(r.planned)+'</td><td '+TDN+'>'+(r.expected==null?'—':fmt(r.expected))+'</td><td '+TDN+'>'+fmt(r.installed)+'</td>'+
       '<td '+TDN+' style="color:'+(d==null?C.grey:d<0?C.red:C.green)+'">'+(d==null?'—':signed(d))+'</td>'+
       '<td '+TDN+' style="color:'+pctColor(r.installed,r.planned)+'">'+pctTxt(r.installed,r.planned)+'</td><td '+TD+'>'+miniBar(r.planned?r.installed/r.planned:0)+'</td>'+
       '<td '+TDN+'>'+fmt(r.balance)+'</td><td '+TDN+'>'+(r.todayProj==null?'—':fmt(r.todayProj))+'</td><td '+TDN+'>'+(r.weekProj?fmt(r.weekProj):'—')+'</td></tr>';
   }).join('');
   const td=T.installed-T.expected;
-  const more=(!forPrint&&list.length>LIMIT)?'<button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="mgmt.paAll()">'+(ui.paAll?'Show largest '+LIMIT:'Show all '+list.length+' active projects')+'</button>':'';
-  return panel('Planned vs actual — active projects',scroll('<table style="width:100%;border-collapse:collapse"><thead><tr><th '+TH+'>Project</th><th '+THN+'>Total qty</th><th '+THN+'>Planned to date</th><th '+THN+'>Installed</th><th '+THN+'>Difference</th><th '+THN+'>% done</th><th '+TH+'>Progress</th><th '+THN+'>Balance</th><th '+THN+'>Today proj.</th><th '+THN+'>Week proj.</th></tr></thead><tbody>'+tr+'</tbody>'+
-    '<tfoot><tr><td '+TF+'>Total ('+list.length+' active)</td><td '+TFN+'>'+fmt(T.planned)+'</td><td '+TFN+'>'+fmt(T.expected)+'</td><td '+TFN+'>'+fmt(T.installed)+'</td><td '+TFN+' style="color:'+(td<0?C.red:C.green)+'">'+signed(td)+'</td><td '+TFN+'>'+pctTxt(T.installed,T.planned)+'</td><td '+TF+'></td><td '+TFN+'>'+fmt(T.balance)+'</td><td '+TFN+'>'+fmt(T.tp)+'</td><td '+TFN+'>'+fmt(T.wp)+'</td></tr></tfoot></table>')+more+
-    hint('Difference = installed − planned to date. Planned to date assumes a steady rate from installation start (or project start) to the committed date. Where a project has no planned qty, its SO (then PO) qty is used. Week proj. = DPR projections of the last 7 days.'));
+  const more=(!forPrint&&list.length>LIMIT)?'<button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="mgmt.paAll()">'+(ui.paAll?'Show largest '+LIMIT:'Show all '+list.length+(everyone?' projects':' active projects'))+'</button>':'';
+  return panel(title,scroll('<table style="width:100%;border-collapse:collapse"><thead><tr><th '+TH+'>Project</th><th '+THN+'>Total qty</th><th '+THN+'>Planned to date</th><th '+THN+'>Installed</th><th '+THN+'>Difference</th><th '+THN+'>% done</th><th '+TH+'>Progress</th><th '+THN+'>Balance</th><th '+THN+'>Today proj.</th><th '+THN+'>Week proj.</th></tr></thead><tbody>'+tr+'</tbody>'+
+    '<tfoot><tr><td '+TF+'>Total ('+list.length+(everyone?' projects':' active')+')</td><td '+TFN+'>'+fmt(T.planned)+'</td><td '+TFN+'>'+fmt(T.expected)+'</td><td '+TFN+'>'+fmt(T.installed)+'</td><td '+TFN+' style="color:'+(td<0?C.red:C.green)+'">'+signed(td)+'</td><td '+TFN+'>'+pctTxt(T.installed,T.planned)+'</td><td '+TF+'></td><td '+TFN+'>'+fmt(T.balance)+'</td><td '+TFN+'>'+fmt(T.tp)+'</td><td '+TFN+'>'+fmt(T.wp)+'</td></tr></tfoot></table>')+more+
+    hint('Difference = installed − planned to date. Planned to date assumes a steady rate from installation start (or project start) to the committed date. Where a project has no planned qty, its SO (then PO) qty is used. Week proj. = DPR projections of the last 7 days.'+(everyone?'':' Showing active projects only — press All projects (next to the status buttons) to include completed ones.')+(noQty?' '+pl(noQty,'project')+' with no quantity at all '+(noQty===1?'is':'are')+' not listed (see Data checks).':'')));
 }
 
 /* ── Vendor / supervisor / project manager tables ── */
@@ -359,6 +365,7 @@ window.mgmt={
   drill:(k,v)=>{ ui.f[k]=v; drawBar(); drawBody(); try{ window.scrollTo(0,0); }catch(e){} },
   paAll:()=>{ ui.paAll=!ui.paAll; drawBody(); },
   gap:()=>{ ui.gapOpen=!ui.gapOpen; drawBody(); },
+  scope:()=>{ ui.paScope=ui.paScope==='all'?'active':'all'; drawBar(); drawBody(); },
   older:()=>{ ui.olderOpen=!ui.olderOpen; drawBody(); },
   open:openProject,
   refresh,
