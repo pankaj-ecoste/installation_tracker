@@ -5,7 +5,7 @@
    A key changes when the item's state changes (e.g. a request moving New -> Visit Done), so it
    counts as new again. The rules below are the badge rules that existed before v2-48, unchanged. */
 import { state } from './state.js';
-import { canDo, vpAdminAccess, needsFinanceReview, needsRABill, visibleProjects } from './helpers.js';
+import { canDo, vpAdminAccess, svrFullAccess, needsFinanceReview, needsRABill, visibleProjects } from './helpers.js';
 import { CHECKLIST_DEFS, TODAY } from './constants.js';
 
 // Requests: Admin/Manager act on brand-new and visit-done requests; a Supervisor on requests
@@ -80,9 +80,17 @@ export function visitPlanAttentionKeys(){
   return (state.visitPlans || []).map(p => 'vp:' + p.id);
 }
 
+// SVR (v2-79): admin-level only — each new report by someone else is "new" until the SVR tab is opened.
+export function svrAttentionKeys(){
+  const u = state.currentUser;
+  if(!u || !svrFullAccess()) return [];
+  return (state.svrs || []).filter(r => String(r.submitted_by_id) !== String(u.id)).map(r => 'svr:' + r.id);
+}
+
 // tab name (as passed to setTab) -> [seen-store module, keys function]
 export const TAB_ATTENTION = {
   visitplanner: ['visitplanner', visitPlanAttentionKeys],
+  svr:        ['svr', svrAttentionKeys],
   projects:   ['projects', snagAttentionKeys],
   dpr:        ['dpr', dprAttentionKeys],
   finance:    ['finance', financeAttentionKeys],

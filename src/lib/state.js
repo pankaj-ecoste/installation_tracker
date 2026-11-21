@@ -94,6 +94,11 @@ export const state = {
   vpFilters: {week: '', supervisorId: '', status: ''},
   vpDraft: null,
   vpStatusPending: null,
+  // v2-79 SVR (Site Visit Report) — fetched after login (admin-level: all, supervisor: own), never in loadAllData().
+  svrs: [],
+  svrsLoaded: false,
+  svrFilters: {period: 'month', personId: '', from: '', to: ''},
+  svrDraft: null,
   // v2-70 Summary (admin only) — sent history is fetched per chosen date; notes are typed per project + date.
   summaryDate: '',
   summarySends: [],

@@ -94,3 +94,6 @@ export function visibleProjects(){
 // Supervisor keeps its own-plans behaviour; every other role with the tick (Admin, Ops Manager, ...) gets full admin-level access.
 export const vpAdminAccess=()=>!!state.currentUser&&state.currentUser.role!=='supervisor'&&(state.currentUser.role==='admin'||canDo('useVisitPlanner'));
 export const vpSupervisorAccess=()=>!!state.currentUser&&state.currentUser.role==='supervisor'&&canDo('useVisitPlanner');
+// v2-79: SVR follows the same pattern with its own tick ("useSVR"): Supervisor = own reports, other ticked roles = everyone's.
+export const svrFullAccess=()=>!!state.currentUser&&state.currentUser.role!=='supervisor'&&(state.currentUser.role==='admin'||canDo('useSVR'));
+export const svrSupervisorAccess=()=>!!state.currentUser&&state.currentUser.role==='supervisor'&&canDo('useSVR');

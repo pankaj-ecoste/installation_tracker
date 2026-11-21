@@ -13,6 +13,7 @@ import { openUpdate } from './projects/addEditProject.js';
 import { renderProjects } from './projects/projectCards.js';
 import { renderRequests } from './requests/requestsTab.js';
 import { buildVisitPlanNotifHTML, unseenVisitPlanCount } from './visitPlanner/visitPlannerTab.js';
+import { buildSVRNotifHTML, unseenSVRCount } from './svr/svrTab.js';
 
 /* ══ ALERTS ══ */
 export function computeAlerts(){
@@ -97,7 +98,7 @@ export function updateBell(){
   const b=document.getElementById('bell-count');
   if(b){
     // v2-64: admin's bell also counts visit plans submitted since they last opened the Visit Planner tab
-    const total=a.length+unseenVisitPlanCount();
+    const total=a.length+unseenVisitPlanCount()+unseenSVRCount(); // v2-79: + new SVRs not yet seen
     if(total>0){ b.classList.remove('hidden'); b.textContent=total; }
     else b.classList.add('hidden');
   }
@@ -215,7 +216,7 @@ function alertViewButtonHTML(a){
 export function buildNotifHTML(){
   const alerts=activeAlerts();
   const iconMap={overdue:'🚨',atrisk:'⚠️',milestone:'⏰',constraint:'🔴',rabill:'💰',noprogress:'📊',snag:'🔧',dispatch:'📦',nodpr:'📝',financereview:'⚠️'};
-  const reqSectionHTML=buildVisitPlanNotifHTML()+buildRequestActivityHTML();
+  const reqSectionHTML=buildVisitPlanNotifHTML()+buildSVRNotifHTML()+buildRequestActivityHTML();
   if(!alerts.length){
     return reqSectionHTML+'<div class="no-alerts"><div style="font-size:48px;margin-bottom:12px">✅</div><div style="font-size:16px;font-weight:700;margin-bottom:6px">All clear!</div><div style="font-size:13px;color:#888">No stalled milestones, overdue projects or open constraints.</div></div>';
   }

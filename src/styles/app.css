@@ -245,6 +245,25 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helv
 }
 
 /* ══ VISIT PLANNER (v2-64) ══ */
+.svr-wrap{max-width:1100px}
+.svr-new-btn{display:block;width:100%;background:#1b5a9c;color:#fff;font-size:15px;font-weight:700;padding:14px;border-radius:10px;border:none;margin-bottom:10px}
+.svr-filters{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.svr-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.svr-box{background:#fff;border:1px solid #e0e0e0;border-radius:10px;overflow:hidden;margin-bottom:10px}
+.svr-box-h{font-size:13px;font-weight:700;padding:10px 14px;border-bottom:1px solid #eee}
+.svr-entry{background:#fff;border:1px solid #e0e0e0;border-left:4px solid #1b5a9c;border-radius:10px;padding:10px 14px;margin-bottom:8px}
+.svr-title{font-size:14px}
+.svr-sub{color:#666;font-weight:400}
+.svr-meta{font-size:12px;color:#777;margin-top:3px}
+.svr-meta a{color:#1b5a9c}
+.svr-line{font-size:13px;margin-top:4px}
+.svr-docs{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:6px}
+.svr-doc{font-size:12px;color:#1D9E75}
+.svr-actions{margin-top:8px;display:flex;gap:6px}
+.svr-head{font-size:13px;color:#555;text-align:center;margin-bottom:10px;line-height:1.8}
+.svr-gps{background:#f4f4f2;border-radius:8px;padding:10px 12px;font-size:13px;color:#555}
+.svr-file-row{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;margin-bottom:4px}
+@media (max-width:640px){.svr-filters{grid-template-columns:1fr}.vp-table.svr-table{min-width:0}}
 .vp-filters{display:grid;grid-template-columns:minmax(280px,1fr) 1fr 1fr;gap:12px;background:#fff;border:1px solid #e0e0e0;border-radius:10px;padding:12px 14px;margin:12px 0 8px}
 .vp-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px}
 .vp-stat{background:#fff;border:1px solid #e0e0e0;border-radius:10px;padding:12px 14px}

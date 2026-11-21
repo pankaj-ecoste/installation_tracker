@@ -67,6 +67,7 @@
     <button class="nav-tab" onclick="setTab('pipeline')" id="tab-pipeline">Pipeline</button>
     <button class="nav-tab" onclick="setTab('dpr')" id="tab-dpr">DPR log<span class="bell-badge hidden" id="dpr-count">0</span></button>
     <button class="nav-tab" onclick="setTab('visitplanner')" id="tab-visitplanner" style="display:none">Visit Planner<span class="bell-badge hidden" id="visitplanner-count">0</span></button>
+    <button class="nav-tab" onclick="setTab('svr')" id="tab-svr" style="display:none">SVR<span class="bell-badge hidden" id="svr-count">0</span></button>
     <button class="nav-tab" onclick="setTab('material')" id="tab-material">Material<span class="bell-badge hidden" id="material-count">0</span></button>
     <button class="nav-tab" onclick="setTab('team')" id="tab-team-mgmt">Team</button>
     <button class="nav-tab" onclick="setTab('finance')" id="tab-finance">Finance<span class="bell-badge hidden" id="finance-count">0</span></button>
@@ -128,6 +129,7 @@
       <div id="dpr-list"></div>
     </div>
     <div id="tab-visitplanner-view" class="hidden"><div id="visitplanner-content"></div></div>
+    <div id="tab-svr-view" class="hidden"><div id="svr-content"></div></div>
     <div id="tab-material-view" class="hidden">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
         <h3 style="font-size:15px;font-weight:600">Material movement tracker</h3>
@@ -377,6 +379,22 @@
   <div class="panel-footer">
     <button class="btn btn-outline" onclick="closeVisitPlanForm()">Close</button>
     <button class="btn btn-green" id="vp-save-btn" onclick="saveVisitPlan()">Save Plan</button>
+  </div>
+</div>
+
+<!-- SVR: New Site form (v2-79) -->
+<div class="page-panel" id="panel-svr">
+  <div class="panel-topbar">
+    <button class="btn btn-outline btn-sm" onclick="closeSVRForm()">← Back</button>
+    <div class="panel-title" id="svr-panel-title">New Site</div>
+  </div>
+  <div class="panel-body" style="max-width:680px" id="svr-form-body">
+    <!-- populated by renderSVRForm() -->
+  </div>
+  <div class="error-msg hidden" id="svr-error" style="margin:0 20px"><span id="svr-err-msg"></span></div>
+  <div class="panel-footer">
+    <button class="btn btn-outline" onclick="closeSVRForm()">Cancel</button>
+    <button class="btn btn-green" id="svr-save-btn" onclick="saveSVR()">Submit New Site</button>
   </div>
 </div>
 

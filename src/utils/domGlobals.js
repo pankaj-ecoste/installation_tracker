@@ -33,6 +33,7 @@ import { updateNewVendorBadge, renderNewVendors, markVendorReviewed, markVendorA
 import { openVendorEdit, saveVendorEdit, closeVendorEdit } from '../sections/vendors/vendorEdit.js';
 import { summaryDateChanged, summaryStatusChanged, summaryPreviewToggle, summaryNoteChanged, summaryEmail, summaryWhatsApp } from '../sections/summary/summaryTab.js';
 import { renderVisitPlanner, goToVisitPlanner, vpWeekShift, vpWeekPicked, vpFilterChanged, vpSetStatus, vpCancelRemark, vpSaveRemark, emailVisitPlan, deleteVisitPlan, openVisitPlanForm, closeVisitPlanForm, saveVisitPlan, vpPastDayClicked, vpEmployeeChanged, vpCityChanged, vpFormWeekChanged, vpSiteChanged, vpNewSiteToggled, vpNewSiteTyped, vpReasonChanged, vpReasonOtherTyped, vpNoteTyped, vpAddSameDay, vpRemoveVisit } from '../sections/visitPlanner/visitPlannerTab.js';
+import { renderSVR, goToSVR, svrFilterChanged, exportSVR, deleteSVR, openSVRForm, closeSVRForm, saveSVR, svrFilesPicked, svrRemoveDoc } from '../sections/svr/svrTab.js';
 
 // Every function invoked from an inline onclick="..." attribute in index.html needs to
 // be reachable on window - once this app moved into ES modules those functions stopped
@@ -276,6 +277,7 @@ export function installDomGlobals(){
     emailVisitPlan, deleteVisitPlan, openVisitPlanForm, closeVisitPlanForm, saveVisitPlan, vpPastDayClicked, vpEmployeeChanged,
     vpCityChanged, vpFormWeekChanged, vpSiteChanged, vpNewSiteToggled, vpNewSiteTyped, vpReasonChanged, vpReasonOtherTyped, vpNoteTyped,
     vpAddSameDay, vpRemoveVisit,
+    renderSVR, goToSVR, svrFilterChanged, exportSVR, deleteSVR, openSVRForm, closeSVRForm, saveSVR, svrFilesPicked, svrRemoveDoc,
     renderReports,
     openReport,
     closeReport,

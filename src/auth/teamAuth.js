@@ -7,6 +7,7 @@ import { setTab, showClientSection, showSection } from '../sections/navigation.j
 import { renderProjects } from '../sections/projects/projectCards.js';
 import { updateNewVendorBadge } from '../sections/vendors/newVendorsTab.js';
 import { canUseVisitPlanner, loadVisitPlans, updateVisitPlannerBadge } from '../sections/visitPlanner/visitPlannerTab.js';
+import { canUseSVR, loadSVRs, updateSVRBadge } from '../sections/svr/svrTab.js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY, TEST_MODE } from '../lib/config.js';
 import { db, setTeamAuthToken } from '../lib/supabaseClient.js';
 import { saveTeamSession, loadTeamSession, clearTeamSession } from '../lib/rememberMe.js';
@@ -122,6 +123,11 @@ export function showTeamDashboard(){
   if(vpTab) vpTab.style.display=canUseVisitPlanner()?'':'none';
   state.visitPlans=[]; state.visitPlansLoaded=false; state.vpFilters={week:'',supervisorId:'',status:''};
   if(canUseVisitPlanner()) loadVisitPlans().then(()=>updateVisitPlannerBadge());
+  // SVR (v2-79) — same pattern: read per user by RLS, fetched after login; drives the admin-level badge/bell.
+  const svrTab=document.getElementById('tab-svr');
+  if(svrTab) svrTab.style.display=canUseSVR()?'':'none';
+  state.svrs=[]; state.svrsLoaded=false; state.svrFilters={period:'month',personId:'',from:'',to:''};
+  if(canUseSVR()) loadSVRs().then(()=>updateSVRBadge());
   // Material tab — Admin/Dispatch Head can manage; Supervisor and Design get view-only access
   // (right to view, not edit — the addLot permission still blocks adding/editing lots, and the
   // only edit button on a lot is hardcoded to role==='admin'). See plan.md v2-66.
